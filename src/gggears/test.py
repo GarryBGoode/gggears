@@ -11,36 +11,43 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-import numpy as np
-from scipy.spatial.transform import Rotation as scp_Rotation
-from function_generators import *
-from curve import *
-from defs import *
 from gggears import *
 import matplotlib.pyplot as plt
+import numpy as np
+
+n=40
+
+param1 = SphericalInvoluteProfileParam(gamma=PI/2*0.6,
+                                       pitch_angle=2*PI/n,
+                                       h_a=1,h_d=1.5,
+                                       profile_shift=0,
+                                       enable_undercut=True,
+                                       root_fillet=0.0)
+
+gearprofile1 = GearProfileSpherical(**param1.__dict__)
+
+gear1 = Gear2DSpherical(num_of_teeth=-n,module=1,profile_param=param1)
+
+# points = scp_Rotation.from_euler('y',PI/2-gearprofile1.gamma).apply(gearprofile1.ref_rack_curve(np.linspace(0,1,100)))+gearprofile1.center
+# points2 = gearprofile1.involute_curve(np.linspace(0,1,100))
+# points3 = gearprofile1.undercut_connector_arc(np.linspace(0,1,100))
+# points4 = gearprofile1.undercut_curve(np.linspace(0,1.0,100))
+# points5 = gearprofile1.rd_curve(np.linspace(0,1,100))
+# points6 = gearprofile1.ra_curve(np.linspace(0,1,100))
+# points7 = gearprofile1.profile(np.linspace(0,1,100))
 
 
+points = gear1.profile_closed(np.linspace(0,1,1000))
 
-points =np.array([[ORIGIN,RIGHT,2*RIGHT],
-                  [ORIGIN+UP,RIGHT+UP,RIGHT+UP],
-                  [ORIGIN+2*UP,RIGHT+2*UP,2*RIGHT+2*UP]
-                  ])
-weights = np.ones((3,3))
-weights[1,1] = 2
-asd = nurbezier_surface(0.7,0.55,points,weights)
-asd2 = nurbezier_surface_2(0.55,0.7,points,weights)
+ax = plt.axes(projection='3d')
 
-arccurve = Curve(arc_from_2_point_center,params={'p0':UP,'p1':RIGHT,'center':ORIGIN})
-testpoints = arccurve(np.linspace(0,1,20))
+ax.plot(points[:,0],points[:,1],points[:,2])
+# ax.plot(points2[:,0],points2[:,1],points2[:,2])
+# ax.plot(points3[:,0],points3[:,1],points3[:,2])
+# ax.plot(points4[:,0],points4[:,1],points4[:,2])
+# ax.plot(points5[:,0],points5[:,1],points5[:,2])
+# ax.plot(points6[:,0],points6[:,1],points6[:,2])
+# ax.plot(points7[:,0],points7[:,1],points7[:,2])
 
-testres,testpoints,testweights = fit_nurb_points(testpoints,n_points=3,force_2D=True)
-
-
-
-curve_aprox = Curve(nurbezier,params={'points':testpoints,'weights':testweights})
-
-
-asd=bezierdc(np.linspace(0,1,4),np.stack([np.zeros((3,3,3)),np.ones((3,3,3))]))
-
-print(asd)
-# print(asd2)
+ax.axis('equal')
+plt.show()

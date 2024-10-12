@@ -344,7 +344,7 @@ def find_curve_line_intersect(curve, offset=ORIGIN, line_direction=RIGHT,guess=0
 
 def find_curve_plane_intersect(curve,offset=ORIGIN, plane_normal = OUT, guess=0):
     res = root(lambda t: np.dot((curve(t)-offset),plane_normal),guess)
-    return res.x[0]
+    return res
 
 def find_curve_nearest_point (curve: Curve, point, guesses = [0.5]):
     results = []
@@ -602,7 +602,7 @@ def fillet_curve(input_curves: CurveChain, radius:float, location=0.5):
                                            p1=input_curves(t2),
                                            center=center)
 
-        return arc, t1, t2
+        return arc2, t1, t2
     
 
 class LineCurve(Curve):
@@ -653,9 +653,29 @@ class ArcCurve(Curve):
     def p1(self):
         return self._p1
     
+    @p0.setter
+    def p0(self, value):
+        self._p0 = value
+
+    @p1.setter
+    def p1(self, value):
+        self._p1 = value
+
     @property
     def curvature(self):
         return self._curvature
+    
+    @curvature.setter
+    def curvature(self, value):
+        self._curvature = value
+    
+    @property
+    def radius(self):
+        return 1/self._curvature
+    
+    @radius.setter
+    def radius(self, value):
+        self._curvature = 1/abs(value) * np.sign(self._curvature)
     
     @property
     def center(self):
@@ -730,6 +750,34 @@ class InvoluteCurve(Curve):
                          t1=t1, 
                          params={}, 
                          enable_vectorize=enable_vectorize)
+        
+class SphericalInvoluteCurve(Curve):
+    def __init__(self, 
+                 r=1, 
+                 t0=0,
+                 t1=1,
+                 angle=0, 
+                 c_sphere=1,
+                 v_offs=ORIGIN, 
+                 z_offs=0,  
+                 active=True,
+                 enable_vectorize=True):
+        self.r=r
+        self.angle=angle
+        self.c_sphere = c_sphere
+        self.v_offs=v_offs
+        self.z_offs=z_offs
+        super().__init__(lambda t: involute_sphere(t,
+                                                   r=self.r,
+                                                   C=self.c_sphere,
+                                                   angle=self.angle,
+                                                   v_offs=self.v_offs, 
+                                                   z_offs=self.z_offs), 
+                        active, 
+                        t0, 
+                        t1, 
+                        params={}, 
+                        enable_vectorize=enable_vectorize)
         
 class TransformedCurve(Curve):
     def __init__(self, transform: callable, curve: Curve):

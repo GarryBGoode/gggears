@@ -30,6 +30,13 @@ def normalize_vector(v):
 def angle_between_vectors(v1,v2):
     return np.arctan2(np.linalg.norm(np.cross(v1,v2)),np.dot(v1,v2))
 
+def angle_between_vector_and_plane(v,plane_normal):
+    v_plane = v - np.dot(v,plane_normal)*plane_normal
+    if np.linalg.norm(v_plane)==0:
+        return PI/2
+    else:
+        return angle_between_vectors(v_plane,v)
+
 def involute_func(t, r, a=0, rad_offs=0, tan_offs=0, z_offs=0, csph=0):
     '''
     Returns the x-y-z values of the involute function.

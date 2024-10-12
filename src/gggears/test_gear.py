@@ -39,11 +39,11 @@ point_arr =  gear3.profile_reference.profile(np.linspace(0,1,100*n))
 def_param = InvoluteProfileParam(h_a=1,
                                  h_d=1.2,
                                  profile_shift=0,
-                                 enable_undercut=True,
+                                 enable_undercut=False,
                                  root_fillet=0)
 
-val_range = np.linspace(-3,3,20)
-attr = 'profile_shift'
+val_range = np.linspace(0,1,10)
+attr = 'root_fillet'
 
 for val in val_range:
     mod_param = def_param
@@ -55,5 +55,5 @@ for val in val_range:
 
 # plt.plot(point_arr[:,0],point_arr[:,1])
 # plt.plot(point_arr2[:,0],point_arr2[:,1],'-')
-
+plt.axis('equal')
 plt.show()

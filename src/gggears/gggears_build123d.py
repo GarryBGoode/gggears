@@ -40,6 +40,7 @@ class GearBuilder():
         self.n_points_hz = n_points_hz
         self.n_points_vert = n_points_vert
         self.vert_oversamp_ratio = 2
+        self.force_2D = False
 
         self.gear_stack = []
         self.gear_stacks = []
@@ -58,15 +59,15 @@ class GearBuilder():
             self.gear_stacks.append(gear_stack_loc)
             self.nurb_profile_stacks.append([convert_curve_nurbezier(gearprofile.profile_closed.get_curves(lerp_inactive=True),
                                                                n_points=self.n_points_hz, 
-                                                               force_2D=True) 
+                                                               force_2D=self.force_2D) 
                                        for gearprofile in gear_stack_loc])
 
         for nurb_stack in self.nurb_profile_stacks:
             self.nurb_profile_stack = nurb_stack
             profile_surfaces.extend(self.generate_side_surfaces())
 
-        profile_surfaces.insert(0,self.generate_cover_surface(self.nurb_profile_stacks[0][0]))
-        profile_surfaces.append(self.generate_cover_surface(self.nurb_profile_stacks[-1][-1]))
+        profile_surfaces.insert(0,self.generate_cover_surface_flat(self.nurb_profile_stacks[0][0]))
+        profile_surfaces.append(self.generate_cover_surface_flat(self.nurb_profile_stacks[-1][-1]))
 
 
         
@@ -193,6 +194,11 @@ class GearBuilder():
         return profile_surfaces
         
     
+    def generate_cover_surface_flat(self, nurb_chain: CurveChain):
+        # resisting 1-lining this for improved debugging
+        splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA]
+        return Face.make_surface(Wire(splines)).clean()
+    
     def generate_cover_surface(self, nurb_chain: CurveChain):
         # resisting 1-lining this for improved debugging
         splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA]
@@ -235,26 +241,45 @@ class GearBuilder():
         points_out = points_sol[:,:,:3]
         weights_out = points_sol[:,:,3]
         return sol, points_out, weights_out
+    
+
+# class GearBuilderSpherical(GearBuilder):
+#     def __init__(self,
+#                  gear: GearSpherical,
+#                  n_points_hz = 4,
+#                  n_points_vert=4,
+#                  **kwargs):
 
 start = time.time()
 
-n_z = 17
+n_z = 10
 
 # gear1 = GearProfile2D(pitch_angle=np.pi*2/8, h_d=1.25,h_a=1,profile_shift=0.25)
-gear2 = GearBuilder(GearCylindric(z_vals=np.array([0,1,2]),n_tweens=6,
-                                  params=GearParamHandler(num_of_teeth=n_z,
-                                                          angle=lambda z: 0.05*(abs(z-1))**1*PI*2,
-                                                          center=lambda z: z*3*OUT,
-                                                          inside_teeth=False,
-                                                          profile_overlap=0,
-                                                          cutout_teeth_num=0,
-                                                          profile_param= InvoluteProfileHandler(
-                                                              profile_shift=lambda z: 0.2-0.0*(z-1)**2,
-                                                              root_fillet=0.2,
-                                                              h_a= lambda z: 1,
-                                                              enable_undercut=True))),
-                                                              n_points_vert=4,
-                                                              n_points_hz=5)
+# gear2 = GearBuilder(GearCylindric(z_vals=np.array([0,1,2]),n_tweens=6,
+#                                   params=GearParamHandler(num_of_teeth=n_z,
+#                                                           angle=lambda z: 0.05*(abs(z-1))**1*PI*2,
+#                                                           center=lambda z: z*3*OUT,
+#                                                           inside_teeth=False,
+#                                                           profile_overlap=0,
+#                                                           cutout_teeth_num=0,
+#                                                           profile_param= InvoluteProfileHandler(
+#                                                               profile_shift=lambda z: 0.2-0.0*(z-1)**2,
+#                                                               root_fillet=0.2,
+#                                                               h_a= lambda z: 1,
+#                                                               enable_undercut=True))),
+#                                                               n_points_vert=4,
+#                                                               n_points_hz=5)
+
+gamma=PI/2 * 0.4
+gear3 = GearBuilder(GearSpherical(z_vals=np.array([0,1]),n_tweens=6,
+                                  params=GearParamHandlerSpherical(num_of_teeth=n_z,
+                                                                   center=lambda z: z*OUT,
+                                                                   module=lambda z: 1-np.tan(gamma)*z/n_z*2,
+                                                                   profile_overlap=0.01,
+                                                                   profile_param=SphericalInvoluteProfileHandler(
+                                                                       gamma=gamma
+                                                                   )
+                                  )))
 
 
-show(gear2.solid,gear2.profile_solid)
+show(gear3.solid,gear3.profile_solid)
