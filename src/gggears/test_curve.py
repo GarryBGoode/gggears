@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 # curve1 = Curve(arc_from_2_point_center,params={'p0': DOWN,'p1':RIGHT,'center':ORIGIN})
 # curve2 = Curve(arc_from_2_point_center,params={'p0': RIGHT,'p1':RIGHT*2+DOWN,'center':RIGHT*2})
 
-curve1 = ArcCurve.from_2_point_center(p0=DOWN,p1=RIGHT,center=ORIGIN)
+curve1 = ArcCurve.from_radius_center_angle(radius=0.5,center=RIGHT*0.5,angle_start=-PI/2,angle_end=0)
 curve2 = ArcCurve.from_2_point_center(p0=RIGHT,p1=RIGHT*2+DOWN,center=RIGHT+DOWN)
 
 chain1 = CurveChain(curve1,curve2)
@@ -27,7 +27,8 @@ chain1(0.8)
 print(len(chain1))
 p1 = chain1(np.linspace(0,1,101))
 
-chain2 = chain1.fillet(radius=0.2,location=0.5)
+props=chain1.get_length_portions()
+chain2 = chain1.fillet(radius=0.05,location=props[1])
 # chain2.set_start_on(0.5,preserve_inactive_curves=True)
 # chain2.set_end_on(0.8)
 

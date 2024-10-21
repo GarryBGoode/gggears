@@ -33,21 +33,22 @@ def nppoint2Vector(p: np.ndarray):
 class GearBuilder():
     def __init__(self,
                  gear: GearCylindric,
+                 add_plug = True,
                  n_points_hz = 4,
                  n_points_vert=4,
                  **kwargs):
         self.gear = gear
         self.n_points_hz = n_points_hz
         self.n_points_vert = n_points_vert
-        self.vert_oversamp_ratio = 2
+        self.vert_oversamp_ratio = 2.5
         self.force_2D = False
 
         self.gear_stack = []
         self.gear_stacks = []
         self.nurb_profile_stacks = []
-        solid_levels = []
         profile_surfaces = []
 
+        start_gear = time.time()
         for ii in range(len(self.gear.z_vals)-1):
             # need more gear slices than nurb points to produce 'best' fit without overfitting
             # oversamp ratio controls how many more
@@ -57,21 +58,25 @@ class GearBuilder():
                                    int(np.ceil((n_points_vert-2)*self.vert_oversamp_ratio)) + 2)
             gear_stack_loc = [self.gear.generate_gear_slice(z) for z in z_tweens]
             self.gear_stacks.append(gear_stack_loc)
-            self.nurb_profile_stacks.append([convert_curve_nurbezier(gearprofile.profile_closed.get_curves(lerp_inactive=True),
-                                                               n_points=self.n_points_hz, 
-                                                               force_2D=self.force_2D) 
-                                       for gearprofile in gear_stack_loc])
+        print(f"gear generation time: {time.time()-start_gear}")
 
+        start_nurb = time.time()
+        for gear_stack_loc in self.gear_stacks:
+            self.nurb_profile_stacks.append([convert_curve_nurbezier(gearprofile.profile_closed,
+                                                                     n_points=self.n_points_hz, 
+                                                                     force_2D=self.force_2D) 
+                                       for gearprofile in gear_stack_loc])
+        print(f"nurb generation time: {time.time()-start_nurb}")
         for nurb_stack in self.nurb_profile_stacks:
             self.nurb_profile_stack = nurb_stack
             profile_surfaces.extend(self.generate_side_surfaces())
 
-        profile_surfaces.insert(0,self.generate_cover_surface_flat(self.nurb_profile_stacks[0][0]))
-        profile_surfaces.append(self.generate_cover_surface_flat(self.nurb_profile_stacks[-1][-1]))
-
-
+        profile_surfaces.insert(0,self.generate_cover_surface(self.nurb_profile_stacks[0][0]))
+        profile_surfaces.append(self.generate_cover_surface(self.nurb_profile_stacks[-1][-1]))
         
+        # visual debug is harder if these surfaces go into self right from the start
         self.profile_surfaces = profile_surfaces
+
         shell1 = Shell(self.profile_surfaces)
         solid1 = Solid(shell1)
 
@@ -91,16 +96,36 @@ class GearBuilder():
         ro_min = np.min([gear.ro for gear in self.gear_stack])
         ro_max = np.max([gear.ro for gear in self.gear_stack])
 
-        zmin = np.min([gear.center[2] for gear in self.gear_stack])
-        zmax = np.max([gear.center[2] for gear in self.gear_stack])
+        ro_0 = self.gear_stack[0].ro
+        ro_1 = self.gear_stack[-1].ro
+        ra_0 = self.gear_stack[0].ra
+        ra_1 = self.gear_stack[-1].ra
 
-        if self.gear.params.inside_teeth:
-            plug = Cylinder(ro_max,zmax-zmin) - \
-                    Cylinder(ra_max+DELTA,zmax-zmin)
-            plug = plug.translate(nppoint2Vector(OUT*(zmax+zmin)/2))
-        else:
-            plug = Cylinder(rd_min+DELTA,zmax-zmin)
-            plug = plug.translate(nppoint2Vector(OUT*(zmax+zmin)/2))
+        zmin = np.min([gear.profile_closed[-2](0.5)[2] for gear in self.gear_stack])
+        zmax = np.max([gear.profile_closed[-2](0.5)[2] for gear in self.gear_stack])
+
+        
+        if isinstance(self.gear,GearSpherical):
+            if self.gear.params.inside_teeth:
+                z_height = zmax-zmin
+                align1 = (Align.CENTER, Align.CENTER, Align.MIN)
+                plug = Cylinder(ro_0,z_height,align=align1) - \
+                      Cylinder(ro_1,z_height,align=align1) - \
+                      Cone(ro_0,ro_1,zmax-zmin,align=align1)
+                plug = plug.translate(nppoint2Vector(OUT*(zmin)))
+            else:
+                plug = Cone(ro_0,ro_1,zmax-zmin,align=(Align.CENTER, Align.CENTER, Align.MIN))
+                plug = plug.translate(nppoint2Vector(OUT*(zmin)))
+        
+        elif isinstance(self.gear,GearCylindric):
+            if self.gear.params.inside_teeth:
+                plug = Cylinder(ro_max,zmax-zmin) - \
+                        Cylinder(ra_max+DELTA,zmax-zmin)
+                plug = plug.translate(nppoint2Vector(OUT*(zmax+zmin)/2))
+            else:
+                plug = Cylinder(rd_min+DELTA,zmax-zmin)
+                plug = plug.translate(nppoint2Vector(OUT*(zmax+zmin)/2))
+        
 
 
 
@@ -131,7 +156,13 @@ class GearBuilder():
                 solid2_to_fuse.append(shape_dict[k].rotate(Axis((0,0,0),(0,0,1)),angle_construct))
                 angle_idx = angle_idx+2**k
                 
-        self.solid = Solid.fuse(plug,*solid2_to_fuse, glue=False,tol=tol).clean()
+        if len(solid2_to_fuse)>1:
+            self.solid = Solid.fuse(*solid2_to_fuse, glue=False,tol=tol).clean()
+        else:
+            self.solid = solid2_to_fuse[0].clean()
+
+        if add_plug:
+            self.solid = self.solid.fuse(plug).clean()
 
         print(f"fuse time: {time.time()-start}")
 
@@ -147,8 +178,8 @@ class GearBuilder():
                 profile[ii].params['points'][0] = profile[jj].params['points'][-1] = p_mean
     
     def gen_splines(self,curve_bezier:Curve):
-        vectors = nppoint2Vector(curve_bezier.params['points'])
-        weights = curve_bezier.params['weights'].tolist()
+        vectors = nppoint2Vector(curve_bezier.points)
+        weights = curve_bezier.weights.tolist()
         return Edge.make_bezier(*vectors,weights=weights)
 
     def generate_side_surfaces(self):
@@ -161,9 +192,10 @@ class GearBuilder():
         for k in range(len(self.nurb_profile_stack[0])):
             # vertical stack is built for 1 2d profile element (eg. all involute curves stacked up)
             curve_stack_vert = [ curve[k] for curve in self.nurb_profile_stack]
-            point_stack = np.stack([curve.params['points'] for curve in curve_stack_vert])
-            weight_stack = np.stack([curve.params['weights'] for curve in curve_stack_vert])
-
+            # point_stack = np.stack([curve.params['points'] for curve in curve_stack_vert])
+            # weight_stack = np.stack([curve.params['weights'] for curve in curve_stack_vert])
+            point_stack = np.stack([curve.points for curve in curve_stack_vert])
+            weight_stack = np.stack([curve.weights for curve in curve_stack_vert])
             # example size numbers: points for one curve: 4x3, weights for one curve: 4, point stack: 6x4x3, weight stack: 6x4
             # adding weights as 4th coordinate
             # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
@@ -172,17 +204,23 @@ class GearBuilder():
 
 
         target_point_2 = np.concatenate(point_collector2,axis=1)
+        start_surf = time.time()
         sol2,points2,weights2 = self.solve_surface(target_point_2, n_points_vert=self.n_points_vert)
+        print(f"surface solve time: {time.time()-start_surf}")
         points2 = np.concatenate([points2,weights2[:,:,np.newaxis]],axis=2)
 
-        idx = np.arange(0,points2.shape[1],self.n_points_hz-1)
+        # idx = np.arange(0,points2.shape[1],self.n_points_hz-1)
+        idx = self.nurb_profile_stack[0].knots[:-1]
         points3=np.roll(np.insert(points2,idx,points2[:,idx,:],axis=1),-1,axis=1)
 
 
-
+        idx_loc=0
+        start_surf_gen = time.time()
         for k in range(len(self.nurb_profile_stack[0])):
-
-            points_w = points3[:,k*self.n_points_hz:(k+1)*self.n_points_hz,:]
+            n_points = self.nurb_profile_stack[0][k].n_points
+            
+            points_w = points3[:,idx_loc:idx_loc+n_points,:]
+            idx_loc = idx_loc + n_points
             points = points_w[:,:,:3]
             weights = points_w[:,:,3]
             vpoints = [nppoint2Vector(points[k]) for k in range(points.shape[0])]
@@ -190,18 +228,13 @@ class GearBuilder():
             surface_1 = Face.make_bezier_surface(vpoints,weights.tolist())
             if surface_1.area>DELTA:
                 profile_surfaces.append(surface_1)
-        
+        print(f"surface gen time: {time.time()-start_surf_gen}")
         return profile_surfaces
         
     
-    def generate_cover_surface_flat(self, nurb_chain: CurveChain):
-        # resisting 1-lining this for improved debugging
-        splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA]
-        return Face.make_surface(Wire(splines)).clean()
-    
     def generate_cover_surface(self, nurb_chain: CurveChain):
         # resisting 1-lining this for improved debugging
-        splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA]
+        splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA and curve.active]
         return Face.make_surface(Wire(splines)).clean()
 
                     
@@ -242,44 +275,82 @@ class GearBuilder():
         weights_out = points_sol[:,:,3]
         return sol, points_out, weights_out
     
+    def solve_surface2(self,target_points, n_points_vert = 4):
 
-# class GearBuilderSpherical(GearBuilder):
-#     def __init__(self,
-#                  gear: GearSpherical,
-#                  n_points_hz = 4,
-#                  n_points_vert=4,
-#                  **kwargs):
+        n = target_points.shape[1]
+        m = n_points_vert
+        o = target_points.shape[0]
+
+        def point_allocator(x):
+            points = np.zeros((m,n,4))
+            points[0,:,:] = target_points[0,:,:]
+            points[-1,:,:] = target_points[-1,:,:]
+
+            points[1:-1,:,:] = x[:(m-2)*n*4].reshape(((m-2),n,4))
+            return points
+        
+        def inverse_allocator(points,t):
+            x = np.zeros(((m-2)*n*4+o))
+            x[:(m-2)*n*4] = points[1:-1,:,:].reshape((m-2)*n*4)
+            return x
+
+        def cost_fun(x):
+            points = point_allocator(x)
+            tref = np.linspace(0,1,o)[1:-1]
+            return np.sum((bezierdc(tref,points)-target_points[1:-1,:,:])**2)
+        
+        init_t = np.linspace(0,1,o)[1:-1]
+        init_points = bezierdc(np.linspace(0,1,m),target_points)
+        init_guess_x = inverse_allocator(init_points,init_t)
+
+        sol = minimize(cost_fun,init_guess_x)
+        points_sol = point_allocator(sol.x)
+        points_out = points_sol[:,:,:3]
+        weights_out = points_sol[:,:,3]
+        return sol, points_out, weights_out
+    
+
 
 start = time.time()
 
-n_z = 10
+n_z = 9
 
-# gear1 = GearProfile2D(pitch_angle=np.pi*2/8, h_d=1.25,h_a=1,profile_shift=0.25)
+
 # gear2 = GearBuilder(GearCylindric(z_vals=np.array([0,1,2]),n_tweens=6,
 #                                   params=GearParamHandler(num_of_teeth=n_z,
-#                                                           angle=lambda z: 0.05*(abs(z-1))**1*PI*2,
+#                                                           angle=lambda z: 0.01*(abs(z-1))**1*PI*2,
 #                                                           center=lambda z: z*3*OUT,
 #                                                           inside_teeth=False,
-#                                                           profile_overlap=0,
+#                                                           profile_overlap=0.01,
 #                                                           cutout_teeth_num=0,
+#                                                           h_o=2,
 #                                                           profile_param= InvoluteProfileHandler(
 #                                                               profile_shift=lambda z: 0.2-0.0*(z-1)**2,
 #                                                               root_fillet=0.2,
 #                                                               h_a= lambda z: 1,
 #                                                               enable_undercut=True))),
 #                                                               n_points_vert=4,
-#                                                               n_points_hz=5)
+#                                                               n_points_hz=4)
 
-gamma=PI/2 * 0.4
-gear3 = GearBuilder(GearSpherical(z_vals=np.array([0,1]),n_tweens=6,
+gamma=PI/2 * 0.5
+gear2 = GearBuilder(GearSpherical(z_vals=np.array([0,3]),n_tweens=6,
                                   params=GearParamHandlerSpherical(num_of_teeth=n_z,
+                                                                   cutout_teeth_num=0,
+                                                                   angle= lambda z: 0.1*(z-1.5)**1,
                                                                    center=lambda z: z*OUT,
                                                                    module=lambda z: 1-np.tan(gamma)*z/n_z*2,
-                                                                   profile_overlap=0.01,
+                                                                   profile_overlap=0.0,
+                                                                   h_o=1.5,
                                                                    profile_param=SphericalInvoluteProfileHandler(
-                                                                       gamma=gamma
+                                                                       gamma=gamma,
+                                                                       profile_shift=0.3,
+                                                                       root_fillet=0.1,
+                                                                       enable_undercut=False,
                                                                    )
-                                  )))
+                                  )),
+                    n_points_vert=4,
+                    n_points_hz=5)
 
+print(f"total time: {time.time()-start}")
 
-show(gear3.solid,gear3.profile_solid)
+show(gear2.solid,gear2.profile_solid)

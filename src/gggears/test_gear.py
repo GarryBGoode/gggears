@@ -42,15 +42,16 @@ def_param = InvoluteProfileParam(h_a=1,
                                  enable_undercut=False,
                                  root_fillet=0)
 
-val_range = np.linspace(0,1,10)
+val_range = np.linspace(0,0.5,4)
 attr = 'root_fillet'
 
 for val in val_range:
     mod_param = def_param
     setattr(mod_param,attr,val)
     gear3 = Gear2D(num_of_teeth=n, 
+                   profile_symmetry_shift=-0.5,
                    profile_param=mod_param)
-    point_arr =  gear3.profile_reference.profile(np.linspace(0,1,101*n))
+    point_arr =  gear3.profile_closed(np.linspace(0,1,101*n))
     plt.plot(point_arr[:,0],point_arr[:,1])
 
 # plt.plot(point_arr[:,0],point_arr[:,1])

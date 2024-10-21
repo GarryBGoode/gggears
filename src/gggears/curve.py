@@ -125,6 +125,43 @@ class Curve():
         self.t_1 = self.p2t(t1)
         self.update_lengths()
 
+    def __add__(self, other:'Curve'):
+        return Curve(lambda t: self(t) + other(t), 
+                     active=self.active and other.active, 
+                     t0=0, t1=1, params={}, enable_vectorize=False)
+    
+    def __subtract__(self, other:'Curve'):
+        return Curve(lambda t: self(t) - other(t), 
+                     active=self.active and other.active, 
+                     t0=0, t1=1, params={}, enable_vectorize=False)
+    
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            return Curve(lambda t: self(t) * other, 
+                         active=self.active, 
+                         t0=self.t_0, t1=self.t_1, 
+                         params=self.params, 
+                         enable_vectorize=self.enable_vectorize)
+        else:
+            raise TypeError("Multiplication with type {} is not supported".format(type(other)))
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+    
+    def __truediv__(self, other):
+        if isinstance(other, (int, float)):
+            return Curve(lambda t: self(t) / other, 
+                         active=self.active, 
+                         t0=self.t_0, t1=self.t_1, 
+                         params=self.params, 
+                         enable_vectorize=self.enable_vectorize)
+        else:
+            raise TypeError("Division with type {} is not supported".format(type(other)))
+    
+    @property
+    def is_closed(self):
+        return np.linalg.norm(self(0)-self(1))<DELTA/100
+
 class CurveChain(Curve):
     '''
         A class that chains together multiple curves while also being callable and can be used as a single curve.
@@ -184,10 +221,7 @@ class CurveChain(Curve):
         
     def get_p_index(self,t):
         '''find which curve index t belongs to and how far along it is in the curve'''
-        length_sum = np.cumsum(self.length_array)
-        length_portions = np.concatenate([[0],length_sum/self.length])
-
-
+        length_portions = self.get_length_portions()
         idx = np.searchsorted(length_portions,t)
 
         if idx>self.idx_active_max+1:
@@ -202,11 +236,14 @@ class CurveChain(Curve):
         return idx-1,t3
     
     def get_t_for_index(self,idx):
-        length_sum = np.cumsum(self.length_array)
-        length_portions = np.concatenate([[0],length_sum/self.length])
-
+        length_portions = self.get_length_portions()
         return length_portions[idx], length_portions[idx+1]
     
+    def get_length_portions(self):
+        length_sum = np.cumsum(self.length_array)
+        length_portions = np.concatenate([[0],length_sum/self.length])
+        return length_portions
+
     def curve_list_eval(self,t):
 
         idx, t2 = self.get_p_index(t)
@@ -232,13 +269,7 @@ class CurveChain(Curve):
                 ii_p1 = (k+1)%len(curve_list)
                 ii_m1 = (k-1)%len(curve_list)
                 if not curve_list[ii].active:
-                    curve_list[ii] = Curve(arc_from_2_point,
-                                           active=False,
-                                           params={'p0': curve_list[ii_m1](1),
-                                                   'p1': curve_list[ii_p1](0),
-                                                   'curvature':0})
-
-
+                    curve_list[ii] = LineCurve(curve_list[ii_m1](1),curve_list[ii_p1](0),active=False)
         return curve_list
 
     def __len__(self):
@@ -332,6 +363,22 @@ class CurveChain(Curve):
         curve1.set_end_on(t1)
         curve2.set_start_on(t2)
         return CurveChain(*curve1.get_curves(),arc,*curve2.get_curves())
+    
+    @property
+    def continuity_list(self):
+        out_list = []
+        for k in range(self.num_curves):
+            out_list.append(np.linalg.norm(self.curves[k](1) - self.curves[(k+1)%self.num_curves](0)) < DELTA/100 or
+                            not self.curves[k].active or
+                            not self.curves[(k+1)%self.num_curves].active)
+        return out_list
+    @property
+    def is_continuous(self):
+        return all(self.continuity_list[:-1])
+
+    @property
+    def is_closed(self):
+        return np.linalg.norm(self(0)-self(1))<DELTA/100 and self.is_continuous
 
 
 def find_curve_intersect(curve1: Curve, curve2: Curve, guess=[0.5,0.5]):
@@ -432,8 +479,6 @@ def fit_nurb_points(target_points: np.ndarray, n_points=4, force_2D=False):
             for j in range(N_Dim):
                 x[ii+j] = points[k,j]
             x[N_Dim*(n_points-2)+k-1] = weights[k]
-            # points[k] = np.array([x[ii+j] for j in range(N_Dim)])
-            # weights[k] = x[N_Dim*(n_points-2)+k-1]
         
         x[(N_Dim+1)*(n_points-2):(N_Dim+1)*(n_points-2)+N_target] = t
         return x
@@ -515,15 +560,15 @@ def fit_nurb_optim(target_curve: Curve, n_points=4, N_Dim=3):
     return sol,point_out/scaler, weight_out
 
 
-def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False):
+def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False, samp_ratio=1.5):
     N_Dim = 2 if force_2D else 3
     
     scaler = 1
-    # each bezier point brings 4 DoF (xyz + w)
-    # each eval point uses 2 DoF (xyz - t)
-    #
+    # each bezier point brings 4 DoF unknown (xyz + w)
+    # each eval point uses 2 DoF known (xyz - t)
+    # on average at least 2 eval points are needed per bezier point
 
-    n_fit_points = (n_points) * 4
+    n_fit_points = int(np.ceil((n_points) * 2 * samp_ratio))
     # the 2 edge points are enforced
     tvals = np.linspace(0,1,n_fit_points)
     target_points = (target_curve(tvals)*scaler)[:,:N_Dim]
@@ -533,16 +578,27 @@ def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False):
 
     return sol, points, weights
 
-def convert_curve_nurbezier(input_curve: Curve, **kwargs):
+def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True,**kwargs):
     if hasattr(input_curve,'__iter__'):
         out_curve_list = []
         for curve in input_curve:
-            out_curve_list.append(convert_curve_nurbezier(curve,**kwargs))
-        return CurveChain(*out_curve_list)
+            if curve.active or not skip_inactive:
+                out_curve_list.append(convert_curve_nurbezier(curve,**kwargs))
+        return NURBSCurve(*out_curve_list)
             
     else:
-        sol, bz_points, bz_weights = fit_nurb_optim2(input_curve,**kwargs)
-        out_curve = Curve(nurbezier,params={'points':bz_points,'weights':bz_weights})
+        if isinstance(input_curve,LineCurve):
+            bz_points = np.array([input_curve.p0,input_curve.p1])
+            bz_weights = np.ones((2))
+        elif isinstance(input_curve,ArcCurve):
+            if abs(input_curve.angle)<PI:
+                bz_points,bz_weights = calc_nurbezier_arc(input_curve.p0,input_curve.p1,input_curve.center)
+            else:
+                sol, bz_points, bz_weights = fit_nurb_optim2(input_curve,**kwargs)
+        else:
+            sol, bz_points, bz_weights = fit_nurb_optim2(input_curve,**kwargs)
+        # out_curve = Curve(nurbezier,params={'points':bz_points,'weights':bz_weights})
+        out_curve = NurbCurve(bz_points,bz_weights,active=input_curve.active)
 
     return out_curve
 
@@ -647,19 +703,23 @@ class ArcCurve(Curve):
                          enable_vectorize=enable_vectorize)
     @property
     def p0(self):
-        return self._p0
+        return self(0)
     
     @property
     def p1(self):
-        return self._p1
+        return self(1)
     
     @p0.setter
     def p0(self, value):
         self._p0 = value
+        self.t_0 = 0
+        self.update_lengths()
 
     @p1.setter
     def p1(self, value):
         self._p1 = value
+        self.t_1 = 1
+        self.update_lengths()
 
     @property
     def curvature(self):
@@ -729,6 +789,40 @@ class ArcCurve(Curve):
                    active=active,
                    enable_vectorize=enable_vectorize)
     
+    @classmethod
+    def from_radius_center_angle(cls,
+                                 radius=1, 
+                                 center=ORIGIN, 
+                                 angle_start=0, 
+                                 angle_end=PI/2,
+                                 axis=OUT, 
+                                 active=True, 
+                                 enable_vectorize=True):
+        axis1 = normalize_vector(axis)
+        diff_angle = (angle_end-angle_start)%(PI*2)
+        revolutions = (angle_end-angle_start)//(PI*2)
+        # default starting direction is RIGHT if axis is OUT
+        v0 = normalize_vector(np.cross(UP,axis1))
+        p0 = center + scp_Rotation.from_rotvec(angle_start*axis1).apply(v0*radius)
+        p1 = center + scp_Rotation.from_rotvec((angle_start+diff_angle)*axis1).apply(v0*radius)
+        return cls(p0=p0, 
+                   p1=p1, 
+                   curvature=1.0/radius, 
+                   axis=axis, 
+                   revolutions=revolutions, 
+                   active=active,
+                   enable_vectorize=enable_vectorize)
+    
+    @classmethod
+    def from_point_center_angle(cls,
+                                p0=RIGHT,
+                                center=ORIGIN,
+                                angle=PI/2,
+                                axis=OUT,
+                                active=True,
+                                enable_vectorize=True):
+        pass
+    
 
 class InvoluteCurve(Curve):
     def __init__(self, 
@@ -780,11 +874,14 @@ class SphericalInvoluteCurve(Curve):
                         enable_vectorize=enable_vectorize)
         
 class TransformedCurve(Curve):
-    def __init__(self, transform: callable, curve: Curve):
+    def __init__(self, transform: callable, curve: Curve, params={}):
         self.target_curve = curve
         self.transform_method = transform
-        super().__init__(lambda t: self.transform_method(self.target_curve(t)), 
-                         active=self.target_curve.active, t0=0, t1=1, params={}, enable_vectorize=False)
+        super().__init__(lambda t: self.apply_transform(self.target_curve(t)), 
+                         active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=False)
+    
+    def apply_transform(self,point):
+        return self.transform_method(point,**self.params)
         
 
 class MirroredCurve(TransformedCurve):
@@ -814,3 +911,32 @@ class NurbCurve(Curve):
                          t1=1, 
                          params={}, 
                          enable_vectorize=False)
+    @property
+    def n_points(self):
+        return self.points.shape[0]
+        
+
+class NURBSCurve(CurveChain):
+    def __init__(self,*curves : 'NurbCurve', active=True, **kwargs):
+        self.curves = [*curves]
+        self._active = active
+        self.update_lengths()
+
+    @property
+    def points(self):
+        out_arr = np.concatenate([curve.points[:-1] for curve in self.curves])
+        out_arr = np.append(out_arr,self.curves[-1].points[-1,np.newaxis],axis=0)
+        return out_arr
+    
+    @property
+    def weights(self):
+        out_arr = np.concatenate([curve.weights[:-1] for curve in self.curves])
+        out_arr = np.append(out_arr,self.curves[-1].weights[-1,np.newaxis],axis=0)
+        return out_arr
+    
+    @property
+    def knots(self):
+        out_arr = np.array([0])
+        for curve in self.curves:
+            out_arr = np.append(out_arr,curve.n_points-1+out_arr[-1])
+        return out_arr

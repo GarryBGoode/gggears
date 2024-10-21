@@ -187,8 +187,9 @@ def arc_from_2_point(t, p0=RIGHT, p1=UP, curvature=1.0, axis=OUT, revolutions=0.
     else:
 
         # axis = normalize_vector( np.cross((p0-center),(p1-center)))
-        dp = normalize_vector(p1-p0)
-        axis = normalize_vector(axis-np.dot(axis,dp)*dp)
+        if any((p1-p0)!=0):
+            dp = normalize_vector(p1-p0)
+            axis = normalize_vector(axis-np.dot(axis,dp)*dp)
         r = 1/curvature
         if abs(r)<np.linalg.norm(p1-p0)/2:
             r=np.linalg.norm(p1-p0)/2*np.sign(r)
@@ -305,3 +306,18 @@ def nurbezier_surface_2(u,v,points,weights):
         
     
     return np.sum(parts,axis=0) / np.sum(weights_bezier)
+
+
+def calc_nurbezier_arc(p0,p2,center):
+    pmid = (p0+p2)/2
+    h_angle = angle_between_vectors(p0-center,p2-center)/2
+    # p0 and p2 should be on the same radius, but adding little numeric redundancy here with the average
+    radius = (np.linalg.norm(p0-center) + np.linalg.norm(p2-center))/2
+    p1 = normalize_vector(pmid-center)*(np.sin(h_angle)**2/np.cos(h_angle)+np.cos(h_angle))*radius+center
+    bz_points = np.array([p0,p1,p2])
+    bz_weights = np.array([1,np.cos(h_angle),1])
+    return bz_points, bz_weights
+
+
+def calc_quadratic_bezier_interp(p0,p1,p2):
+    return np.array([p0,(4*p1-p0-p2),p2])
