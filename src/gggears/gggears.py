@@ -49,6 +49,28 @@ class InvoluteProfileParam():
     enable_undercut: bool = True
 
 
+@dataclasses.dataclass
+class GearProfileGenParam():
+    pitch_angle: float = 2 * PI / 16
+    h_a: float = 1.0
+    h_d: float = 1.2
+    tip_fillet: float = 0.0
+    root_fillet: float = 0.0
+    tip_reduction: float = 0.0
+
+class GearProfileGenerator(GearProfileGenParam):
+    def __init__(**kwargs):
+        super().__init__(**kwargs)
+        self.ra_circle = self.ra_generator()
+        self.rp_circle = self.rp_generator()
+        self.rd_circle = self.rd_generator()
+        self.tooth_curve = self.tooth_curve_generator()
+
+        self.tooth_curve, self.ra_circle = self.update_tip()
+        self.tooth_curve = self.update_root_fillet()
+        self.tooth_curve = self.update_tip_fillet()
+
+
 class GearProfile2D(InvoluteProfileParam):
     def __init__(self,
                  **kwargs
@@ -411,7 +433,7 @@ class GearProfileSpherical(SphericalInvoluteProfileParam):
         sol1 = root(lambda t: np.arcsin(curve1(t[0])[2]/self.R)-self.an_a,[0])
         curve1.set_end_on(sol1.x[0])
         curve3 = crv.MirroredCurve(curve1,plane_normal=UP).reverse()
-        curve2 = crv.ArcCurve(p0=curve1(1),p1=curve3(0),curvature=self.C_sph,axis=OUT)
+        curve2 = crv.ArcCurve.from_2_point_curvature(p0=curve1(1),p1=curve3(0),curvature=self.C_sph,axis=OUT)
         self.ref_rack_curve = crv.CurveChain(curve1,curve2,curve3)
 
     def calculate_involute_base(self):
@@ -482,10 +504,10 @@ class GearProfileSpherical(SphericalInvoluteProfileParam):
 
 
                 loc_curve = crv.CurveChain(self.undercut_connector_arc,self.involute_curve)
-                rb_curve = crv.ArcCurve(p0=self.involute_curve(0),
-                                        p1=self.involute_curve(0)*np.array([1,-1,1]),
-                                        curvature=1/self.involute_curve.r,
-                                        revolutions=0)
+                rb_curve = crv.ArcCurve.from_2_point_curvature(p0=self.involute_curve(0),
+                                                               p1=self.involute_curve(0)*np.array([1,-1,1]),
+                                                               curvature=1/self.involute_curve.r,
+                                                               revolutions=0)
 
                 sol0 = crv.find_curve_intersect(self.undercut_curve,rb_curve,guess=[0.1,0])
                 sol1 = crv.find_curve_intersect(loc_curve,self.undercut_curve, guess=[0.3,sol0.x[0]*2])

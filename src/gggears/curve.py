@@ -675,8 +675,138 @@ class LineCurve(Curve):
                          t1=1, 
                          params={}, 
                          enable_vectorize=enable_vectorize)
+        
+    def update_lengths(self):
+        self.length = np.linalg.norm(self.p1-self.p0)
+        self.t2l['l'] = np.array([0,1])
+        self.t2l['t'] = np.array([self.t_0,self.t_1])
 
 class ArcCurve(Curve):
+    def __init__(self,
+                 radius=1,
+                 angle=PI/2,
+                 center=ORIGIN,
+                 yaw=0,
+                 pitch=0,
+                 roll=0,
+                 active=True):
+        self._radius = radius
+        self._angle = angle
+        self._center = center
+        self._yaw = yaw
+        self._pitch = pitch
+        self._roll = roll
+        self._rotmat = self.gen_rotmat()
+        super().__init__(self.arcfunc,active=active,enable_vectorize=False)
+
+    
+    def gen_rotmat(self):
+        return scp_Rotation.from_euler('zyx',[self._yaw,self._pitch,self._roll]).as_matrix()
+    
+    def arcfunc(self,t):
+        rot_arc = scp_Rotation.from_euler('z',self._angle*t).as_matrix()
+        points =  self._rotmat @ rot_arc @ ( RIGHT*self._radius) + self._center
+        return points
+    
+    @property
+    def radius(self):
+        return self._radius
+    
+    @property
+    def r(self):
+        return self._radius
+    
+    @property
+    def angle(self):
+        return self._angle
+    
+    @property
+    def center(self):
+        return self._center
+    
+    @property
+    def p0(self):
+        return self(0)
+    
+    @property
+    def p1(self):
+        return self(1)
+    
+    @property
+    def curvature(self):
+        return 1/self._radius
+    
+    @property
+    def revolutions(self):
+        return self._angle//(PI*2)
+    
+    @property
+    def axis(self):
+        return self._rotmat @ OUT
+    
+
+
+    @classmethod
+    def from_2_point_center(cls,
+                            p0=RIGHT, 
+                            p1=UP, 
+                            center=ORIGIN,
+                            revolutions=0,
+                            active=True):
+        r = np.linalg.norm(p0-center)
+        x = normalize_vector(p0-center)
+        z = normalize_vector(np.cross(p0-center,p1-center))
+        y = np.cross(z,x)
+        R = np.transpose(np.array([x,y,z]))
+        yaw,pitch,roll = scp_Rotation.from_matrix(R).as_euler('zyx')
+        return cls(radius=r, 
+                   angle=angle_between_vectors(p0-center,p1-center) + revolutions*PI*2, 
+                   center=center, 
+                   yaw=yaw, 
+                   pitch=pitch, 
+                   roll=roll, 
+                   active=active)
+    
+    @classmethod
+    def from_2_point_curvature(cls,
+                               p0=RIGHT,
+                               p1=UP,
+                               curvature=1,
+                               axis=OUT,
+                               revolutions=0,
+                               active=True):
+        r = 1/curvature
+        if any((p1-p0)!=0):
+            dp = normalize_vector(p1-p0)
+        else:
+            # this is baaad but can't deal with it rn
+            dp = UP
+            
+        axis = normalize_vector(axis-np.dot(axis,dp)*dp)
+
+        if abs(r)<np.linalg.norm(p1-p0)/2:
+            r=np.linalg.norm(p1-p0)/2*np.sign(r)
+        
+        h = np.sqrt(r**2-(np.linalg.norm(p1-p0)/2)**2)*np.sign(r)
+        
+        center = (p0+p1)/2-np.cross(dp,axis)*h
+        return cls.from_2_point_center(p0=p0,
+                                       p1=p1,
+                                       center=center,
+                                       revolutions=revolutions)
+
+
+
+    def update_lengths(self):
+        self.length = self.radius * self.angle
+        self.t2l['l'] = np.array([0,1])
+        self.t2l['t'] = np.array([self.t_0,self.t_1])
+    
+
+
+
+
+class ArcCurve_old(Curve):
     def __init__(self, 
                  p0=RIGHT, 
                  p1=UP, 

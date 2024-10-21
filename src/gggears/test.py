@@ -17,56 +17,33 @@ import matplotlib.pyplot as plt
 import numpy as np
 from defs import *
 
-n=12
-pitch_angle = 2*PI/n
+p0 = normalize_vector(np.array([1,0,0]))
+p1 = normalize_vector(np.array([0,1,0]))
+p2 = normalize_vector(np.array([1,1,2]))
 
-class ref_arc_builder(CurveBuilderBase):
-    def __init__(self,pitch_angle,radius=1):
-        self.pitch_angle = pitch_angle
-        self.radius = radius
-    def gen_curve(self):
-        return crv.ArcCurve.from_radius_center_angle(self.radius,ORIGIN,-self.pitch_angle,0)
-    
-class ref_tooth_line_builder(CurveBuilderBase):
-    def __init__(self,pitch_angle,radius=1,height=0.2,alpha=20*np.pi/180, reverse=False):
-        self.pitch_angle = pitch_angle
-        self.radius = radius
-        self.alpha = alpha
-        self.height=height
-        self.reverse = reverse
-    def gen_curve(self):
-        p0 = RIGHT * self.radius + rotate_vector(RIGHT,self.alpha)*self.height/2
-        p1 = RIGHT * self.radius + rotate_vector(RIGHT,self.alpha)*(-self.height/2)
-        p2 = rotate_vector(p0,-self.pitch_angle/4)
-        p3 = rotate_vector(p1,-self.pitch_angle/4)
-        if self.reverse:
-            return crv.LineCurve(p3,p2)
-        else:
-            return crv.LineCurve(p2,p3)
-        
-test1 = ref_arc_builder(pitch_angle,1)
-test2 = ref_arc_builder(pitch_angle,1.7)
-test3 = ref_tooth_line_builder(pitch_angle,1.05,reverse=True)
-test4 = ref_tooth_line_builder(-pitch_angle,1.05,alpha=-20*np.pi/180,reverse=False)
+curve1 = crv.ArcCurve2.from_2_point_center(p0,p1)
+curve2 = crv.ArcCurve2.from_2_point_center(p1,p2)
+curve3 = crv.ArcCurve2.from_2_point_center(p2,p0)
+# curve4 = copy.deepcopy(curve3)
+# curve4.set_start_on(0.5)
+# curve4.set_end_on(3)
 
-test5 = GearToothTrapezoidAdapter(TrapezoidPatternBuilder(test4,test2,test3,test1),
-                                  root_fillet=0.05*0,
-                                  tip_fillet=0.0,
-                                  tip_reduction=0.1)
+curve4 = crv.CurveChain(curve1,curve2,curve3)
+curve4 = curve4.fillet(radius=0.1,location=curve4.get_length_portions()[2])
 
-points1 = test1.gen_curve()(np.linspace(0,1,100))
-points2 = test2.gen_curve()(np.linspace(0,1,100))
-points3 = test3.gen_curve()(np.linspace(0,1,100))
-points4 = test4.gen_curve()(np.linspace(0,1,100))
-points5 = test5.gen_curve()(np.linspace(0,1,1000))
+points1 = curve1(np.linspace(0,1,31))
+points2 = curve2(np.linspace(0,1,31))
+points3 = curve3(np.linspace(0,1,31))
+points4 = curve4(np.linspace(0,1,201))
 
 
-ax = plt.axes()
+ax = plt.axes(projection='3d')
+
+ax.plot(points1[:,0],points1[:,1],points1[:,2])
+ax.plot(points2[:,0],points2[:,1],points2[:,2])
+ax.plot(points3[:,0],points3[:,1],points3[:,2])
+ax.plot(points4[:,0],points4[:,1],points4[:,2])
 ax.axis('equal')
-ax.plot(points1[:,0],points1[:,1])
-ax.plot(points2[:,0],points2[:,1])
-ax.plot(points3[:,0],points3[:,1])
-ax.plot(points4[:,0],points4[:,1])
-ax.plot(points5[:,0],points5[:,1])
+
 
 plt.show()
