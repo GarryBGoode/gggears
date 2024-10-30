@@ -14,31 +14,37 @@ from defs import*
 from function_generators import *
 from scipy.optimize import root, minimize
 import copy
+from enum import Enum
 
 class Curve():
     '''
         A class to represent a curve in space.
-        Callable with inputs between 0 and 1, returns 1 point on the curve proportionally to the input.
-        When called with an array of inputs, should return an array of outputs (concat along axis 0).
-        The 'active' flag does not inhibit anything, it is just there to signify if a curve needs to exist as an object, but does not exist geometrically (eg. 0 length line).
     '''
     def __init__(self, curve_function: callable, active=True, t0=0, t1=1,params={},enable_vectorize=True):
+        # active is used to show if curve is degenerate, such as a 0 length line
         self.active = active
+        # start and end of the curve in its natural parameter, eg. an arc that starts and ends at 30 and 60 degrees
         self.t_0 = t0
         self.t_1 = t1
-        self.params = params
-        self.t2l = {'t': np.array([-1E6, 1E6]), 'l': np.array([-1E6, 1E6])}
+        # mathematical function to generate curve points
         self.function = curve_function
-        self.len_approx_N = 101
+        # parameters of the curve function
+        self.params = params
+
+        # length of the curve is stored in the object, calculated by update_lengths()
         self.length=0
+        self.len_approx_N = 101
+        # used for length-parametrization conversion
+        self.t2l = {'t': np.array([-1E6, 1E6]), 'l': np.array([-1E6, 1E6])}
+
+        # vectorize feature is used to iterate over np.array inputs, to eg. generate 100 points on the curve with np.linspace
+        # if curve_function is already compatible with array inputs, this can be disabled
         self.enable_vectorize=enable_vectorize
         if self.active:
+            # update_lengths might be CP expensive so only done if active
             self.update_lengths()
 
     def __call__(self,p):
-        # if not self.active:
-        #     return
-        # else:
         t = self.p2t(p)
         if self.enable_vectorize:
             return vectorize(self.function)(t,**self.params)
@@ -75,7 +81,7 @@ class Curve():
             value_array = vectorize(self.function)(t_range, **self.params)
         else:
             value_array = self.function(t_range, **self.params)
-        # curve_len = np.cumsum(np.append(np.array([0]), np.linalg.norm(value_array[1:, :, 0] - value_array[:-1, :,0], axis=1)))
+
         curve_len = np.cumsum(np.append(np.array([0]), np.linalg.norm(value_array[1:, :] - value_array[:-1, :], axis=1)))
         self.length = curve_len[-1]
         self.t2l['l'] = curve_len / self.length
@@ -117,6 +123,11 @@ class Curve():
     def copy(self):
         return copy.deepcopy(self)
     
+    def set_start_and_end_on(self,t0,t1):
+        self.t_0 = self.p2t(t0)
+        self.t_1 = self.p2t(t1)
+        self.update_lengths()
+
     def set_start_on(self,t0):
         self.t_0 = self.p2t(t0)
         self.update_lengths()
@@ -311,8 +322,9 @@ class CurveChain(Curve):
         self.update_lengths()
 
     def pop(self, index=-1):
-        self.curves.pop(index)
+        ret_curve = self.curves.pop(index)
         self.update_lengths()
+        return ret_curve
 
     def clear(self):
         self.curves.clear()
@@ -321,6 +333,27 @@ class CurveChain(Curve):
         self.curves.reverse()
         for curve in self.curves:
             curve.reverse()
+
+    def set_start_and_end_on(self, t0, t1, preserve_inactive_curves=False):
+        idx,t2 = self.get_p_index(t0)
+        if preserve_inactive_curves:
+            for curve in self.curves[:idx]:
+                curve.active=False
+            self.curves[idx].set_start_on(t2)
+        else:
+            self.curves = self.curves[idx:]
+            self.curves[0].set_start_on(t2)
+
+        idx,t2 = self.get_p_index(t1)
+        if preserve_inactive_curves:
+            for curve in self.curves[idx+1:]:
+                curve.active=False
+            self.curves[idx].set_end_on(t2)
+        else:
+            self.curves = self.curves[:idx+1]
+            self.curves[-1].set_end_on(t2)
+        self.update_lengths()
+        
 
     def set_start_on(self,t0, preserve_inactive_curves=False):
         idx,t2 = self.get_p_index(t0)
@@ -356,13 +389,20 @@ class CurveChain(Curve):
 
         return curve1,curve2
     
-    def fillet(self,radius,location=0.5):
-        arc, t1, t2 = fillet_curve(self,radius,location)
+    def fillet_at_locations(self,radius,locations=[0.5,0.6]):
+        arc, t1, t2 = fillet_curve(self,radius,start_locations=locations)
         curve1 = copy.deepcopy(self)
         curve2 = copy.deepcopy(self)
         curve1.set_end_on(t1)
         curve2.set_start_on(t2)
         return CurveChain(*curve1.get_curves(),arc,*curve2.get_curves())
+
+    def fillet(self,radius,location=0.5):
+        return self.fillet_at_locations(radius,[location+radius/self.length,location-radius/self.length])
+    
+    def fillet_at_index(self,radius,index):
+        location = self.get_t_for_index(index%self.num_curves)[1]
+        return self.fillet(radius,location)
     
     @property
     def continuity_list(self):
@@ -381,22 +421,37 @@ class CurveChain(Curve):
         return np.linalg.norm(self(0)-self(1))<DELTA/100 and self.is_continuous
 
 
-def find_curve_intersect(curve1: Curve, curve2: Curve, guess=[0.5,0.5]):
-    res = root(lambda t: np.reshape(curve1(t[0])-curve2(t[1]),(3)),np.array([guess[0],guess[1],0]))
+class IntersectMethod(Enum):
+    EQUALITY = 1
+    MINDISTANCE = 2
+
+def find_curve_intersect(curve1: Curve, curve2: Curve, guess=[0.5,0.5], method:'IntersectMethod'=IntersectMethod.EQUALITY):
+    if method == IntersectMethod.EQUALITY:
+        res = root(lambda t: curve1(t[0])-curve2(t[1]),np.array([guess[0],guess[1],0]))
+    elif method == IntersectMethod.MINDISTANCE:
+        def minfunc(t):
+            diff = curve1(t[0])-curve2(t[1])
+            return np.dot(diff,diff)
+        res = minimize(minfunc,np.array([guess[0],guess[1]]))
     return res
+
+
     
 def find_curve_line_intersect(curve, offset=ORIGIN, line_direction=RIGHT,guess=0):
     res = root(lambda t: np.linalg.norm(np.cross((curve(t)-offset),line_direction)),guess)
     return res
 
-def find_curve_plane_intersect(curve,offset=ORIGIN, plane_normal = OUT, guess=0):
-    res = root(lambda t: np.dot((curve(t)-offset),plane_normal),guess)
+def find_curve_plane_intersect(curve,plane_normal = OUT,offset=ORIGIN,  guess=0):
+    def target_func(t):
+        val =  np.dot((curve(t[0])-offset),plane_normal)
+        return val
+    res = root(target_func,guess)
     return res
 
 def find_curve_nearest_point (curve: Curve, point, guesses = [0.5]):
     results = []
     for guess in guesses:
-        results.append( minimize(lambda t: np.linalg.norm(curve(t[0])-point),guess))
+        results.append(minimize(lambda t: np.dot((curve(t[0])-point),(curve(t[0])-point)),guess))
     pass
 
     return min(results, key=lambda res: res.fun).x[0]
@@ -602,63 +657,98 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True,**kwargs):
 
     return out_curve
 
+def calc_tangent_arc(curve1:Curve,curve2:Curve,radius:float,start_locations=[1,0],method=IntersectMethod.EQUALITY):
+    def calc_centers(t1,t2):
+        p1 = curve1(t1)
+        p2 = curve2(t2)
+        tan1 = normalize_vector(curve1.derivative(t1))
+        tan2 = normalize_vector(curve2.derivative(t2))
 
-def fillet_curve(input_curves: CurveChain, radius:float, location=0.5):
-    deriv_fw = input_curves.derivative(location,direction=1)
-    deriv_bw = input_curves.derivative(location,direction=-1)
-    # check if there is a break in the curve at location.
-    # if curve is smooth, no need to add fillet
-    if np.linalg.norm(deriv_fw-deriv_bw)<DELTA:
-        return input_curves
-    else:
+        arc_axis = np.cross(tan1,tan2)
+        angle = np.linalg.norm(arc_axis)
+        arc_axis = arc_axis/angle
 
-        def calc_centers(t1,t2):
-            p1 = input_curves(t1)
-            p2 = input_curves(t2)
-            tan1 = normalize_vector(input_curves.derivative(t1))
-            tan2 = normalize_vector(input_curves.derivative(t2))
+        normal1 = np.cross(tan1,arc_axis)
+        normal2 = np.cross(tan2,arc_axis)
 
-            arc_axis = np.cross(tan1,tan2)
-            angle = np.linalg.norm(arc_axis)
-            arc_axis = arc_axis/angle
-
-            normal1 = np.cross(tan1,arc_axis)
-            normal2 = np.cross(tan2,arc_axis)
-
-            center1 = p1-normal1*radius
-            center2 = p2-normal2*radius
-            return center1,center2
-        def cost_fun(x):
-            t1 = location-abs(x[0])
-            t2 = location+abs(x[1])
-            center1,center2 = calc_centers(t1,t2)
-            # return [np.linalg.norm(center1-center2),np.linalg.norm(center1-center2)]
-            return center1-center2
-        
-        alpha = angle_between_vectors(deriv_fw,deriv_bw)
-        init_guess = radius / np.tan(alpha/2)*0.7/input_curves.length
-        sol1 = root(cost_fun,np.array([init_guess,init_guess,0]))
-        if not sol1.success:
-            # try again with different first guess
-            guess2 = radius / input_curves.length
-            sol1 = root(cost_fun,np.array([guess2,guess2,0]))
-        if not sol1.success:
-            # try again with different first guess
-            guess2 = radius / input_curves.length
-            sol1 = root(cost_fun,np.array([DELTA,DELTA,0]))
-        t1 = location-abs(sol1.x[0])
-        t2 = location+abs(sol1.x[1])
-
+        center1 = p1-normal1*radius
+        center2 = p2-normal2*radius
+        return center1,center2
+    
+    def cost_fun(x):
+        t1 = start_locations[0]-x[0]
+        t2 = start_locations[1]+x[1]
         center1,center2 = calc_centers(t1,t2)
-        center = (center1 + center2)/2
+        return center1-center2
+    def cost_fun2(x):
+        t1 = start_locations[0]-x[0]
+        t2 = start_locations[1]+x[1]
+        center1,center2 = calc_centers(t1,t2)
+        return np.dot(center1-center2,center1-center2)
+    
+    if method == IntersectMethod.EQUALITY:
+        sol1 = root(cost_fun,np.array([0,0,0]))
+    elif method == IntersectMethod.MINDISTANCE:
+        sol1 = minimize(cost_fun2,np.array([0,0]))
 
-        arc = Curve(arc_from_2_point_center,params={'p0':input_curves(t1),
-                                                    'p1':input_curves(t2),'center':center})
-        arc2 = ArcCurve.from_2_point_center(p0=input_curves(t1),
-                                           p1=input_curves(t2),
-                                           center=center)
+    t1 = start_locations[0]-sol1.x[0]
+    t2 = start_locations[1]+sol1.x[1]
+    center1,center2 = calc_centers(t1,t2)
+    center = (center1 + center2)/2
 
-        return arc2, t1, t2
+    arc = ArcCurve.from_2_point_center(p0=curve1(t1),
+                                       p1=curve2(t2),
+                                       center=center)
+    return arc, t1, t2, sol1
+    
+
+def fillet_curve(input_curves: CurveChain, radius:float, start_locations=[0.5,0.5]):
+
+    def calc_centers(t1,t2):
+        p1 = input_curves(t1)
+        p2 = input_curves(t2)
+        tan1 = normalize_vector(input_curves.derivative(t1))
+        tan2 = normalize_vector(input_curves.derivative(t2))
+
+        arc_axis = np.cross(tan1,tan2)
+        angle = np.linalg.norm(arc_axis)
+        arc_axis = arc_axis/angle
+
+        normal1 = np.cross(tan1,arc_axis)
+        normal2 = np.cross(tan2,arc_axis)
+
+        center1 = p1-normal1*radius
+        center2 = p2-normal2*radius
+        return center1,center2
+    def cost_fun(x):
+        t1 = start_locations[0]-x[0]
+        t2 = start_locations[1]+x[1]
+        center1,center2 = calc_centers(t1,t2)
+        # return [np.linalg.norm(center1-center2),np.linalg.norm(center1-center2)]
+        return center1-center2
+    
+
+    sol1 = root(cost_fun,np.array([0,0,0]))
+    if not sol1.success:
+        # try again with different first guess
+        guess2 = radius / input_curves.length
+        sol1 = root(cost_fun,np.array([guess2,guess2,0]))
+    if not sol1.success:
+        # try again with different first guess
+        guess2 = radius / input_curves.length
+        sol1 = root(cost_fun,np.array([DELTA,DELTA,0]))
+    t1 = start_locations[0]-sol1.x[0]
+    t2 = start_locations[1]+sol1.x[1]
+
+    center1,center2 = calc_centers(t1,t2)
+    center = (center1 + center2)/2
+
+
+    arc = ArcCurve.from_2_point_center(p0=input_curves(t1),
+                                       p1=input_curves(t2),
+                                       center=center)
+
+    return arc, t1, t2
     
 
 class LineCurve(Curve):
@@ -666,15 +756,21 @@ class LineCurve(Curve):
                  p0=ORIGIN,
                  p1=ORIGIN,
                  active=True, 
-                 enable_vectorize=True):
+                 enable_vectorize=False):
         self.p0 = p0
         self.p1 = p1
-        super().__init__(lambda t: arc_from_2_point(t,p0=self.p0,p1=self.p1,curvature=0), 
+        super().__init__(self.line_func, 
                          active, 
                          t0=0, 
                          t1=1, 
                          params={}, 
                          enable_vectorize=enable_vectorize)
+    
+    def line_func(self,t):
+        if isinstance(t,np.ndarray):
+            return (1-t)[:,np.newaxis] * self.p0[np.newaxis,:] + t[:,np.newaxis] * self.p1[np.newaxis,:]
+        else:
+            return self.p0*(1-t) + self.p1*t
         
     def update_lengths(self):
         self.length = np.linalg.norm(self.p1-self.p0)
@@ -708,9 +804,18 @@ class ArcCurve(Curve):
         points =  self._rotmat @ rot_arc @ ( RIGHT*self._radius) + self._center
         return points
     
+    def update_lengths(self):
+        self.length = self.radius * self.angle
+        self.t2l['l'] = np.array([0,1])
+        self.t2l['t'] = np.array([self.t_0,self.t_1])
+
     @property
     def radius(self):
         return self._radius
+    
+    @radius.setter
+    def radius(self,value):
+        self._radius = value
     
     @property
     def r(self):
@@ -795,12 +900,29 @@ class ArcCurve(Curve):
                                        center=center,
                                        revolutions=revolutions)
 
+    @classmethod
+    def from_point_center_angle(cls,
+                                p0=RIGHT,
+                                center=ORIGIN,
+                                angle=PI/2,
+                                axis=OUT,
+                                active=True):
+        r = np.linalg.norm(p0-center)
+        x = normalize_vector(p0-center)
+        y = normalize_vector(np.cross(axis,x))
+        z = np.cross(x,y)
+        R = np.transpose(np.array([x,y,z]))
+        yaw,pitch,roll = scp_Rotation.from_matrix(R).as_euler('zyx')
+        return cls(radius=r, 
+                   angle=angle, 
+                   center=center, 
+                   yaw=yaw, 
+                   pitch=pitch, 
+                   roll=roll, 
+                   active=active)
 
 
-    def update_lengths(self):
-        self.length = self.radius * self.angle
-        self.t2l['l'] = np.array([0,1])
-        self.t2l['t'] = np.array([self.t_0,self.t_1])
+
     
 
 
@@ -1002,13 +1124,19 @@ class SphericalInvoluteCurve(Curve):
                         t1, 
                         params={}, 
                         enable_vectorize=enable_vectorize)
+    @property
+    def center(self):
+        return (np.sqrt(self.R**2-self.r**2)+self.z_offs) * OUT
+    @property
+    def R(self):
+        return 1/self.c_sphere
         
 class TransformedCurve(Curve):
-    def __init__(self, transform: callable, curve: Curve, params={}):
+    def __init__(self, transform: callable, curve: Curve, params={},enable_vectorize=False):
         self.target_curve = curve
         self.transform_method = transform
         super().__init__(lambda t: self.apply_transform(self.target_curve(t)), 
-                         active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=False)
+                         active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=enable_vectorize)
     
     def apply_transform(self,point):
         return self.transform_method(point,**self.params)
@@ -1026,6 +1154,17 @@ class MirroredCurve(TransformedCurve):
             else:
                 return p2-2* h * self.plane_normal + self.center
         super().__init__(mirror_func, curve)
+
+
+class RotatedCurve(TransformedCurve):
+    def __init__(self, curve: Curve, angle=0, axis=OUT, center=ORIGIN):
+        self.axis = normalize_vector(axis)
+        self.angle = angle
+        self.center = center
+        def rotate_func(p):
+            p2 = p-self.center
+            return scp_Rotation.from_rotvec(self.angle*self.axis).apply(p2) + self.center
+        super().__init__(rotate_func, curve)
 
 
 class NurbCurve(Curve):

@@ -163,12 +163,14 @@ def involute_sphere(t,r=1,C=0.5,angle=0,v_offs=ORIGIN, z_offs=0):
         # v1 = v_offs + R*RIGHT
 
         beta = np.arcsin(r / R)
-        z_center = np.cos(beta) * R * OUT  * Csig
+        # z_center = np.cos(beta) * R * OUT  * Csig
+        z_center = np.sqrt(R**2-r**2)*OUT*Csig
         rot_y0 = scp_Rotation.from_euler('y',(PI/2-beta)*Csig)
         rot_z0 = scp_Rotation.from_euler('z',-gamma)
 
 
         rot_chain = rot_z * rot_y0 * rot_z0
+        rot_chain2 = scp_Rotation.from_euler('zyz',[-gamma,(PI/2-beta)*Csig,t+angle])
         v2 = rot_chain.apply(v1) + z_center + z_offs*OUT
         return  v2
 
@@ -321,3 +323,56 @@ def calc_nurbezier_arc(p0,p2,center):
 
 def calc_quadratic_bezier_interp(p0,p1,p2):
     return np.array([p0,(4*p1-p0-p2),p2])
+
+
+def xyz_to_spherical(v, center=ORIGIN):
+    '''Convert to spherical coordinates. Spherical center can be set as kwarg. Zero angles are at the north pole and along the x axis.
+    Returns: r: radius, phi: azimuth angle (rotation around z), theta: polar angle (altitude angle)'''
+    v = np.asarray(v)
+    center = np.asarray(center)
+    single_vector = v.ndim == 1
+    if single_vector:
+        v = v[np.newaxis, :]
+    r = np.linalg.norm(v - center, axis=-1)
+    theta = np.arccos((v - center)[:, 2] / r)
+    phi = np.arctan2((v - center)[:, 1], (v - center)[:, 0])
+    result = np.stack([r, phi, theta], axis=-1)
+    return result[0] if single_vector else result
+
+def spherical_to_xyz(s, center=ORIGIN):
+    s = np.asarray(s)
+    center = np.asarray(center)
+    single_vector = s.ndim == 1
+    if single_vector:
+        s = s[np.newaxis, :]
+    r, phi, theta = s[:, 0], s[:, 1], s[:, 2]
+    x = r * np.sin(theta) * np.cos(phi) + center[0]
+    y = r * np.sin(theta) * np.sin(phi) + center[1]
+    z = r * np.cos(theta) + center[2]
+    result = np.stack([x, y, z], axis=-1)
+    return result[0] if single_vector else result
+
+def xyz_to_cylindrical(v, center=ORIGIN):
+    v = np.asarray(v)
+    center = np.asarray(center)
+    single_vector = v.ndim == 1
+    if single_vector:
+        v = v[np.newaxis, :]
+    r = np.linalg.norm((v - center)[:, :2], axis=-1)
+    phi = np.arctan2((v - center)[:, 1], (v - center)[:, 0])
+    z = (v - center)[:, 2]
+    result = np.stack([r, phi, z], axis=-1)
+    return result[0] if single_vector else result
+
+def cylindrical_to_xyz(c, center=ORIGIN):
+    c = np.asarray(c)
+    center = np.asarray(center)
+    single_vector = c.ndim == 1
+    if single_vector:
+        c = c[np.newaxis, :]
+    r, phi, z = c[:, 0], c[:, 1], c[:, 2]
+    x = r * np.cos(phi) + center[0]
+    y = r * np.sin(phi) + center[1]
+    z = z + center[2]
+    result = np.stack([x, y, z], axis=-1)
+    return result[0] if single_vector else result

@@ -18,7 +18,7 @@ from scipy.optimize import root
 from scipy.optimize import minimize
 import dataclasses
 import curve as crv
-
+from typing import Callable
 
 @dataclasses.dataclass
 class ZFunctionMixin():
@@ -48,6 +48,23 @@ class InvoluteProfileParam():
     tip_reduction: float = 0.0
     enable_undercut: bool = True
 
+@dataclasses.dataclass
+class InvoluteParamMin():
+    pitch_angle: float = 2 * PI / 16
+    cone_angle: float = 0.0
+    alpha: float = 20.0 * PI / 180
+    profile_shift: float = 0.0
+    profile_reduction: float = 0.0
+    h_d: float = 1.2
+    enable_undercut: bool = True
+
+    @property
+    def rp(self):
+        return PI/self.pitch_angle
+    
+    @property
+    def gamma(self):
+        return self.cone_angle/2
 
 @dataclasses.dataclass
 class GearProfileGenParam():
@@ -58,23 +75,757 @@ class GearProfileGenParam():
     root_fillet: float = 0.0
     tip_reduction: float = 0.0
 
-class GearProfileGenerator(GearProfileGenParam):
-    def __init__(**kwargs):
-        super().__init__(**kwargs)
-        self.ra_circle = self.ra_generator()
-        self.rp_circle = self.rp_generator()
-        self.rd_circle = self.rd_generator()
-        self.tooth_curve = self.tooth_curve_generator()
-
-        self.tooth_curve, self.ra_circle = self.update_tip()
-        self.tooth_curve = self.update_root_fillet()
-        self.tooth_curve = self.update_tip_fillet()
+    @property
+    def rp(self):
+        # non-intuitively 1 PI and not 2 due to module convention
+        # m*z = D, pitch angle = 2pi/z, D = m*2pi/pitch_angle, R = D/2 = m*pi=/pitch_angle
+        return PI/self.pitch_angle
 
 
-class GearProfile2D(InvoluteProfileParam):
+class GearCurveGenerator():
     def __init__(self,
-                 **kwargs
-                 ):
+                 n_teeth: float = 16,
+                 n_cutout_teeth: int = 0,
+                 reference_tooth_curve: crv.Curve = None,
+                 module: float = 1,
+                 cone_angle: float = 0,
+                 axis_offset: float = 0,
+                 center: np.ndarray = ORIGIN,
+                 angle: float = 0,
+                 axis: np.ndarray = OUT,
+                 h_a: float = 1,
+                 h_d:float = 1.2,
+                 h_o: float = 2,
+                 tip_fillet: float = 0.0,
+                 root_fillet: float = 0.0,
+                 tip_reduction: float = 0.0,
+                 inside_teeth: bool = False,
+                 ) -> None:
+        self.n_teeth = n_teeth
+        self.n_cutout_teeth = n_cutout_teeth
+        self.module = module
+        self.cone_angle = cone_angle
+        self.axis_offset = axis_offset
+        self.center = center
+        self.angle = angle
+        self.axis = axis
+        self.h_a = h_a
+        self.h_d = h_d
+        self.h_o = h_o
+        self.tip_fillet = tip_fillet
+        self.root_fillet = root_fillet
+        self.tip_reduction = tip_reduction
+        self.inside_teeth = inside_teeth
+        self.tooth_curve = reference_tooth_curve
+
+        self.generate_ref_base_circles()
+        self.update_tip()
+        self.update_tip_fillet()
+        self.update_root_fillet()
+        self.generate_profile()
+    
+    @property
+    def rp_ref(self):
+        return self.n_teeth/2
+
+    @property
+    def gamma(self):
+        return self.cone_angle/2
+    
+    @property
+    def R_ref(self):
+        return self.rp_ref/np.sin(self.gamma)
+    
+    @property
+    def center_sphere_ref(self):
+        return self.R_ref*np.cos(self.gamma)*self.axis
+
+    @property 
+    def rp(self):
+        return self.rp_ref*self.module
+
+    @property
+    def R(self):
+        return self.R_ref*self.module
+    
+    @property
+    def center_sphere(self):
+        return self.base_transform(self.center_sphere_ref)
+    
+    @property
+    def pitch_angle(self):
+        return 2*PI/self.n_teeth
+
+    def base_transform(self,point):
+        rot_axis = np.cross(OUT,self.axis)
+        if np.linalg.norm(rot_axis)<1E-12:
+            # this can be if axis is OUT or -OUT
+            if all(abs(self.axis-OUT)<1E-12):
+                rot_angle = 0
+                rot_axis = RIGHT
+            else:
+                rot_angle = PI
+                rot_axis = RIGHT
+        else:
+            rot_angle = angle_between_vectors(OUT,self.axis)
+            rot_axis = normalize_vector(rot_axis)
+
+        return scp_Rotation.from_rotvec(rot_angle*rot_axis).apply(point)*self.module + self.center
+
+    def polar_transform(self,point):
+        if self.cone_angle==0:
+            return xyz_to_cylindrical(point)
+        else:
+            point = xyz_to_spherical(point,center=self.center_sphere_ref)
+            # R theta phi in spherical
+            # quasi r = (PI/2-phi) * self.R
+            # theta = theta
+            # z = self.R-R 
+            if point.ndim==1:
+                return np.array([(PI/2-point[2])*self.R_ref,
+                                 point[1],
+                                 (self.R_ref-point[0])])
+            else:
+                return np.array([(PI/2-point[:,2])*self.R_ref,
+                                point[:,1],
+                                (self.R_ref-point[:,0])]).transpose()
+        
+    def inverse_polar_transform(self,point):
+        if self.cone_angle==0:
+            return cylindrical_to_xyz(point)
+        else:
+            if point.ndim==1:
+                point2 = np.array([self.R_ref-point[2],
+                                point[1],
+                                PI/2-point[0]/self.R_ref])
+                return spherical_to_xyz(point2, 
+                                        center=self.center_sphere_ref)
+            else:
+                point2 = np.array([self.R_ref-point[:,2],
+                                   point[:,1],
+                                   PI/2-point[:,0]/self.R_ref]).transpose()
+                return spherical_to_xyz(point2, 
+                                        center=self.center_sphere_ref)
+
+    def r_height_func(self,point):
+        if self.cone_angle==0:
+            return self.r_height_func_cylindrical(point)
+        else:
+            return self.r_height_func_spherical(point)
+    
+    def r_height_func_cylindrical(self,point):
+        return np.linalg.norm((point-self.center)[:2])
+    def r_height_func_spherical(self,point):
+        return self.R*(PI-xyz_to_spherical(point,center=self.center)[2])
+
+    def generate_ref_base_circles(self):
+
+        p0 = RIGHT*self.rp_ref
+        pa = self.inverse_polar_transform(self.polar_transform(p0) + np.array([self.h_a,0,0]))
+        pd = self.inverse_polar_transform(self.polar_transform(p0) - np.array([self.h_d,0,0]))
+        po = self.inverse_polar_transform(self.polar_transform(p0) - np.array([self.h_o,0,0]))
+
+        self.rp_circle = crv.ArcCurve.from_point_center_angle(p0=p0,center=OUT*p0[2],angle=2*PI)
+        self.ra_circle = crv.ArcCurve.from_point_center_angle(p0=pa,center=OUT*pa[2],angle=2*PI)
+        self.rd_circle = crv.ArcCurve.from_point_center_angle(p0=pd,center=OUT*pd[2],angle=2*PI)
+        self.ro_circle = crv.ArcCurve.from_point_center_angle(p0=po,center=OUT*po[2],angle=2*PI)
+    
+    def update_tip(self):
+        sols = []
+        rdh = self.r_height_func(self.rd_circle(0))
+        rah = self.r_height_func(self.ra_circle(0))
+        for guess in np.linspace(0.1,0.9,4):
+            sol1 = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=UP,guess=guess)
+            r_sol = self.r_height_func(self.tooth_curve(sol1.x[0]))
+            if sol1.success and r_sol>rdh:
+                sols.append(sol1)
+
+        if len(sols) > 0:
+            sol = sols[np.argmin([sol.x[0] for sol in sols])]
+            r_sol = self.r_height_func(self.tooth_curve(sol.x[0]))
+
+            if r_sol-self.tip_reduction<rah:
+                if self.tip_reduction>0:
+                    sol2 = root(lambda t: self.r_height_func(self.tooth_curve(t[0]))-r_sol+self.tip_reduction,[sol.x[0]])
+                    self.tooth_curve.set_end_on(sol2.x[0])
+                else:
+                    self.tooth_curve.set_end_on(sol.x[0])
+                self.ra_circle = crv.ArcCurve.from_point_center_angle(p0=self.tooth_curve(1),
+                                                                        center=self.tooth_curve(1)*np.array([0,0,1]),
+                                                                        angle=2*PI)
+    
+    def generate_profile(self):
+
+        # if tip fillet is used, tooth curve tip is already settled
+        # in fact this solver tends to fail due to tangential nature of fillet
+        if not self.tip_fillet>0:
+            sol_tip_2 = crv.find_curve_intersect(self.tooth_curve,self.ra_circle,guess=[1,0])
+            solcheck = np.linalg.norm(self.tooth_curve(sol_tip_2.x[0])-self.ra_circle(sol_tip_2.x[1]))
+            if sol_tip_2.success or solcheck<1E-12:
+                self.tooth_curve.set_end_on(sol_tip_2.x[0])
+            else:
+                sol_mid = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=UP,guess=1)
+                self.tooth_curve.set_end_on(sol_mid.x[0])
+
+        if not self.root_fillet>0:
+            sol_root_1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0], method=crv.IntersectMethod.MINDISTANCE)  
+            solcheck = np.linalg.norm(self.tooth_curve(sol_root_1.x[0])-self.rd_circle(sol_root_1.x[1]))
+            if sol_root_1.success or solcheck<1E-12:
+                self.tooth_curve.set_start_on(sol_root_1.x[0])
+            else:
+                sol_mid2 = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=rotate_vector(UP,-self.pitch_angle/2),guess=0)
+                self.tooth_curve.set_start_on(sol_mid2.x[0])
+        
+        self.tooth_mirror = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
+        self.tooth_mirror.reverse()
+        tooth_rotate = crv.RotatedCurve(self.tooth_mirror,angle=-self.pitch_angle,axis=OUT)
+
+        pa1 = self.tooth_curve(1)
+        pa2 = self.tooth_mirror(0)
+        center_a = ((pa1+pa2)/2*np.array([0,0,1]))*OUT
+        self.ra_curve = crv.ArcCurve.from_2_point_center(p0=pa1,p1=pa2,center=center_a)
+
+        pd1 = self.tooth_curve(0)
+        pd2 = tooth_rotate(1)
+        center_d = ((pd1+pd2)/2*np.array([0,0,1]))*OUT
+        self.rd_curve = crv.ArcCurve.from_2_point_center(p0=pd2,p1=pd1,center=center_d)
+
+        self.profile = crv.CurveChain(self.rd_curve,self.tooth_curve,self.ra_curve,self.tooth_mirror)
+        return self.profile
+    
+    def update_tip_fillet(self):
+        if self.tip_fillet>0:
+            sol1 = crv.find_curve_intersect(self.tooth_curve,self.ra_circle,guess=[0.9,0], method=crv.IntersectMethod.MINDISTANCE)
+            # if sol is found and the intersection is below the x line
+            if sol1.success and self.ra_circle(sol1.x[1])[1]<0:
+                sharp_tip = False
+                guesses = np.asarray([0.5,1,1.5])*self.tip_fillet
+                for guess in guesses:
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.tooth_curve,
+                                                          self.ra_circle,
+                                                          self.tip_fillet,
+                                                          start_locations=[sol1.x[0]-guess/self.tooth_curve.length,
+                                                                           sol1.x[1]+guess/self.ra_circle.length],
+                                                          method=crv.IntersectMethod.MINDISTANCE)
+                    if sol.success:
+                        break
+                    
+                if arc(1)[1]<0:
+                    self.tooth_curve.set_end_on(t1)
+                    self.tooth_curve.append(arc)
+                else:
+                    sharp_tip = True
+            else:
+                sharp_tip = True
+            
+            if sharp_tip:
+                    mirror_curve = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
+                    mirror_curve.reverse()
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.tooth_curve,
+                                                          mirror_curve,
+                                                          self.tip_fillet,
+                                                          start_locations=[0+self.tip_fillet/self.ra_circle.length,
+                                                                           1-self.tip_fillet/self.ra_circle.length],
+                                                          method=crv.IntersectMethod.MINDISTANCE)
+                    if sol.success:
+                        # this is almost guaranteed to succeed, the middle of this arc should be on the x axis
+                        # the length-proportion based curve parameterization might make it off by a tiny bit so solver is used instead
+                        sol2 = crv.find_curve_plane_intersect(arc,plane_normal=UP,guess=0.5)
+                        arc.set_end_on(sol2.x[0])
+                        self.tooth_curve.set_end_on(t1)
+                        self.tooth_curve.append(arc)
+
+
+    def update_root_fillet(self):
+
+        def angle_check(p):
+            return angle_between_vector_and_plane(p,UP) < self.pitch_angle/2
+        
+        if self.root_fillet>0:
+            sol1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0])
+            if sol1.success and angle_check(self.rd_circle(sol1.x[1])):
+                sharp_root = False
+                guesses = np.asarray([0.5,1,1.5])*self.root_fillet
+                for guess in guesses:
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.rd_circle,
+                                                        self.tooth_curve,
+                                                        self.root_fillet,
+                                                        start_locations=[sol1.x[1]-guess/self.rd_circle.length,
+                                                                         sol1.x[0]+guess/self.tooth_curve.length])
+                    if sol.success:
+                        break
+                if angle_check(arc(0)):
+                    self.tooth_curve.set_start_on(t2)
+                    self.tooth_curve.insert(0,arc)
+                else:
+                    sharp_root = True
+            else:
+                sharp_root = True
+
+            if sharp_root:
+                mirror_curve = crv.MirroredCurve(self.tooth_curve,plane_normal=rotate_vector(UP,-self.pitch_angle/2))
+                mirror_curve.reverse()
+                arc, t1,t2,sol = crv.calc_tangent_arc(mirror_curve,
+                                                      self.tooth_curve,
+                                                      self.root_fillet,
+                                                      start_locations=[1-self.root_fillet/self.tooth_curve.length,
+                                                                       0+self.root_fillet/self.tooth_curve.length])
+                if sol.success:
+                    sol2 = crv.find_curve_plane_intersect(arc,plane_normal=rotate_vector(UP,-self.pitch_angle/2),guess=0.5)
+                    arc.set_start_on(sol2.x[0])
+                    self.tooth_curve.set_start_on(t2)
+                    self.tooth_curve.insert(0,arc)
+            
+    def generate_profile_closed(self,rd_coeff_right=1.0,rd_coeff_left=0.0):
+        v0 = np.cross(self.profile(0),OUT)
+        v1 = np.cross(self.profile(1),OUT)
+        sol0 = crv.find_curve_plane_intersect(self.ro_circle,v0,guess=0)
+        sol1 = crv.find_curve_plane_intersect(self.ro_circle,v1,guess=0)
+        
+        p0 = self.ro_circle(sol0.x[0])
+        p1 = self.ro_circle(sol1.x[0])
+
+        if self.cone_angle==0:
+            connector_1 = crv.LineCurve(self.profile(1),p1)
+            connector_0 = crv.LineCurve(p0,self.profile(0))
+        else:
+            connector_1 = crv.ArcCurve.from_2_point_center(p0=self.profile(1),p1=p1,center=self.center_sphere_ref)
+            connector_0 = crv.ArcCurve.from_2_point_center(p0=p0,p1=self.profile(0),center=self.center_sphere_ref)
+        ro_curve = crv.ArcCurve.from_2_point_center(p0=p1,p1=p0,center=self.ro_circle.center)
+
+        self.profile_closed = crv.CurveChain(self.profile,connector_1,ro_curve,connector_0)
+
+        return self.profile_closed
+    
+    def generate_gear_pattern(self,profile:crv.Curve):
+        def func(t):
+            t2,k = self.tooth_moduler(t)
+            p = profile(t2)
+            return self.base_transform(scp_Rotation.from_euler('z',k*self.pitch_angle).apply(p))
+
+        return crv.Curve(func,0,1)
+
+    def tooth_moduler(self,t):
+        t2 = ((np.floor(self.n_teeth)-self.n_cutout_teeth)*t)
+        return t2%1, t2//1
+
+class GearSegmentGenerator(GearProfileGenParam):
+    '''curve constructor to generate arc segments around the gear tooth flank, creates a unit segment to be repeated for the gear profile'''
+    def __init__(self,tooth_curve_generator: Callable, **kwargs):
+        super().__init__(**kwargs)
+        self.rp_circle, self.rd_circle, self.ra_circle = self.generate_base_circles()
+        self.tooth_curve_generator: Callable[[], crv.Curve] = tooth_curve_generator
+        self.tooth_curve : crv.Curve = self.tooth_curve_generator()
+        self.profile:crv.CurveChain
+
+        self.update_tip()
+        self.update_tip_fillet()
+        self.update_root_fillet()
+        self.generate_profile()
+        
+        
+
+    def generate_base_circles(self):
+        rp_circe = crv.ArcCurve(radius=self.rp,angle=2*PI)
+        ra_circle = crv.ArcCurve(radius=self.rp+self.h_a,angle=2*PI)
+        rd_circle = crv.ArcCurve(radius=self.rp-self.h_d,angle=2*PI)
+        return rp_circe, rd_circle, ra_circle
+    
+    
+    @property
+    def ra(self):
+        return self.ra_circle.radius
+    
+    @property
+    def rd(self):
+        return self.rd_circle.radius
+    
+    def r_height_func(self,point):
+        return np.linalg.norm(point)
+
+    def update_tip(self):
+        sols = []
+        rdh = self.r_height_func(self.rd_circle(0))
+        rah = self.r_height_func(self.ra_circle(0))
+        for guess in np.linspace(0.1,0.9,4):
+            sol1 = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=UP,guess=guess)
+            r_sol = self.r_height_func(self.tooth_curve(sol1.x[0]))
+            if sol1.success and r_sol>rdh:
+                sols.append(sol1)
+
+        if len(sols) > 0:
+            sol = sols[np.argmin([sol.x[0] for sol in sols])]
+            r_sol = self.r_height_func(self.tooth_curve(sol.x[0]))
+
+            if r_sol-self.tip_reduction<rah:
+                if self.tip_reduction>0:
+                    sol2 = root(lambda t: self.r_height_func(self.tooth_curve(t[0]))-r_sol+self.tip_reduction,[sol.x[0]])
+                    self.tooth_curve.set_end_on(sol2.x[0])
+                else:
+                    self.tooth_curve.set_end_on(sol.x[0])
+                self.ra_circle = crv.ArcCurve.from_point_center_angle(p0=self.tooth_curve(1),
+                                                                        center=self.tooth_curve(1)*np.array([0,0,1]),
+                                                                        angle=2*PI)
+    
+
+
+    def generate_profile(self):
+
+        # if tip fillet is used, tooth curve tip is already settled
+        # in fact this solver tends to fail due to tangential nature of fillet
+        if not self.tip_fillet>0:
+            sol_tip_2 = crv.find_curve_intersect(self.tooth_curve,self.ra_circle,guess=[1,0])
+            if sol_tip_2.success:
+                self.tooth_curve.set_end_on(sol_tip_2.x[0])
+            else:
+                sol_mid = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=UP,guess=1)
+                self.tooth_curve.set_end_on(sol_mid.x[0])
+
+        if not self.root_fillet>0:
+            sol_root_1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0])
+            if sol_root_1.success:
+                self.tooth_curve.set_start_on(sol_root_1.x[0])
+            else:
+                sol_mid2 = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=rotate_vector(UP,-self.pitch_angle/2),guess=0)
+                self.tooth_curve.set_start_on(sol_mid2.x[0])
+        
+        self.tooth_mirror = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
+        self.tooth_mirror.reverse()
+        tooth_rotate = crv.RotatedCurve(self.tooth_mirror,angle=-self.pitch_angle,axis=OUT)
+
+        pa1 = self.tooth_curve(1)
+        pa2 = self.tooth_mirror(0)
+        center_a = ((pa1+pa2)/2*np.array([0,0,1]))*OUT
+        self.ra_curve = crv.ArcCurve.from_2_point_center(p0=pa1,p1=pa2,center=center_a)
+
+        pd1 = self.tooth_curve(0)
+        pd2 = tooth_rotate(1)
+        center_d = ((pd1+pd2)/2*np.array([0,0,1]))*OUT
+        self.rd_curve = crv.ArcCurve.from_2_point_center(p0=pd2,p1=pd1,center=center_d)
+
+        self.profile = crv.CurveChain(self.rd_curve,self.tooth_curve,self.ra_curve,self.tooth_mirror)
+        return self.profile
+    
+    def update_tip_fillet(self):
+        if self.tip_fillet>0:
+            sol1 = crv.find_curve_intersect(self.tooth_curve,self.ra_circle,guess=[0.9,0], method=crv.IntersectMethod.MINDISTANCE)
+            # if sol is found and the intersection is below the x line
+            if sol1.success and self.ra_circle(sol1.x[1])[1]<0:
+                sharp_tip = False
+                guesses = np.asarray([0.5,1,1.5])*self.tip_fillet
+                for guess in guesses:
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.tooth_curve,
+                                                          self.ra_circle,
+                                                          self.tip_fillet,
+                                                          start_locations=[sol1.x[0]-guess/self.tooth_curve.length,
+                                                                           sol1.x[1]+guess/self.ra_circle.length],
+                                                          method=crv.IntersectMethod.MINDISTANCE)
+                    if sol.success:
+                        break
+                    
+                if arc(1)[1]<0:
+                    self.tooth_curve.set_end_on(t1)
+                    self.tooth_curve.append(arc)
+                else:
+                    sharp_tip = True
+            else:
+                sharp_tip = True
+            
+            if sharp_tip:
+                    mirror_curve = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
+                    mirror_curve.reverse()
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.tooth_curve,
+                                                          mirror_curve,
+                                                          self.tip_fillet,
+                                                          start_locations=[0+self.tip_fillet/self.ra_circle.length,
+                                                                           1-self.tip_fillet/self.ra_circle.length],
+                                                          method=crv.IntersectMethod.MINDISTANCE)
+                    if sol.success:
+                        # this is almost guaranteed to succeed, the middle of this arc should be on the x axis
+                        # the length-proportion based curve parameterization might make it off by a tiny bit so solver is used instead
+                        sol2 = crv.find_curve_plane_intersect(arc,plane_normal=UP,guess=0.5)
+                        arc.set_end_on(sol2.x[0])
+                        self.tooth_curve.set_end_on(t1)
+                        self.tooth_curve.append(arc)
+
+
+    def update_root_fillet(self):
+
+        def angle_check(p):
+            return angle_between_vector_and_plane(p,UP) < self.pitch_angle/2
+        
+        if self.root_fillet>0:
+            sol1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0])
+            if sol1.success and angle_check(self.rd_circle(sol1.x[1])):
+                sharp_root = False
+                guesses = np.asarray([0.5,1,1.5])*self.root_fillet
+                for guess in guesses:
+                    arc, t1,t2,sol = crv.calc_tangent_arc(self.rd_circle,
+                                                        self.tooth_curve,
+                                                        self.root_fillet,
+                                                        start_locations=[sol1.x[1]-guess/self.rd_circle.length,
+                                                                         sol1.x[0]+guess/self.tooth_curve.length])
+                    if sol.success:
+                        break
+                if angle_check(arc(0)):
+                    self.tooth_curve.set_start_on(t2)
+                    self.tooth_curve.insert(0,arc)
+                else:
+                    sharp_root = True
+            else:
+                sharp_root = True
+
+            if sharp_root:
+                mirror_curve = crv.MirroredCurve(self.tooth_curve,plane_normal=rotate_vector(UP,-self.pitch_angle/2))
+                mirror_curve.reverse()
+                arc, t1,t2,sol = crv.calc_tangent_arc(mirror_curve,
+                                                      self.tooth_curve,
+                                                      self.root_fillet,
+                                                      start_locations=[1-self.root_fillet/self.tooth_curve.length,
+                                                                       0+self.root_fillet/self.tooth_curve.length])
+                if sol.success:
+                    sol2 = crv.find_curve_plane_intersect(arc,plane_normal=rotate_vector(UP,-self.pitch_angle/2),guess=0.5)
+                    arc.set_start_on(sol2.x[0])
+                    self.tooth_curve.set_start_on(t2)
+                    self.tooth_curve.insert(0,arc)
+            
+            
+class GearSegmentGeneratorSpherical(GearSegmentGenerator):
+    def __init__(self,tooth_curve_generator: Callable, center_z: float = 0.0, **kwargs):
+        self.center = center_z*OUT
+        super().__init__(tooth_curve_generator=tooth_curve_generator,**kwargs)
+
+    @property
+    def R(self):
+        return np.sqrt(self.rp**2+self.center[2]**2)
+    
+    def r_height_func(self,point):
+        return self.R*(PI-xyz_to_spherical(point,center=self.center)[2])
+    
+    def generate_base_circles(self):
+        rp_circe = crv.ArcCurve(radius=self.rp,angle=2*PI)
+        pa = scp_Rotation.from_euler('y',-self.h_a/self.R).apply(self.rp*RIGHT-self.center)+self.center
+        pd = scp_Rotation.from_euler('y',self.h_d/self.R).apply(self.rp*RIGHT-self.center)+self.center
+        ra_circle = crv.ArcCurve.from_point_center_angle(p0=pa,center=pa[2]*OUT,angle=2*PI)
+        rd_circle = crv.ArcCurve.from_point_center_angle(p0=pd,center=pd[2]*OUT,angle=2*PI)
+        return rp_circe, rd_circle, ra_circle
+
+class InvoluteFlankGenerator(InvoluteParamMin):
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        self.involute_curve = crv.InvoluteCurve(active=False)
+        self.involute_connector = crv.LineCurve(active=False)
+        self.undercut_curve = crv.InvoluteCurve(active=False)
+
+        self.involute_curve_sph = crv.SphericalInvoluteCurve(active=False)
+        self.involute_connector_arc = crv.ArcCurve(active=False)
+        self.undercut_curve_sph = crv.SphericalInvoluteCurve(active=False)
+
+        
+
+        if self.cone_angle==0:
+            self.rd = self.rp - self.h_d + self.profile_shift
+            self.calculate_involutes_cylindric()
+            self.tooth_curve = crv.CurveChain(self.undercut_curve,self.involute_connector,self.involute_curve)
+        else:
+            # gamma is cone angle / 2 property
+            self.R = self.rp/np.sin(self.gamma)
+            self.C_sph = 1/self.R
+            self.center = OUT*np.sqrt(self.R**2-self.rp**2)
+            self.an_d = (self.h_d-self.profile_shift ) /self.R
+            # 180deg cone is a flat circle... leads to similar result like infinite radius cylinder... which would be a straight rack
+            if self.cone_angle==PI:
+                self.tooth_curve = self.calculate_rack_spherical()
+            else:
+                self.calculate_involutes_spherical()
+                self.tooth_curve = crv.CurveChain(self.undercut_curve_sph,self.involute_connector_arc,self.involute_curve_sph)
+
+    def __call__(self):
+        return self.tooth_curve
+
+    def calculate_involutes_cylindric(self):
+        self.involute_curve.active=True
+        
+        pitch_circle = crv.ArcCurve(radius=self.rp,angle=2*PI)
+
+        # base circle of involute function
+        self.rb = self.rp * np.cos(self.alpha)
+        # setup base circle
+        self.involute_curve.r = self.rb
+
+        # find the angular position of the involute curve start point
+        # this is the point where the involute curve intersects the pitch circle
+        sol2 = crv.find_curve_intersect(self.involute_curve,pitch_circle,guess=[0.5,0])
+        involute_angle_0 = angle_between_vectors(RIGHT,self.involute_curve(sol2.x[0]))
+
+        # based on tec-science article
+        # https://www.tec-science.com/mechanical-power-transmission/involute-gear/profile-shift/
+        # angle change from profile shift
+        da = self.profile_shift * np.tan(self.alpha)/ self.rp - self.profile_reduction/self.rp
+        # angle to move the involute into standard construction position
+        # by convention moving clockwise, which is negative angular direction
+        # the tooth shall be symmetrical on the x-axis, so the base angle is quarter of pitch angle
+        # added angular components to compensate for profile shift and the involute curve's travel from base to pitch circle
+        self.involute_curve.angle = -(self.pitch_angle / 4 + involute_angle_0 + da)
+
+        # hence the tooth shall be on the x axis, the involute shall not cross the x axis
+        # find the point where the involute curve reaches the x axis, that shall be the end of the segment
+        x_line = crv.Curve(arc_from_2_point,params={'p0':ORIGIN,'p1':self.rp*2*RIGHT,'curvature':0})
+        sol1 = crv.find_curve_intersect(self.involute_curve,x_line)
+        self.involute_curve.t_1 = self.involute_curve.p2t(sol1.x[0])
+        self.involute_curve.update_lengths()
+
+        if self.rd<self.rb:
+            p_invo_base = self.involute_curve(0)
+            p_invo_d = p_invo_base*self.rd/self.rb
+
+            self.involute_connector.p0 = p_invo_d
+            self.involute_connector.p1 = p_invo_base
+            self.involute_connector.active=True
+            if self.enable_undercut:
+                # when undercut is used, there is no line between undercut and involute in 2D
+                
+                self.undercut_curve.active=True
+                # the undercut is an involute curve with an offset vector (sometimes called trochoid)
+                # radial and tangential elements of the offset vector
+                rad_ucut = self.rd - self.rp
+                tan_ucut = +self.rd * np.tan(self.alpha)
+                ucut_ofs_v = np.array((rad_ucut,tan_ucut,0)).reshape(VSHAPE)
+                
+                self.undercut_curve.r = self.rp
+                self.undercut_curve.angle = self.involute_curve.angle - self.alpha
+                self.undercut_curve.v_offs = ucut_ofs_v
+                self.undercut_curve.t_0=0.3
+                self.undercut_curve.t_1=-0.35
+                self.undercut_curve.update_lengths()
+
+                loc_curve = crv.CurveChain(self.involute_connector,self.involute_curve)
+                t_invo = loc_curve.get_length_portions()[1]
+
+                # find intersection of undercut curve and involute curve, might need multiple guesses from different starting points
+                guess = 0.1
+                for k in range(10):
+                    sol1 = root(lambda p: (loc_curve(p[0])-self.undercut_curve(p[1])),[guess+t_invo,guess,0])
+                    if abs(sol1.x[1])>0.01+t_invo and sol1.success:
+                        break
+                    guess = (k+1) * 0.1
+
+                # loc_curve.set_start_on(sol1.x[0])
+                # find lowest point of ucut
+                sol2 = minimize(lambda t: np.linalg.norm(self.undercut_curve(t)),0)
+                self.undercut_curve.set_start_and_end_on(sol2.x[0],sol1.x[1])
+                self.involute_connector.active=False
+            else:
+                self.undercut_curve.active=False
+        else:
+            self.involute_connector.active=False
+            self.undercut_curve.active=False
+
+    def calculate_involutes_spherical(self):
+        def involute_angle_func(x):
+            t=x[0]
+            r=x[1]
+            p0=involute_sphere(t,      r,angle=0,C=self.C_sph)
+            p1=involute_sphere(t+DELTA,r,angle=0,C=self.C_sph)
+            p2=involute_sphere(t-DELTA,r,angle=0,C=self.C_sph)
+            tan = normalize_vector(p1-p2)
+            center = np.array([0,0,np.sqrt(self.R**2-r**2)])
+            sph_tan = normalize_vector(np.cross(p0-center,np.array([p0[0],p0[1],0])))
+            # angle = np.arctan2(np.linalg.norm(np.cross(tan,sph_tan)),np.dot(tan,sph_tan))
+            angle = angle_between_vectors(tan,sph_tan)
+
+            return [p0[0]**2+p0[1]**2-self.rp**2, angle-PI/2-self.alpha]
+    
+        self.involute_curve_sph.active=True
+        base_res = root(involute_angle_func,[self.alpha/2,self.rp*np.cos(self.alpha)],tol=1E-14)
+        self.rb = base_res.x[1]
+        
+        self.involute_curve_sph.r = self.rb
+        self.involute_curve_sph.c_sphere = self.C_sph
+        
+        angle_0 = angle_between_vectors(involute_sphere(base_res.x[0],self.rb,angle=0,C=self.C_sph)*np.array([1,1,0]),
+                                        RIGHT)
+        angle_offset = -angle_0 - (self.pitch_angle/4 + self.profile_shift*np.tan(self.alpha)/2 /self.rp)
+        self.involute_curve_sph.angle = angle_offset
+        self.involute_curve_sph.z_offs = -involute_sphere(base_res.x[0],base_res.x[1],C=self.C_sph)[2]
+        self.involute_curve_sph.t_0 = 0
+        self.involute_curve_sph.t_1 = 1
+        sol1 = crv.find_curve_plane_intersect(self.involute_curve_sph,offset=ORIGIN,plane_normal=UP,guess=1)
+        self.involute_curve_sph.set_end_on(sol1.x[0])
+
+
+        ## undercut
+        p0=self.involute_curve_sph(0)
+        axis = normalize_vector(np.cross(p0,OUT))
+        # by convention the pitch circle is in the x-y plane
+        # the involute goes partially below the pitch circle
+        # calculate the angle to go until the dedendum circle
+        p0_xy = (p0-self.center)*np.array([1,1,0])
+        an_diff = self.an_d-angle_between_vectors(p0-self.center,p0_xy)+(PI/2-self.gamma)
+        if an_diff<0:
+            self.involute_connector_arc.active=False
+            self.undercut_curve_sph.active=False
+        else:
+            p1 = scp_Rotation.from_rotvec(-axis*an_diff).apply(p0-self.center)+self.center
+            self.involute_connector_arc = crv.ArcCurve.from_2_point_center(p0=p1,p1=p0,center=self.center)
+            self.involute_connector_arc.active=True
+
+            if not self.enable_undercut:
+                self.undercut_curve_sph.active=False
+            else:
+                self.undercut_curve_sph.active=True
+                ref_rack = self.calculate_rack_spherical()
+                self.undercut_curve_sph.r = self.rp
+                self.undercut_curve_sph.angle = 0
+                self.undercut_curve_sph.z_offs = 0
+                self.undercut_curve_sph.v_offs = scp_Rotation.from_euler('y',PI/2 * np.sign(self.C_sph)).apply(ref_rack(0)-self.R*RIGHT)
+                self.undercut_curve_sph.c_sphere = self.C_sph
+                self.undercut_curve_sph.t_0 = 1
+                self.undercut_curve_sph.t_1 = -1
+
+                self.undercut_curve_sph.update_lengths()
+
+
+                loc_curve = crv.CurveChain(self.involute_connector_arc,self.involute_curve_sph)
+                rb_curve = crv.ArcCurve.from_2_point_curvature(p0=self.involute_curve_sph(0),
+                                                               p1=self.involute_curve_sph(0)*np.array([1,-1,1]),
+                                                               curvature=1/self.involute_curve_sph.r,
+                                                               revolutions=0)
+
+                sol0 = crv.find_curve_intersect(self.undercut_curve_sph,rb_curve,guess=[0.1,0])
+                sol1 = crv.find_curve_intersect(loc_curve,self.undercut_curve_sph, guess=[0.3,sol0.x[0]*2])
+                loc_curve.set_start_on(sol1.x[0],preserve_inactive_curves=True)
+                self.undercut_curve_sph.set_end_on(sol1.x[1])
+
+                # sol2 = crv.find_curve_intersect(self.undercut_curve_sph,self.rd_curve)
+                sol2 = minimize(lambda t: np.linalg.norm(self.undercut_curve_sph(t)[:2]),0)
+                self.undercut_curve_sph.set_start_on(sol2.x[0])
+                
+    
+    def calculate_rack_spherical(self):
+        def rack_flanc_func(t,a):
+            axis1 = scp_Rotation.from_euler('x',-self.alpha).apply(OUT)
+            v0 = self.R*RIGHT
+            an1 = t*np.cos(self.alpha)
+            v1 = scp_Rotation.from_rotvec(-axis1*an1).apply(v0)
+            v2 = scp_Rotation.from_euler('z',t+a).apply(v1)
+            return v2
+        
+        an_tooth_sph = (self.pitch_angle/2 + self.profile_shift*np.tan(self.alpha) /self.rp )* self.rp / self.R
+        curve1 = crv.Curve(rack_flanc_func,
+                           t0=-1,
+                           t1=1,
+                           params={'a':-an_tooth_sph/2})
+               
+        
+        sol2 = root(lambda t: np.arcsin(curve1(t[0])[2]/self.R)+self.an_d,[0])
+
+        sol1 = crv.find_curve_plane_intersect(curve1,plane_normal=UP,guess=1)
+        curve1.set_start_and_end_on(sol2.x[0],sol1.x[0])
+        return curve1
+    
+class GearProfile2D(InvoluteProfileParam):
+    def __init__(self,**kwargs):
         '''
         alpha: pressure angle in degrees, affects tooth curvature. Suggested values between 10-30
         h_a: addendum / module coefficient (tooth height above pitch circle)
@@ -230,33 +981,15 @@ class GearProfile2D(InvoluteProfileParam):
             self.tooth_curve=self.tooth_curve.cut(sol1.x[0],preserve_inactive_curves=True)[1]
             
             if self.root_fillet>0:
-                # rd_cut_curve = self.rd_curve.cut(sol1.x[1])[0]
-                # prep_chain = CurveChain(rd_cut_curve,self.tooth_curve)
-                # location = prep_chain.get_t_for_index(0)[1]
-                # temp = fillet_curve(prep_chain,self.root_fillet,location)
-                # # self.undercut_curve = temp.get_curves()[1]
-                # # self.undercut_connector_line.p0 = self.undercut_curve(1)
-                # # self.tooth_curve.update_lengths()
-                # self.tooth_curve = CurveChain(*temp.get_curves()[1:])
                 rd_cut_curve = self.rd_curve.cut(sol1.x[1])[0]
-                # prep_chain = CurveChain(rd_cut_curve,self.tooth_curve)
-                # location = prep_chain.get_t_for_index(0)[1]
-
-                # self.undercut_curve, t1, t2 = fillet_curve(prep_chain,self.root_fillet,location
                 self.tooth_curve.insert(0,rd_cut_curve)
                 location = self.tooth_curve.get_t_for_index(0)[1]
                 self.tooth_curve = self.tooth_curve.fillet(self.root_fillet,location)
                 self.tooth_curve.pop(0)
                 
-                 
 
             else:
                 # add placeholder of undercut curve
-                # self.undercut_curve=Curve(arc_from_2_point,params={'p0': self.tooth_curve(0),
-                #                                                    'p1': self.tooth_curve(0),
-                #                                                    'curvature':0},
-                #                           active=False)
-                # self.tooth_curve.insert(0,self.undercut_curve)
                 self.undercut_curve.active=False
 
 
@@ -784,3 +1517,16 @@ class GearSpherical(GearCylindric):
     def generate_gear_slice(self,z) -> Gear2DSpherical:
         paramdict = self.params(z).__dict__
         return Gear2DSpherical(**paramdict)
+    
+
+# class Gear():
+#     def __init__(self,
+#                  z_vals=np.array([0]),
+#                  params: GearParamHandler = GearParamHandler(),
+#                  flank_generator: InvoluteFlankGenerator = InvoluteFlankGenerator(),
+#                  segment_generator: GearSegmentGenerator = GearSegmentGenerator()
+#     ):
+#         self.params = params
+#         self.flank_generator = flank_generator
+#         self.segment_generator = segment_generator
+#         self.z_vals = z_vals

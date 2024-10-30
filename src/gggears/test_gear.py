@@ -11,50 +11,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-from gggears import *
+import gggears as gg
 import matplotlib.pyplot as plt
-
-n = 24
-# gear1 = GearCylindric(num_of_teeth=16,z_vals=[0,1],n_tweens=1,params=GearParamHandler(angle=lambda z: z*PI/23))
-
-
-asd1 = GearParamHandler(num_of_teeth=16,angle=lambda z: z*2,profile_param=InvoluteProfileHandler(profile_shift= lambda z: z/10))
-print(asd1)
-print(asd1(0.5))
-
-# gear1 = GearProfile2D(pitch_angle=2*PI/n,enable_undercut=True,h_a=3)
-# gear2 = GearProfile2D(pitch_angle=2*PI/n,enable_undercut=False,root_fillet=0.25,h_a=3)
-gear3 = Gear2D(num_of_teeth=n, profile_param=InvoluteProfileParam(h_a=1,h_d=0.2,profile_shift=0,enable_undercut=False,root_fillet=0.5))
-# gear4 = Gear2D(num_of_teeth=n, profile_param=InvoluteProfileParam(h_a=2,
-#                                                                   root_fillet=0.5,
-#                                                                   enable_undercut=False))
-
-print(gear3.profile_reference.tooth_curve(0))
-# gear5 = GearCylindric(params=GearParamHandler(center=lambda z: z*OUT))
-point_arr =  gear3.profile_reference.profile(np.linspace(0,1,100*n))
-# point_arr2 = gear4.boundary(np.linspace(0,1,100*n))
-# # point_arr2 = gear1.gear_stack[6].boundary(np.linspace(0,1,100*n))
+from defs import *
+n = 8
+gamma = PI/2 *0.5
 
 
-def_param = InvoluteProfileParam(h_a=1,
-                                 h_d=1.2,
-                                 profile_shift=0,
-                                 enable_undercut=False,
-                                 root_fillet=0)
+param1 = gg.InvoluteParamMin(cone_angle=gamma*2,
+                             pitch_angle=2*PI/n,
+                             h_d=1.2,
+                             enable_undercut=True)
+profile1 = gg.InvoluteFlankGenerator(**param1.__dict__)
 
-val_range = np.linspace(0,0.5,4)
-attr = 'root_fillet'
 
-for val in val_range:
-    mod_param = def_param
-    setattr(mod_param,attr,val)
-    gear3 = Gear2D(num_of_teeth=n, 
-                   profile_symmetry_shift=-0.5,
-                   profile_param=mod_param)
-    point_arr =  gear3.profile_closed(np.linspace(0,1,101*n))
-    plt.plot(point_arr[:,0],point_arr[:,1])
+curvgen = gg.GearCurveGenerator(n_teeth=n,cone_angle=gamma*2,reference_tooth_curve=profile1.tooth_curve)
+curvgen.generate_profile_closed()
+profile_full = curvgen.generate_gear_pattern(curvgen.profile_closed)
+print(curvgen.inverse_polar_transform(curvgen.polar_transform(np.array([RIGHT,UP]))))
 
-# plt.plot(point_arr[:,0],point_arr[:,1])
-# plt.plot(point_arr2[:,0],point_arr2[:,1],'-')
-plt.axis('equal')
+points1 = curvgen.rp_circle(np.linspace(0,1,300))
+points2 = curvgen.ra_circle(np.linspace(0,1,300))
+points3 = curvgen.rd_circle(np.linspace(0,1,300))
+points4 = curvgen.ro_circle(np.linspace(0,1,300))
+points5 = profile_full(np.linspace(0,1,300*n))
+
+ax = plt.axes(projection='3d')
+
+ax.plot(points1[:,0],points1[:,1], points1[:,2], marker='',linestyle='-', color='red')
+ax.plot(points2[:,0],points2[:,1], points2[:,2], marker='',linestyle='-', color='green')
+ax.plot(points3[:,0],points3[:,1], points3[:,2], marker='',linestyle='-', color='blue')
+ax.plot(points4[:,0],points4[:,1], points4[:,2], marker='',linestyle='-', color='black')
+ax.plot(points5[:,0],points5[:,1], points5[:,2], marker='.',linestyle='-', color='orange')
+
+ax.axis('equal')
 plt.show()
