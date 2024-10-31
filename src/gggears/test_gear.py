@@ -13,28 +13,59 @@ limitations under the License.
 
 import gggears as gg
 import matplotlib.pyplot as plt
+import curve as crv
 from defs import *
-n = 8
+n = 12
 gamma = PI/2 *0.5
 
 
-param1 = gg.InvoluteParamMin(cone_angle=gamma*2,
-                             pitch_angle=2*PI/n,
-                             h_d=1.2,
-                             enable_undercut=True)
-profile1 = gg.InvoluteFlankGenerator(**param1.__dict__)
+param = gg.InvoluteGearParam(n_teeth=n,
+                              module=2.0,
+                              cone_angle=gamma*2,
+                              h_d=1.2,
+                              tip_fillet=0.1,
+                              enable_undercut=True)
+
+param1 = gg.InvoluteGearParamManager(z_vals=[0,2],
+                                    n_teeth=n,
+                                    module=lambda z: 1-np.tan(gamma)*z/n*2,
+                                    center=lambda z: z*OUT,
+                                    angle=0,
+                                    axis=RIGHT,
+                                    cone_angle=gamma*2,
+                                    h_d=1.2,
+                                    h_o=2.5,
+                                    root_fillet=0.3,
+                                    tip_fillet=0.1,
+                                    enable_undercut=False)
+
+param2 = gg.InvoluteGearParamManager()
+for key in param2.__dict__.keys():
+    param2.__dict__[key] = param2.__dict__[key]*0
+param2.h_d = lambda z: -0.1 + 0.4*z
+
+# param3 = param1+param2
+profile1 = gg.InvoluteFlankGenerator(pitch_angle=2*PI/n,
+                                     h_d=1.2,
+                                     cone_angle=gamma*2,
+                                     enable_undercut=True)
 
 
-curvgen = gg.GearCurveGenerator(n_teeth=n,cone_angle=gamma*2,reference_tooth_curve=profile1.tooth_curve)
-curvgen.generate_profile_closed()
-profile_full = curvgen.generate_gear_pattern(curvgen.profile_closed)
-print(curvgen.inverse_polar_transform(curvgen.polar_transform(np.array([RIGHT,UP]))))
+# curvgen = gg.GearCurveGenerator(reference_tooth_curve=profile1.tooth_curve.copy(),**param1.__dict__)
+# curvgen.generate_profile_closed()
+
+gear = gg.InvoluteGear(params=param1)
+curvgen = gear.setup_generator(param1(0))
+profile_full = curvgen.generate_gear_pattern(curvgen.generate_profile_closed(rd_coeff_right=0.5,rd_coeff_left=0.5))
+profile_closed = curvgen.generate_profile_closed(rd_coeff_right=0.5,rd_coeff_left=0.5)
 
 points1 = curvgen.rp_circle(np.linspace(0,1,300))
 points2 = curvgen.ra_circle(np.linspace(0,1,300))
 points3 = curvgen.rd_circle(np.linspace(0,1,300))
 points4 = curvgen.ro_circle(np.linspace(0,1,300))
 points5 = profile_full(np.linspace(0,1,300*n))
+# points5 = crv.convert_curve_nurbezier(profile1.tooth_curve)(np.linspace(0,1,300))
+# points5 = crv.convert_curve_nurbezier(profile_closed)(np.linspace(0,1,300*n))
 
 ax = plt.axes(projection='3d')
 

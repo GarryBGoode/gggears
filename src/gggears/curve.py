@@ -430,7 +430,7 @@ def find_curve_intersect(curve1: Curve, curve2: Curve, guess=[0.5,0.5], method:'
         res = root(lambda t: curve1(t[0])-curve2(t[1]),np.array([guess[0],guess[1],0]))
     elif method == IntersectMethod.MINDISTANCE:
         def minfunc(t):
-            diff = curve1(t[0])-curve2(t[1])
+            diff = (curve1(t[0])-curve2(t[1]))/DELTA
             return np.dot(diff,diff)
         res = minimize(minfunc,np.array([guess[0],guess[1]]))
     return res
@@ -643,11 +643,11 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True,**kwargs):
             
     else:
         if isinstance(input_curve,LineCurve):
-            bz_points = np.array([input_curve.p0,input_curve.p1])
+            bz_points = np.array([input_curve(0),input_curve(1)])
             bz_weights = np.ones((2))
         elif isinstance(input_curve,ArcCurve):
             if abs(input_curve.angle)<PI:
-                bz_points,bz_weights = calc_nurbezier_arc(input_curve.p0,input_curve.p1,input_curve.center)
+                bz_points,bz_weights = calc_nurbezier_arc(input_curve(0),input_curve(1),input_curve.center)
             else:
                 sol, bz_points, bz_weights = fit_nurb_optim2(input_curve,**kwargs)
         else:
@@ -1135,14 +1135,32 @@ class TransformedCurve(Curve):
     def __init__(self, transform: callable, curve: Curve, params={},enable_vectorize=False):
         self.target_curve = curve
         self.transform_method = transform
-        super().__init__(lambda t: self.apply_transform(self.target_curve(t)), 
-                         active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=enable_vectorize)
+        if isinstance(curve,CurveChain):
+            TransformedCurveChain.__init__(self,transform,curve)
+        else:
+            super().__init__(lambda t: self.apply_transform(self.target_curve(t)), 
+                            active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=enable_vectorize)
     
+    def apply_transform(self,point):
+        return self.transform_method(point,**self.params)
+    
+class TransformedCurveChain(CurveChain):
+    def __init__(self, transform: callable, curve: CurveChain, params={},enable_vectorize=False):
+        self.target_curve = curve
+        self.transform_method = transform
+        # super().__init__([Curve(lambda t: self.apply_transform(curve(t)), 
+        #                  active=self.target_curve.active, t0=0, t1=1, params=params, enable_vectorize=enable_vectorize))
+        #                 for curve in self.target_curve]
+        super().__init__(* [TransformedCurve(transform,
+                                             curve,
+                                             params=params,
+                                             enable_vectorize=enable_vectorize) for curve in self.target_curve])
+            
     def apply_transform(self,point):
         return self.transform_method(point,**self.params)
         
 
-class MirroredCurve(TransformedCurve):
+class MirroredCurve(TransformedCurve,TransformedCurveChain):
     def __init__(self, curve: Curve, plane_normal=RIGHT, center=ORIGIN):
         self.plane_normal = normalize_vector(plane_normal)
         self.center=center
@@ -1156,7 +1174,7 @@ class MirroredCurve(TransformedCurve):
         super().__init__(mirror_func, curve)
 
 
-class RotatedCurve(TransformedCurve):
+class RotatedCurve(TransformedCurve,TransformedCurveChain):
     def __init__(self, curve: Curve, angle=0, axis=OUT, center=ORIGIN):
         self.axis = normalize_vector(axis)
         self.angle = angle
@@ -1192,6 +1210,9 @@ class NURBSCurve(CurveChain):
         self.update_lengths()
 
     @property
+    def n_points(self):
+        return sum([curve.n_points for curve in self.curves])
+    @property
     def points(self):
         out_arr = np.concatenate([curve.points[:-1] for curve in self.curves])
         out_arr = np.append(out_arr,self.curves[-1].points[-1,np.newaxis],axis=0)
@@ -1209,3 +1230,19 @@ class NURBSCurve(CurveChain):
         for curve in self.curves:
             out_arr = np.append(out_arr,curve.n_points-1+out_arr[-1])
         return out_arr
+    
+    def enforce_continuity(self):
+        for curve1,curve2 in zip(self.curves[:-1],self.curves[1:]):
+            midpoints = (curve1.points[-1]+curve2.points[0])/2
+            midweights = (curve1.weights[-1]+curve2.weights[0])/2
+            curve1.points[-1] = midpoints
+            curve2.points[0] = midpoints
+            curve1.weights[-1] = midweights
+            curve2.weights[0] = midweights
+        if self.is_closed:
+            midpoints = (self.curves[-1].points[-1]+self.curves[0].points[0])/2
+            midweights = (self.curves[-1].weights[-1]+self.curves[0].weights[0])/2
+            self.curves[-1].points[-1] = midpoints
+            self.curves[0].points[0] = midpoints
+            self.curves[-1].weights[-1] = midweights
+            self.curves[0].weights[0] = midweights
