@@ -1,6 +1,6 @@
 [lint]
 # 1. Enable flake8-bugbear (`B`) rules, in addition to the defaults.
-select = ["E4", "E7", "E9", "F", "B"]
+select = ["E","F", "W", "B"]
 
 # 2. Avoid enforcing line-length violations (`E501`)
 ignore = ["F403", "F405"]

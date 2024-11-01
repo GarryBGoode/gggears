@@ -14,12 +14,10 @@ limitations under the License.
 from gggears import *
 from function_generators import *
 from curve import *
-from typing import Type
 from build123d import *
 import numpy as np
-import numpy.typing as npt
 import time
-from ocp_vscode import show, show_object, reset_show, set_port, set_defaults, get_defaults
+from ocp_vscode import show, set_port
 set_port(3939)
 
 
@@ -48,7 +46,7 @@ class GearBuilder():
         self.nurb_profile_stacks = []
         profile_surfaces = []
 
-        
+
 
         start_gear = time.time()
         for ii in range(len(self.params.z_vals)-1):
@@ -77,7 +75,7 @@ class GearBuilder():
                     nurb.points = gearprofile.base_transform(nurb.points)
                 nurb_stack.append(NurbsConv)
             self.nurb_profile_stacks.append(nurb_stack)
-            
+
         print(f"nurb generation time: {time.time()-start_nurb}")
         for nurb_stack in self.nurb_profile_stacks:
             self.nurb_profile_stack = nurb_stack
@@ -85,7 +83,7 @@ class GearBuilder():
 
         profile_surfaces.insert(0,self.generate_cover_surface(self.nurb_profile_stacks[0][0]))
         profile_surfaces.append(self.generate_cover_surface(self.nurb_profile_stacks[-1][-1]))
-        
+
         # visual debug is harder if these surfaces go into self right from the start
         self.profile_surfaces = profile_surfaces
 
@@ -95,14 +93,14 @@ class GearBuilder():
         if not solid1.is_valid():
             # solid1 = Solid(shell1.fix())
             Warning("Tooth profile solid is not valid")
-            
+
 
         self.profile_solid = solid1
 
         self.params_stack = [self.params(z) for z in self.params.z_vals]
         # flatten the gear stacks
         self.gear_stack = [ gear  for gear_stack in self.gear_stacks for gear in gear_stack]
-        
+
         ra_min = np.min([gear.ra for gear in self.gear_stack])
         ra_max = np.max([gear.ra for gear in self.gear_stack])
         rd_min = np.min([gear.rd for gear in self.gear_stack])
@@ -119,7 +117,7 @@ class GearBuilder():
         zmax = np.max([gear.base_transform(gear.ro_curve(0.5))[2] for gear in self.gear_stack])
 
         axis1 = Axis((0,0,0),(self.params.axis[0],self.params.axis[1],self.params.axis[2]))
-        
+
         if any([param.cone_angle!=0 for param in self.params_stack]):
             if self.params.inside_teeth:
                 z_height = zmax-zmin
@@ -131,7 +129,7 @@ class GearBuilder():
             else:
                 plug = Cone(ro_0,ro_1,zmax-zmin,align=(Align.CENTER, Align.CENTER, Align.MIN))
                 plug = plug.translate(nppoint2Vector(OUT*(zmin)))
-        
+
         else:
             if self.params.inside_teeth:
                 plug = Cylinder(ro_max,zmax-zmin) - \
@@ -140,7 +138,7 @@ class GearBuilder():
             else:
                 plug = Cylinder(ro_min+DELTA,zmax-zmin)
                 plug = plug.translate(nppoint2Vector(OUT*(zmax+zmin)/2))
-        
+
 
 
 
@@ -168,15 +166,15 @@ class GearBuilder():
 
             if bin_n_teeth[-(k+1)]=='1':
 
-                
+
                 angle_construct = angle_idx * self.gear.params.pitch_angle*RAD2DEG
                 rotshape = shape_dict[k].translate(nppoint2Vector(-self.params.center(0))
                                                      ).rotate(axis1,angle_construct).translate(
                                                          nppoint2Vector(self.params.center(0)))
-                
+
                 solid2_to_fuse.append(rotshape)
                 angle_idx = angle_idx+2**k
-                
+
         if len(solid2_to_fuse)>1:
             self.solid = Solid.fuse(*solid2_to_fuse, glue=False,tol=tol).clean()
         else:
@@ -197,7 +195,7 @@ class GearBuilder():
                 p_mean = (profile[ii].params['points'][0]+profile[jj].params['points'][-1])/2.0
                 self.point_diffs.append(np.linalg.norm(profile[ii].params['points'][0]-profile[jj].params['points'][-1]))
                 profile[ii].params['points'][0] = profile[jj].params['points'][-1] = p_mean
-    
+
     def gen_splines(self,curve_bezier:Curve):
         vectors = nppoint2Vector(curve_bezier.points)
         weights = curve_bezier.weights.tolist()
@@ -239,7 +237,7 @@ class GearBuilder():
         start_surf_gen = time.time()
         for k in range(len(self.nurb_profile_stack[0])):
             n_points = self.nurb_profile_stack[0][k].n_points
-            
+
             points_w = points3[:,idx_loc:idx_loc+n_points,:]
             idx_loc = idx_loc + n_points
             points = points_w[:,:,:3]
@@ -251,14 +249,14 @@ class GearBuilder():
                 profile_surfaces.append(surface_1)
         print(f"surface gen time: {time.time()-start_surf_gen}")
         return profile_surfaces
-        
-    
+
+
     def generate_cover_surface(self, nurb_chain: CurveChain):
         # resisting 1-lining this for improved debugging
         splines = [self.gen_splines(curve) for curve in nurb_chain if curve.length>DELTA and curve.active]
         return Face.make_surface(Wire(splines)).clean()
 
-                    
+
 
     def solve_surface(self,target_points, n_points_vert = 4):
 
@@ -274,7 +272,7 @@ class GearBuilder():
             points[1:-1,:,:] = x[:(m-2)*n*4].reshape(((m-2),n,4))
             t = x[(m-2)*n*4:(m-2)*n*4+o-2]
             return points,t
-        
+
         def inverse_allocator(points,t):
             x = np.zeros(((m-2)*n*4+o))
             x[:(m-2)*n*4] = points[1:-1,:,:].reshape((m-2)*n*4)
@@ -285,7 +283,7 @@ class GearBuilder():
             points,t = point_allocator(x)
             tref = np.linspace(0,1,o)[1:-1]
             return np.sum((bezierdc(t,points)-target_points[1:-1,:,:])**2) + np.sum((t-tref)**2)*10
-        
+
         init_t = np.linspace(0,1,o)[1:-1]
         init_points = bezierdc(np.linspace(0,1,m),target_points)
         init_guess_x = inverse_allocator(init_points,init_t)
@@ -295,7 +293,7 @@ class GearBuilder():
         points_out = points_sol[:,:,:3]
         weights_out = points_sol[:,:,3]
         return sol, points_out, weights_out
-    
+
     def solve_surface2(self,target_points, n_points_vert = 4):
 
         n = target_points.shape[1]
@@ -309,7 +307,7 @@ class GearBuilder():
 
             points[1:-1,:,:] = x[:(m-2)*n*4].reshape(((m-2),n,4))
             return points
-        
+
         def inverse_allocator(points,t):
             x = np.zeros(((m-2)*n*4+o))
             x[:(m-2)*n*4] = points[1:-1,:,:].reshape((m-2)*n*4)
@@ -319,7 +317,7 @@ class GearBuilder():
             points = point_allocator(x)
             tref = np.linspace(0,1,o)[1:-1]
             return np.sum((bezierdc(tref,points)-target_points[1:-1,:,:])**2)
-        
+
         init_t = np.linspace(0,1,o)[1:-1]
         init_points = bezierdc(np.linspace(0,1,m),target_points)
         init_guess_x = inverse_allocator(init_points,init_t)
@@ -329,23 +327,23 @@ class GearBuilder():
         points_out = points_sol[:,:,:3]
         weights_out = points_sol[:,:,3]
         return sol, points_out, weights_out
-    
+
 
 
 start = time.time()
 
-n_z = 24
+n_z = 9
 
 gamma=PI/2 * 0.5
 
 axis=OUT
 axis2=RIGHT
-param = InvoluteGearParamManager(z_vals=[0,5],
+param = InvoluteGearParamManager(z_vals=[0,2],
                                  n_teeth=n_z,
                                  module=lambda z: 1-np.tan(gamma)*z/n_z*2,
                                  center=lambda z: z*axis,
                                  cone_angle=gamma*2,
-                                 angle=lambda z: 0.03*z,
+                                 angle=lambda z: 0.2*z,
                                  axis=axis,
                                  h_d=1.2,
                                  h_o=2.5,
@@ -359,14 +357,14 @@ param = InvoluteGearParamManager(z_vals=[0,5],
 gear1 = GearBuilder(params=param,
                     n_points_vert=3,
                     n_points_hz=4,
-                    add_plug=False)  
+                    add_plug=False)
 
-param2= InvoluteGearParamManager(z_vals=[0,5],
+param2= InvoluteGearParamManager(z_vals=[0,2],
                                  n_teeth=n_z,
                                  module=lambda z: 1-np.tan(gamma)*z/n_z*2,
                                  center=lambda z: z*axis2+gear1.gear_generator_ref.rp*LEFT+gear1.gear_generator_ref.center_sphere,
                                  cone_angle=gamma*2,
-                                 angle=lambda z: -0.03*z-PI/n_z,
+                                 angle=lambda z: -0.2*z-PI/n_z*0,
                                  axis=axis2,
                                  h_d=1.2,
                                  h_o=2.5,
@@ -381,8 +379,16 @@ param2= InvoluteGearParamManager(z_vals=[0,5],
 gear2 = GearBuilder(params=param2,
                     n_points_vert=3,
                     n_points_hz=4,
-                    add_plug=False)  
+                    add_plug=False)
 
 print(f"total time: {time.time()-start}")
 
-show(gear1.solid,gear2.solid)
+
+solid3 = gear2.solid.rotate(Axis((0,0,0),(0,0,1)),120)
+solid4 = gear2.solid.rotate(Axis((0,0,0),(0,0,1)),-120)
+solid5 = gear1.solid.rotate(Axis((0,0,gear1.gear_generator_ref.center_sphere[2]),
+                                        (0,1,0)),
+                                        angle=180)
+# mirror(Plane(origin=Vector(0,0,gear1.gear_generator_ref.center_sphere[2]),normal=Vector(0,0,1)))
+# solid5 = solid5.rotate(Axis.Z,360/n_z/2)
+show(gear1.solid,gear2.solid,solid3,solid4,solid5)

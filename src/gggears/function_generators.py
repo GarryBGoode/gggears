@@ -12,7 +12,6 @@ limitations under the License.
 '''
 
 import numpy as np
-import copy
 from defs import *
 from scipy.spatial.transform import Rotation as scp_Rotation
 from scipy.special import comb
@@ -57,12 +56,12 @@ def involute_func(t, r, a=0, rad_offs=0, tan_offs=0, z_offs=0, csph=0):
 
 
         #offset vector
-        ov = np.asarray([[rad_offs], 
-                         [tan_offs], 
+        ov = np.asarray([[rad_offs],
+                         [tan_offs],
                          [z_offs]   ])
 
         if csph == 0:
-            
+
             z = 0
             beta=0
 
@@ -81,15 +80,15 @@ def involute_func(t, r, a=0, rad_offs=0, tan_offs=0, z_offs=0, csph=0):
             beta = np.arcsin(r / R)
             # d = l * np.array([[0], [-1], [0]]) + np.array([[0], [0], [z]])
             d = l * DOWN + z * OUT
-            
+
             # z_center = np.array([[0],[0],[np.cos(beta)*R]])
             z_center = np.cos(beta) * R * OUT
-            
+
 
             # rot_mat_y0 = np.array([[np.cos(PI/2-beta), 0, np.sin(PI/2-beta)],
             #                          [0, 1, 0],
             #                          [-np.sin(PI/2-beta), 0, np.cos(PI/2-beta)]])
-            
+
             rot_mat_y0 = scp_Rotation.from_euler('y',beta-PI/2).as_matrix()
 
             # rot_mat_z0 = np.array([[np.cos(gamma), np.sin(gamma), 0],
@@ -105,13 +104,13 @@ def involute_func(t, r, a=0, rad_offs=0, tan_offs=0, z_offs=0, csph=0):
             # rot_mat_y = np.array([[np.cos(beta), 0, -np.sin(beta)],
             #                         [0, 1, 0],
             #                         [np.sin(beta), 0, np.cos(beta)]])
-            
+
             # ov = rot_mat_y @ rot_mat_x @ ov
-            # d = rot_mat_y @ d 
+            # d = rot_mat_y @ d
 
             return np.reshape( rot_mat_z @ (v2), (1, 3))[0]
 
-        
+
 
     if hasattr(t, '__iter__'):
         ret = np.empty((0,3, 1))
@@ -157,7 +156,7 @@ def involute_sphere(t,r=1,C=0.5,angle=0,v_offs=ORIGIN, z_offs=0):
 
         R = 1 / np.abs(C)
         Csig = np.sign(C)
-        gamma = r / R * t 
+        gamma = r / R * t
         # to keep similarity to circle involute for small conic angles (beta~0) this rotatoin of v_offs is needed.
         v1 = scp_Rotation.from_euler('y',-PI/2 * Csig).apply(v_offs) + R*RIGHT
         # v1 = v_offs + R*RIGHT
@@ -195,9 +194,9 @@ def arc_from_2_point(t, p0=RIGHT, p1=UP, curvature=1.0, axis=OUT, revolutions=0.
         r = 1/curvature
         if abs(r)<np.linalg.norm(p1-p0)/2:
             r=np.linalg.norm(p1-p0)/2*np.sign(r)
-        
+
         h = np.sqrt(r**2-(np.linalg.norm(p1-p0)/2)**2)*np.sign(r)
-        
+
         center = (p0+p1)/2-np.cross(dp,axis)*h
 
         if any(np.isnan(axis)):
@@ -211,7 +210,7 @@ def arc_from_2_point(t, p0=RIGHT, p1=UP, curvature=1.0, axis=OUT, revolutions=0.
 
 
 def arc_from_2_point_center(t, p0=RIGHT, p1=UP, center=ORIGIN, revolutions=0.0):
-    
+
     axis = normalize_vector(np.cross(p0-center,p1-center))
 
     d_angle = np.arctan2(np.linalg.norm(np.cross((p0 - center),(p1 - center))),np.dot((p1 - center),(p0 - center)))
@@ -245,7 +244,7 @@ def bezierdc(t,points):
         t_shape = t.shape + (1,) * (points.ndim-1)  # Add as many singleton dimensions as needed
         t_expanded = t.reshape(t_shape)
         return (1-t_expanded)*points[:,:-1]+(t_expanded)*points[:,1:]
-    
+
     if hasattr(t,'__iter__'):
         points2 = np.repeat(np.expand_dims(points,0),t.shape[0],axis=0)
         while points2.shape[1]>1:
@@ -263,7 +262,9 @@ def lerp(t,a,b):
     t_shape = t.shape + (1,) * a.ndim  # Add as many singleton dimensions as needed
     t_expanded = t.reshape(t_shape)
     return ((1-t_expanded) * a + (t_expanded)*b)
-    
+
+def interpolate(x, x0, x1, y0, y1):
+    return y0 + (y1-y0)*(x-x0)/(x1-x0)
 
 def nurbezier(t, points, weights):
     n = points.shape[0]
@@ -288,7 +289,7 @@ def nurbezier_surface(u,v,points,weights):
         rowweights = weights[ii,:]
         q.append(nurbezier(v,rowpoints,rowweights))
         qw.append(bezier(v,rowweights))
-    
+
     qpoints = np.stack(q,axis=0)
     qweights = np.stack(qw,axis=0)
     p_out = nurbezier(u,qpoints,qweights)
@@ -305,8 +306,8 @@ def nurbezier_surface_2(u,v,points,weights):
     for ii,jj in np.ndindex((n,m)):
         weights_bezier.append(weights[ii,jj]*cn[ii]*cm[jj])
         parts.append(points[ii,jj]*weights[ii,jj]*cn[ii]*cm[jj])
-        
-    
+
+
     return np.sum(parts,axis=0) / np.sum(weights_bezier)
 
 

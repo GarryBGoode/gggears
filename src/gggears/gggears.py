@@ -18,6 +18,7 @@ from scipy.optimize import root
 from scipy.optimize import minimize
 import dataclasses
 import curve as crv
+import copy
 
 @dataclasses.dataclass
 class ZFunctionMixin():
@@ -35,7 +36,7 @@ class ZFunctionMixin():
                 # dict_loc[key] = value(z)
                 class_loc = dataclasses.replace(class_loc,**{key:value(z)})
         return class_loc
-    
+
     def __add__(self,other):
         if isinstance(other,ZFunctionMixin):
             z_vals = np.unique(np.concatenate((self.z_vals,other.z_vals)))
@@ -100,7 +101,7 @@ class InvoluteGearParam():
     @property
     def R(self):
         return self.rp/np.sin(self.gamma)
-    
+
     @property
     def pitch_angle(self):
         return 2*PI/self.n_teeth
@@ -178,7 +179,7 @@ class GearCurveGenerator():
         self.update_tip_fillet()
         self.update_root_fillet()
         self.generate_profile()
-    
+
     @property
     def rp_ref(self):
         return self.n_teeth/2
@@ -186,31 +187,31 @@ class GearCurveGenerator():
     @property
     def gamma(self):
         return self.cone_angle/2
-    
+
     @property
     def R_ref(self):
         return self.rp_ref/np.sin(self.gamma)
-    
+
     @property
     def center_sphere_ref(self):
         return self.R_ref*np.cos(self.gamma)*OUT
 
-    @property 
+    @property
     def rp(self):
         return self.rp_ref*self.module
 
     @property
     def R(self):
         return self.R_ref*self.module
-    
+
     @property
     def center_sphere(self):
         return self.base_transform(self.center_sphere_ref)
-    
+
     @property
     def pitch_angle(self):
         return 2*PI/self.n_teeth
-    
+
     # these are post-calculated values that may differ from input parameters
     @property
     def ra(self):
@@ -235,7 +236,7 @@ class GearCurveGenerator():
         else:
             rot_angle = angle_between_vectors(OUT,self.axis)
             rot_axis = normalize_vector(rot_axis)
-        
+
         rot_z = scp_Rotation.from_euler('z',self.angle)
         rot_axis = scp_Rotation.from_rotvec(rot_angle*rot_axis)
 
@@ -249,7 +250,7 @@ class GearCurveGenerator():
             # R theta phi in spherical
             # quasi r = (PI/2-phi) * self.R
             # theta = theta
-            # z = self.R-R 
+            # z = self.R-R
             if point.ndim==1:
                 return np.array([(PI/2-point[2])*self.R_ref,
                                  point[1],
@@ -258,7 +259,7 @@ class GearCurveGenerator():
                 return np.array([(PI/2-point[:,2])*self.R_ref,
                                 point[:,1],
                                 (self.R_ref-point[:,0])]).transpose()
-        
+
     def inverse_polar_transform(self,point):
         if self.cone_angle==0:
             return cylindrical_to_xyz(point)
@@ -267,13 +268,13 @@ class GearCurveGenerator():
                 point2 = np.array([self.R_ref-point[2],
                                 point[1],
                                 PI/2-point[0]/self.R_ref])
-                return spherical_to_xyz(point2, 
+                return spherical_to_xyz(point2,
                                         center=self.center_sphere_ref)
             else:
                 point2 = np.array([self.R_ref-point[:,2],
                                    point[:,1],
                                    PI/2-point[:,0]/self.R_ref]).transpose()
-                return spherical_to_xyz(point2, 
+                return spherical_to_xyz(point2,
                                         center=self.center_sphere_ref)
 
     def r_height_func(self,point):
@@ -281,7 +282,7 @@ class GearCurveGenerator():
             return self.r_height_func_cylindrical(point)
         else:
             return self.r_height_func_spherical(point)
-    
+
     def r_height_func_cylindrical(self,point):
         return np.linalg.norm((point-self.center)[:2])
     def r_height_func_spherical(self,point):
@@ -301,7 +302,7 @@ class GearCurveGenerator():
         self.ra_circle = crv.ArcCurve.from_point_center_angle(p0=pa,center=OUT*pa[2],angle=2*PI)
         self.rd_circle = crv.ArcCurve.from_point_center_angle(p0=pd,center=OUT*pd[2],angle=2*PI)
         self.ro_circle = crv.ArcCurve.from_point_center_angle(p0=po,center=OUT*po[2],angle=2*PI)
-    
+
     def update_tip(self):
         sols = []
         rdh = self.r_height_func(self.rd_circle(0))
@@ -325,7 +326,7 @@ class GearCurveGenerator():
                 self.ra_circle = crv.ArcCurve.from_point_center_angle(p0=self.tooth_curve(1),
                                                                         center=self.tooth_curve(1)*np.array([0,0,1]),
                                                                         angle=2*PI)
-    
+
     def generate_profile(self):
 
         # if tip fillet is used, tooth curve tip is already settled
@@ -352,13 +353,13 @@ class GearCurveGenerator():
                 if sol_root_2.success or solcheck2<1E-5:
                     solcheck = solcheck2
                     sol_root_1 = sol_root_2
-            
+
             if sol_root_1.success or solcheck<1E-5:
                 self.tooth_curve.set_start_on(sol_root_1.x[0])
             else:
                 sol_mid2 = crv.find_curve_plane_intersect(self.tooth_curve,plane_normal=rotate_vector(UP,-self.pitch_angle/2),guess=0)
                 self.tooth_curve.set_start_on(sol_mid2.x[0])
-        
+
         self.tooth_mirror = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
         self.tooth_mirror.reverse()
         tooth_rotate = crv.RotatedCurve(self.tooth_mirror,angle=-self.pitch_angle,axis=OUT)
@@ -375,7 +376,7 @@ class GearCurveGenerator():
 
         self.profile = crv.CurveChain(self.rd_curve,self.tooth_curve,self.ra_curve,self.tooth_mirror)
         return self.profile
-    
+
     def update_tip_fillet(self):
         if self.tip_fillet>0:
             sol1 = crv.find_curve_intersect(self.tooth_curve,self.ra_circle,guess=[0.9,0], method=crv.IntersectMethod.EQUALITY)
@@ -392,7 +393,7 @@ class GearCurveGenerator():
                                                           method=crv.IntersectMethod.MINDISTANCE)
                     if sol.success:
                         break
-                    
+
                 if arc(1)[1]<0:
                     self.tooth_curve.set_end_on(t1)
                     self.tooth_curve.append(arc)
@@ -400,7 +401,7 @@ class GearCurveGenerator():
                     sharp_tip = True
             else:
                 sharp_tip = True
-            
+
             if sharp_tip:
                     mirror_curve = crv.MirroredCurve(self.tooth_curve,plane_normal=UP)
                     mirror_curve.reverse()
@@ -423,7 +424,7 @@ class GearCurveGenerator():
 
         def angle_check(p):
             return angle_between_vector_and_plane(p,UP) < self.pitch_angle/2
-        
+
         if self.root_fillet>0:
             sol1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0])
             if sol1.success and angle_check(self.rd_circle(sol1.x[1])):
@@ -458,7 +459,7 @@ class GearCurveGenerator():
                     arc.set_start_on(sol2.x[0])
                     self.tooth_curve.set_start_on(t2)
                     self.tooth_curve.insert(0,arc)
-            
+
     def generate_profile_closed(self,rd_coeff_right=1.0,rd_coeff_left=0.0):
         # mirroring but making sure its a distinct curve, MirroredCurve remains linked to the original
         rd_curve_left = crv.ArcCurve.from_2_point_center(p0=self.rd_curve(1)*np.array([1,-1,1]),
@@ -469,9 +470,9 @@ class GearCurveGenerator():
             rd_curve_left.active=True
         else:
             rd_curve_left.active=False
-        
-        
-        
+
+
+
         # right-side rd curve is the original rd curve so it exists already
         if rd_coeff_right<1:
             self.rd_curve.set_start_on(1-rd_coeff_right)
@@ -482,7 +483,7 @@ class GearCurveGenerator():
         v1 = np.cross(rd_curve_left(1),OUT)
         sol0 = crv.find_curve_plane_intersect(self.ro_circle,v0,guess=0)
         sol1 = crv.find_curve_plane_intersect(self.ro_circle,v1,guess=0)
-        
+
         p0 = self.ro_circle(sol0.x[0])
         p1 = self.ro_circle(sol1.x[0])
 
@@ -498,7 +499,7 @@ class GearCurveGenerator():
         profile_closed = crv.CurveChain(self.profile,rd_curve_left,connector_1,self.ro_curve,connector_0)
 
         return profile_closed
-    
+
     def generate_gear_pattern(self,profile:crv.Curve):
         def func(t):
             t2,k = self.tooth_moduler(t)
@@ -511,7 +512,7 @@ class GearCurveGenerator():
         t2 = ((np.floor(self.n_teeth)-self.n_cutout_teeth)*t)
         return t2%1, t2//1
 
-         
+
 
 
 class InvoluteFlankGenerator():
@@ -541,7 +542,7 @@ class InvoluteFlankGenerator():
         self.involute_connector_arc = crv.ArcCurve(active=False)
         self.undercut_curve_sph = crv.SphericalInvoluteCurve(active=False)
 
-        
+
 
         if self.cone_angle==0:
             self.rd = self.rp - self.h_d + self.profile_shift
@@ -563,7 +564,7 @@ class InvoluteFlankGenerator():
     @property
     def rp(self):
         return PI/self.pitch_angle
-    
+
     @property
     def gamma(self):
         return self.cone_angle/2
@@ -574,7 +575,7 @@ class InvoluteFlankGenerator():
 
     def calculate_involutes_cylindric(self):
         self.involute_curve.active=True
-        
+
         pitch_circle = crv.ArcCurve(radius=self.rp,angle=2*PI)
 
         # base circle of involute function
@@ -613,14 +614,14 @@ class InvoluteFlankGenerator():
             self.involute_connector.active=True
             if self.enable_undercut:
                 # when undercut is used, there is no line between undercut and involute in 2D
-                
+
                 self.undercut_curve.active=True
                 # the undercut is an involute curve with an offset vector (sometimes called trochoid)
                 # radial and tangential elements of the offset vector
                 rad_ucut = self.rd - self.rp
                 tan_ucut = +self.rd * np.tan(self.alpha)
                 ucut_ofs_v = np.array((rad_ucut,tan_ucut,0)).reshape(VSHAPE)
-                
+
                 self.undercut_curve.r = self.rp
                 self.undercut_curve.angle = self.involute_curve.angle - self.alpha
                 self.undercut_curve.v_offs = ucut_ofs_v
@@ -665,14 +666,14 @@ class InvoluteFlankGenerator():
             angle = angle_between_vectors(tan,sph_tan)
 
             return [p0[0]**2+p0[1]**2-self.rp**2, angle-PI/2-self.alpha]
-    
+
         self.involute_curve_sph.active=True
         base_res = root(involute_angle_func,[self.alpha/2,self.rp*np.cos(self.alpha)],tol=1E-14)
         self.rb = base_res.x[1]
-        
+
         self.involute_curve_sph.r = self.rb
         self.involute_curve_sph.c_sphere = self.C_sph
-        
+
         angle_0 = angle_between_vectors(involute_sphere(base_res.x[0],self.rb,angle=0,C=self.C_sph)*np.array([1,1,0]),
                                         RIGHT)
         angle_offset = -angle_0 - (self.pitch_angle/4 + self.profile_shift*np.tan(self.alpha)/2 /self.rp)
@@ -730,8 +731,8 @@ class InvoluteFlankGenerator():
                 # sol2 = crv.find_curve_intersect(self.undercut_curve_sph,self.rd_curve)
                 sol2 = minimize(lambda t: np.linalg.norm(self.undercut_curve_sph(t)[:2]),0)
                 self.undercut_curve_sph.set_start_on(sol2.x[0])
-                
-    
+
+
     def calculate_rack_spherical(self):
         def rack_flanc_func(t,a):
             axis1 = scp_Rotation.from_euler('x',-self.alpha).apply(OUT)
@@ -740,20 +741,20 @@ class InvoluteFlankGenerator():
             v1 = scp_Rotation.from_rotvec(-axis1*an1).apply(v0)
             v2 = scp_Rotation.from_euler('z',t+a).apply(v1)
             return v2
-        
+
         an_tooth_sph = (self.pitch_angle/2 + self.profile_shift*np.tan(self.alpha) /self.rp )* self.rp / self.R
         curve1 = crv.Curve(rack_flanc_func,
                            t0=-1,
                            t1=1,
                            params={'a':-an_tooth_sph/2})
-               
-        
+
+
         sol2 = root(lambda t: np.arcsin(curve1(t[0])[2]/self.R)+self.an_d,[0])
 
         sol1 = crv.find_curve_plane_intersect(curve1,plane_normal=UP,guess=1)
         curve1.set_start_and_end_on(sol2.x[0],sol1.x[0])
         return curve1
-    
+
 
 
 
@@ -766,11 +767,11 @@ class InvoluteGear():
     def __init__(self,
                  params : InvoluteGearParamManager = InvoluteGearParamManager(),
                  **kwargs):
-        
+
         self.params = params
         self.z_vals = self.params.z_vals
 
-        
+
 
     def setup_generator(self,params):
         paramdict = params.__dict__
@@ -783,14 +784,14 @@ class InvoluteGear():
                                              profile_reduction = params.profile_reduction,
                                              h_d = params.h_d,
                                              enable_undercut = params.enable_undercut).tooth_curve
-        
+
         paramdict['h_a'] = paramdict['h_a']+paramdict['profile_shift']
         paramdict['h_d'] = paramdict['h_d']-paramdict['profile_shift']
 
         curve_generator = GearCurveGenerator(reference_tooth_curve=tooth_curve,**paramdict)
 
         return curve_generator
-    
+
     def curve_gen_at_z(self,z):
         return self.setup_generator(self.params(z))
-    
+
