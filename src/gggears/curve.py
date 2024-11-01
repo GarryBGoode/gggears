@@ -161,7 +161,7 @@ class Curve():
             else:
                 return (function(t)-function(t-delta))/delta
         if n<=1:
-            return numeric_diff(self.function,t,direction,delta)
+            return numeric_diff(self,t,direction,delta)
         else:
             return numeric_diff(self.derivative,t,direction,n-1,delta)
 

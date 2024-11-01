@@ -333,19 +333,20 @@ class GearBuilder():
 start = time.time()
 
 n_z = 9
-
+m=3
 gamma=PI/2 * 0.5
 
 axis=OUT
 axis2=RIGHT
 param = InvoluteGearParamManager(z_vals=[0,2],
                                  n_teeth=n_z,
-                                 module=lambda z: 1-np.tan(gamma)*z/n_z*2,
-                                 center=lambda z: z*axis,
+                                 module=lambda z: m*(1-np.tan(gamma)*z/n_z*2),
+                                 center=lambda z: m*z*axis,
                                  cone_angle=gamma*2,
-                                 angle=lambda z: 0.2*z,
+                                 angle=lambda z: 0.15*(z-1)**2,
                                  axis=axis,
-                                 h_d=1.2,
+                                 h_d=1.4,
+                                 h_a=1.2,
                                  h_o=2.5,
                                  root_fillet=0.0,
                                  tip_fillet=0.0,
@@ -361,12 +362,13 @@ gear1 = GearBuilder(params=param,
 
 param2= InvoluteGearParamManager(z_vals=[0,2],
                                  n_teeth=n_z,
-                                 module=lambda z: 1-np.tan(gamma)*z/n_z*2,
-                                 center=lambda z: z*axis2+gear1.gear_generator_ref.rp*LEFT+gear1.gear_generator_ref.center_sphere,
+                                 module=lambda z: m*(1-np.tan(gamma)*z/n_z*2),
+                                 center=lambda z: m*z*axis2+gear1.gear_generator_ref.rp*LEFT+gear1.gear_generator_ref.center_sphere,
                                  cone_angle=gamma*2,
-                                 angle=lambda z: -0.2*z-PI/n_z*0,
+                                 angle=lambda z: -0.15*(z-1)**2-PI/n_z*0,
                                  axis=axis2,
-                                 h_d=1.2,
+                                 h_d=1.4,
+                                 h_a=1.2,
                                  h_o=2.5,
                                  root_fillet=0.0,
                                  tip_fillet=0.0,
@@ -377,7 +379,7 @@ param2= InvoluteGearParamManager(z_vals=[0,2],
                                  inside_teeth=False)
 
 gear2 = GearBuilder(params=param2,
-                    n_points_vert=3,
+                    n_points_vert=4,
                     n_points_hz=4,
                     add_plug=False)
 
