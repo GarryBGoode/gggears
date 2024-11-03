@@ -11,14 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-from function_generators import *
-# from curve import *
-from defs import *
+from gggears.function_generators import *
+from gggears.defs import *
 from scipy.optimize import root
 from scipy.optimize import minimize
 import dataclasses
-import curve as crv
+import gggears.curve as crv
 import copy
+from functools import lru_cache
 
 @dataclasses.dataclass
 class ZFunctionMixin():
@@ -34,7 +34,6 @@ class ZFunctionMixin():
         class_loc = copy.deepcopy(self)
         for key,value in dict_loc.items():
             if callable(value):
-                # dict_loc[key] = value(z)
                 class_loc = dataclasses.replace(class_loc,**{key:value(z)})
         return class_loc
 
@@ -376,14 +375,14 @@ class GearCurveGenerator():
 
         if not self.root_fillet>0:
             sol_root_1 = crv.find_curve_intersect(self.tooth_curve,
-                                                  self.rd_circle,guess=[0,0],
+                                                  self.rd_circle,guess=[0.3,-0.01],
                                                   method=crv.IntersectMethod.EQUALITY)
             solcheck = np.linalg.norm(self.tooth_curve(sol_root_1.x[0]) - \
                                       self.rd_circle(sol_root_1.x[1]))
             if not sol_root_1.success:
                 # try the other way
                 sol_root_2 = crv.find_curve_intersect(self.tooth_curve,
-                                                      self.rd_circle,guess=[0,0],
+                                                      self.rd_circle,guess=[0.3,-0.01],
                                                       method=crv.IntersectMethod.MINDISTANCE)
                 solcheck2 = np.linalg.norm(self.tooth_curve(sol_root_1.x[0]) - \
                                            self.rd_circle(sol_root_1.x[1]))
@@ -552,13 +551,13 @@ class GearCurveGenerator():
         p1 = self.ro_circle(sol1.x[0])
 
         if self.cone_angle==0:
-            connector_1 = crv.LineCurve(rd_curve_left(1),p1)
-            connector_0 = crv.LineCurve(p0,self.profile(0))
+            self.ro_connector_1 = crv.LineCurve(rd_curve_left(1),p1)
+            self.ro_connector_0 = crv.LineCurve(p0,self.profile(0))
         else:
-            connector_1 = crv.ArcCurve.from_2_point_center(p0=rd_curve_left(1),
+            self.ro_connector_1 = crv.ArcCurve.from_2_point_center(p0=rd_curve_left(1),
                                                            p1=p1,
                                                            center=self.center_sphere_ref)
-            connector_0 = crv.ArcCurve.from_2_point_center(p0=p0,
+            self.ro_connector_0 = crv.ArcCurve.from_2_point_center(p0=p0,
                                                            p1=self.profile(0),
                                                            center=self.center_sphere_ref)
 
@@ -568,8 +567,9 @@ class GearCurveGenerator():
 
         profile_closed = crv.CurveChain(self.profile,
                                         rd_curve_left,
-                                        connector_1,
-                                        self.ro_curve,connector_0)
+                                        self.ro_connector_1,
+                                        self.ro_curve,
+                                        self.ro_connector_0)
 
         return profile_closed
 
@@ -681,7 +681,7 @@ class InvoluteFlankGenerator():
         #  the involute shall not cross the x axis
         # find the point where the involute curve reaches the x axis,
         #  that shall be the end of the segment
-        sol1 = crv.find_curve_plane_intersect(self.involute_curve,plane_normal=UP)
+        sol1 = crv.find_curve_plane_intersect(self.involute_curve,plane_normal=UP,guess=1)
         self.involute_curve.t_1 = self.involute_curve.p2t(sol1.x[0])
         self.involute_curve.update_lengths()
 
@@ -767,7 +767,8 @@ class InvoluteFlankGenerator():
                                     C=self.C_sph)*np.array([1,1,0]),
                     RIGHT)
         angle_offset =  - (self.pitch_angle/4 + \
-                           self.profile_shift * np.tan(self.alpha) / 2 / self.rp) - \
+                           self.profile_shift * np.tan(self.alpha) / self.rp) + \
+                           self.profile_reduction/self.rp - \
                         angle_0
         self.involute_curve_sph.angle = angle_offset
         self.involute_curve_sph.z_offs = -involute_sphere(base_res.x[0],
@@ -862,7 +863,8 @@ class InvoluteFlankGenerator():
             return v2
 
         an_tooth_sph = self.rp / self.R * \
-            (self.pitch_angle/2 + self.profile_shift*np.tan(self.alpha) /self.rp )
+            (self.pitch_angle/2 + self.profile_shift*np.tan(self.alpha) *2/self.rp - \
+             self.profile_reduction*2/self.rp)
         curve1 = crv.Curve(rack_flanc_func,
                            t0=-1,
                            t1=1,
@@ -891,14 +893,14 @@ class InvoluteGear():
 
     def setup_generator(self,params):
         paramdict = params.__dict__
-        tooth_curve = InvoluteFlankGenerator(
+        tooth_curve = self.get_tooth_curve(
             pitch_angle = 2*PI/params.n_teeth,
             cone_angle = params.cone_angle,
             alpha = params.pressure_angle,
             profile_shift = params.profile_shift,
             profile_reduction = params.profile_reduction,
             h_d = params.h_d,
-            enable_undercut = params.enable_undercut).tooth_curve
+            enable_undercut = params.enable_undercut)
 
         paramdict['h_a'] = paramdict['h_a']+paramdict['profile_shift']
         paramdict['h_d'] = paramdict['h_d']-paramdict['profile_shift']
@@ -910,3 +912,21 @@ class InvoluteGear():
     def curve_gen_at_z(self,z):
         return self.setup_generator(self.params(z))
 
+    # somehow this is slower with cache!!! wtf
+    # @lru_cache(maxsize=12)
+    def get_tooth_curve(self,
+                        pitch_angle,
+                        cone_angle,
+                        alpha ,
+                        profile_shift,
+                        profile_reduction,
+                        h_d,
+                        enable_undercut):
+        return InvoluteFlankGenerator(
+            pitch_angle = pitch_angle,
+            cone_angle = cone_angle,
+            alpha = alpha,
+            profile_shift = profile_shift,
+            profile_reduction = profile_reduction,
+            h_d = h_d,
+            enable_undercut = enable_undercut).tooth_curve

@@ -12,7 +12,7 @@ limitations under the License.
 '''
 
 import numpy as np
-from defs import *
+from gggears.defs import *
 from scipy.spatial.transform import Rotation as scp_Rotation
 from scipy.special import comb
 

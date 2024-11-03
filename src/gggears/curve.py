@@ -10,8 +10,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 '''
-from defs import*
-from function_generators import *
+from gggears.defs import*
+from gggears.function_generators import *
 from scipy.optimize import root, minimize
 import copy
 from enum import Enum
@@ -1109,7 +1109,8 @@ class TransformedCurve(Curve):
                  transform: callable,
                  curve: Curve,
                  params=None,
-                 enable_vectorize=False):
+                 enable_vectorize=False,
+                 active=True):
         self.target_curve = curve
         self.transform_method = transform
         if isinstance(curve,CurveChain):
@@ -1178,12 +1179,19 @@ class NurbCurve(Curve):
                  active=True):
         self.points=points
         self.weights=weights
-        super().__init__(lambda t: nurbezier(t,self.points,self.weights),
+        super().__init__(self.function,
                          active,
                          t0=0,
                          t1=1,
                          params={},
                          enable_vectorize=False)
+    def function(self,t):
+        return nurbezier(t,self.points,self.weights)
+    
+    def reverse(self):
+        self.points = np.flip(self.points,axis=0)
+        self.weights = np.flip(self.weights,axis=0)
+
     @property
     def n_points(self):
         return self.points.shape[0]
@@ -1198,11 +1206,21 @@ class NURBSCurve(CurveChain):
     @property
     def n_points(self):
         return sum([curve.n_points for curve in self.curves])
+
     @property
     def points(self):
         out_arr = np.concatenate([curve.points[:-1] for curve in self.curves])
         out_arr = np.append(out_arr,self.curves[-1].points[-1,np.newaxis],axis=0)
         return out_arr
+
+    @points.setter
+    def points(self,newpoints):
+        if newpoints.shape != self.points.shape:
+            raise ValueError('New points shape must match the old one')
+        for k,curve in enumerate(self.curves):
+            # knots start with 0 which is the first point
+            idx = self.knots[k]
+            curve.points = newpoints[idx:idx+curve.n_points]
 
     @property
     def weights(self):
@@ -1232,3 +1250,14 @@ class NURBSCurve(CurveChain):
             self.curves[0].points[0] = midpoints
             self.curves[-1].weights[-1] = midweights
             self.curves[0].weights[0] = midweights
+
+    @classmethod
+    def from_points(cls,points,knots,weights=None,active=True):
+        if weights is None:
+            weights = np.ones((points.shape[0]))
+        curves = []
+        for k in range(len(knots)-1):
+            curves.append(NurbCurve(points[knots[k]:knots[k+1]+1],
+                                    weights[knots[k]:knots[k+1]+1],
+                                    active=active))
+        return cls(*curves,active=active)
