@@ -124,19 +124,20 @@ class GearBuilder2(GearToNurbs):
 if __name__ == "__main__":
     start = time.time()
 
-    n_z = 9
+    num_teeth = 9
+    #module
     m=4
-    gamma=PI/2 * 0.5
+    # half cone angle
+    gamma=0.5*PI/2
 
     axis=OUT
     axis2=RIGHT
-    param = InvoluteGearParamManager(z_vals=[0,1,2],
-                                     n_teeth=n_z,
-                                    #  module=lambda z: m*(1-np.tan(gamma)*z/n_z*2),
-                                     module=lambda t: m* (1-t*np.sin(gamma)/n_z*2),
+    param = InvoluteGearParamManager(z_vals=[0,2,4],
+                                     n_teeth=num_teeth,
+                                     module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
                                      center=lambda z: m*z*axis*np.cos(gamma),
                                      cone_angle=gamma*2,
-                                     angle=lambda z: abs(z-1)*0.1,
+                                     angle=lambda z: abs(z-2)*0.2,
                                      axis=axis,
                                      h_d=1.4,
                                      h_a=1.2,
@@ -154,6 +155,8 @@ if __name__ == "__main__":
                         add_plug=False,
                         method='slow')
     print(f"gear build time: {time.time()-start}")
-    show(gear1.solid)
-
+    
+    solid1 = gear1.solid.translate(nppoint2Vector(-gear1.gear_generator_ref.center_sphere))
+    solid2 = solid1.rotate(Axis.Y,90).mirror(Plane.XY).rotate(Axis.X,gear1.gear_generator_ref.pitch_angle*RAD2DEG*0.5)
+    show(solid1,solid2)
 
