@@ -18,9 +18,6 @@ from build123d import *
 from gggears.gggears_convert import *
 import numpy as np
 import time
-from scipy.optimize import root
-from ocp_vscode import show, set_port
-set_port(3939)
 
 
 def nppoint2Vector(p: np.ndarray):

@@ -1,19 +1,20 @@
 # gggears
-a gear generator in python
+A gear generator in python.
 
-# dependencies
+# Dependencies
 Core geometry generation depends on numpy and scipy only.
 Matplotlib is used for testing and displaying results.
 CAD model creation uses build123d package, and OCP VSCode addon for displaying models.
 See [OCP VSCode github](https://github.com/bernhard-42/vscode-ocp-cad-viewer) and
 [build-123d github](https://github.com/gumyr/build123d).
 
-# how to use
+# How to use
 Download repo. Get / install dependencies as needed (numpy,scipy, build123d, OCP VSCode).
 Follow examples.py.
 
 
-# features
+# Features
+
 Gear generation:
 - Spur gears
 - Helical / spiral gears
@@ -22,6 +23,8 @@ Gear generation:
 - Profile shift
 - Undercut
 - Root / tip fillets
+
+![Gear Example 2](doc/media/bevel_gears.png)
 
 Not yet supported:
 - Cycloid gears
@@ -35,5 +38,5 @@ Planned upcoming other features
 - Planetary drive design
 - Design calculations and optimization
 
-# license
+# License
 Project is licensed under Apache 2.0, see license file for details.

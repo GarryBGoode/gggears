@@ -505,7 +505,7 @@ class GearCurveGenerator():
         if self.root_fillet>0:
             sol1 = crv.find_curve_intersect(self.tooth_curve,
                                             self.rd_circle,
-                                            guess=[0,self.pitch_angle/4/(2*PI)*1.01])
+                                            guess=[0.1,self.pitch_angle/4/(2*PI)*1.01])
             if sol1.success and angle_check(self.rd_circle(sol1.x[1])):
                 sharp_root = False
                 guesses = np.asarray([0.5,1,1.5])*self.root_fillet

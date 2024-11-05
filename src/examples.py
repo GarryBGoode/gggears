@@ -161,6 +161,79 @@ def planetary_gear():
          gear_planet2_cad.solid,
          gear_planet3_cad.solid)
 
+def bevel_gear():
+
+    num_teeth_1 = 25
+    num_teeth_2 = 13
+    #module
+    m=4
+    # half cone angle
+    # this calculation ensures that bevels will generate a 90 degree axial angle
+    gamma=np.arctan2(num_teeth_1,num_teeth_2)
+    axis=OUT
+
+    beta = 0.05
+
+    param1 = InvoluteGearParamManager(
+        z_vals=[0,5],
+        n_teeth=num_teeth_1,
+        # these are necessary for bevel geometry,
+        # proper abstraction is not implemented yet
+        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth_1*2),
+        center=lambda z: m*z*axis*np.cos(gamma),
+        # this is the half cone angle
+        cone_angle=gamma*2,
+        # note the abs function that corresponds to the breakpoint in z_vals
+        angle=lambda z: z*beta,
+        h_d=1.2,
+        h_a=1.0,
+        h_o=2.5,
+        root_fillet=0.2,
+        tip_fillet=0.2,
+        tip_reduction=0.2,
+        profile_reduction=0,
+        profile_shift=0.0,
+        enable_undercut=False,
+        inside_teeth=False)
+
+    gamma2 = PI/2-gamma
+    param2 = InvoluteGearParamManager(
+        z_vals=[0,5],
+        n_teeth=num_teeth_2,
+        module=lambda t: m* (1-t*np.sin(gamma2)/num_teeth_2*2),
+        center=lambda z: m*z*axis*np.cos(gamma2),
+        # this is the half cone angle
+        cone_angle=gamma2*2,
+        # note the abs function that corresponds to the breakpoint in z_vals
+        angle=lambda z: -z*beta * num_teeth_1/num_teeth_2,
+        h_d=1.2,
+        h_a=1.0,
+        h_o=2.5,
+        root_fillet=0.0,
+        tip_fillet=0.2,
+        tip_reduction=0.2,
+        profile_reduction=0,
+        profile_shift=0.0,
+        enable_undercut=True,
+        inside_teeth=False)
+
+    gear_1 = InvoluteGear(param1)
+    gear_2 = InvoluteGear(param2)
+    gear_2.mesh_to(gear_1,target_dir=LEFT)
+
+    gear_cad1 = GearBuilder(gear=gear_1,
+                           n_points_vert=3,
+                           n_points_hz=4,
+                           add_plug=False,
+                           method='fast')
+    gear_cad2 = GearBuilder(gear=gear_2,
+                           n_points_vert=3,
+                           n_points_hz=4,
+                           add_plug=False,
+                           method='fast')
+    show(gear_cad1.solid,
+         gear_cad2.solid)
+
 def fishbone_bevels():
     # it is a bit slow to build the gear so time measurements are thrown in here and there
     start = time.time()
@@ -224,4 +297,4 @@ def fishbone_bevels():
     # export_step(solid1b,"fishbone_bevel_right.step")
 
 if __name__ == '__main__':
-    fishbone_bevels()
+    bevel_gear()
