@@ -2,14 +2,16 @@
 a gear generator in python
 
 # dependencies
-Core generation depends on numpy and scipy only.
+Core geometry generation depends on numpy and scipy only.
 Matplotlib is used for testing and displaying results.
 CAD model creation uses build123d package, and OCP VSCode addon for displaying models.
+See [OCP VSCode github](https://github.com/bernhard-42/vscode-ocp-cad-viewer) and
+[build-123d github](https://github.com/gumyr/build123d).
 
 # how to use
-Download repo.
-Follow the example of src/gggears_build123d.py.
-Proper application code is yet to come!
+Download repo. Get / install dependencies as needed (numpy,scipy, build123d, OCP VSCode).
+Follow examples.py.
+
 
 # features
 Gear generation:
@@ -28,7 +30,7 @@ Not yet supported:
 - Face / crown gears
 - Racks
 
-Upcoming other features
+Planned upcoming other features
 - Gear positioning, pairing, assembly
 - Planetary drive design
 - Design calculations and optimization
