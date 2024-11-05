@@ -32,3 +32,6 @@ Upcoming other features
 - Gear positioning, pairing, assembly
 - Planetary drive design
 - Design calculations and optimization
+
+# license
+Project is licensed under Apache 2.0, see license file for details.

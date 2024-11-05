@@ -134,7 +134,12 @@ class Curve():
                                         np.linalg.norm(value_array[1:, :] -
                                                        value_array[:-1, :], axis=1)))
         self.length = curve_len[-1]
-        self.t2l['l'] = curve_len / self.length
+        # 0 length curve is degenerate, but division by 0 should still be avoided
+        # if curve length is 0 then any point selected at (t) will return the same point
+        if self.length == 0:
+            self.t2l['l'] = np.linspace(0, 1, self.len_approx_N)
+        else:
+            self.t2l['l'] = curve_len / self.length
         self.t2l['t'] = t_range
 
     def reverse(self):
@@ -189,21 +194,29 @@ class Curve():
         self.update_lengths()
 
     def __add__(self, other:'Curve'):
-        return Curve(lambda t: self(t) + other(t),
+        def add_func(t,curve=self,other=other):
+            return curve(t) + other(t)
+        return Curve(add_func,
+                     params={'curve':self,'other':other},
                      active=self.active and other.active,
-                     t0=0, t1=1, params={}, enable_vectorize=False)
+                     t0=0, t1=1, enable_vectorize=False)
 
-    def __subtract__(self, other:'Curve'):
-        return Curve(lambda t: self(t) - other(t),
+    def __sub__(self, other:'Curve'):
+        def sub_func(t,curve=self,other=other):
+            return curve(t) - other(t)
+        return Curve(sub_func,
+                     params={'curve':self,'other':other},
                      active=self.active and other.active,
-                     t0=0, t1=1, params={}, enable_vectorize=False)
+                     t0=0, t1=1, enable_vectorize=False)
 
     def __mul__(self, other):
         if isinstance(other, (int, float)):
-            return Curve(lambda t: self(t) * other,
+            def mult_func(t,curve=self,val=other):
+                return curve(t) * val
+            return Curve(mult_func,
                          active=self.active,
-                         t0=self.t_0, t1=self.t_1,
-                         params=self.params,
+                         t0=0, t1=1,
+                         params={'curve':self,'val':other},
                          enable_vectorize=self.enable_vectorize)
         else:
             raise TypeError(
@@ -217,7 +230,7 @@ class Curve():
             return Curve(lambda t: self(t) / other,
                          active=self.active,
                          t0=self.t_0, t1=self.t_1,
-                         params=self.params,
+                         params={},
                          enable_vectorize=self.enable_vectorize)
         else:
             raise TypeError(
@@ -1113,39 +1126,19 @@ class TransformedCurve(Curve):
                  active=True):
         self.target_curve = curve
         self.transform_method = transform
-        if isinstance(curve,CurveChain):
-            TransformedCurveChain.__init__(self,transform,curve)
-        else:
-            super().__init__(lambda t: self.apply_transform(self.target_curve(t)),
-                            active=self.target_curve.active,
-                            t0=0,
-                            t1=1,
-                            params=params,
-                            enable_vectorize=enable_vectorize)
-
-    def apply_transform(self,point):
-        return self.transform_method(point,**self.params)
-
-class TransformedCurveChain(CurveChain):
-    def __init__(self,
-                 transform: callable,
-                 curve: CurveChain,
-                 params=None,
-                 enable_vectorize=False):
-        self.target_curve = curve
-        self.transform_method = transform
-
-        super().__init__(* [TransformedCurve(transform,
-                                             curve,
-                                             params=params,
-                                             enable_vectorize=enable_vectorize) \
-                             for curve in self.target_curve])
+    
+        super().__init__(lambda t: self.apply_transform(self.target_curve(t)),
+                        active=self.target_curve.active,
+                        t0=0,
+                        t1=1,
+                        params=params,
+                        enable_vectorize=enable_vectorize)
 
     def apply_transform(self,point):
         return self.transform_method(point,**self.params)
 
 
-class MirroredCurve(TransformedCurve,TransformedCurveChain):
+class MirroredCurve(TransformedCurve):
     def __init__(self, curve: Curve, plane_normal=RIGHT, center=ORIGIN):
         self.plane_normal = normalize_vector(plane_normal)
         self.center=center
@@ -1160,7 +1153,7 @@ class MirroredCurve(TransformedCurve,TransformedCurveChain):
         super().__init__(mirror_func, curve)
 
 
-class RotatedCurve(TransformedCurve,TransformedCurveChain):
+class RotatedCurve(TransformedCurve):
     def __init__(self, curve: Curve, angle=0, axis=OUT, center=ORIGIN):
         self.axis = normalize_vector(axis)
         self.angle = angle
@@ -1187,7 +1180,7 @@ class NurbCurve(Curve):
                          enable_vectorize=False)
     def function(self,t):
         return nurbezier(t,self.points,self.weights)
-    
+
     def reverse(self):
         self.points = np.flip(self.points,axis=0)
         self.weights = np.flip(self.weights,axis=0)

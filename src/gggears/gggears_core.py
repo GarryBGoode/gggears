@@ -81,7 +81,7 @@ class InvoluteGearParam():
     axis_offset: float = 0
     center: np.ndarray = ORIGIN
     angle: float = 0
-    axis: np.ndarray = OUT
+    orientation: np.ndarray = np.eye(3)
     h_a: float = 1
     h_d: float = 1.2
     h_o: float = 2
@@ -108,28 +108,36 @@ class InvoluteGearParam():
     @property
     def pitch_angle(self):
         return 2*PI/self.n_teeth
+    
+    @property
+    def axis(self):
+        return self.orientation[:,2]
+    
+    @property
+    def x_axis(self):
+        return self.orientation[:,0]
 
-@classmethod
-def null(cls):
-    return cls(n_teeth=0,
-               n_cutout_teeth=0,
-               module=0,
-               pressure_angle=0,
-               cone_angle=0,
-               axis_offset=0,
-               center=np.array([0, 0, 0]),
-               angle=0,
-               axis=np.array([0, 0, 0]),
-               h_a=0,
-               h_d=0,
-               h_o=0,
-               profile_shift=0,
-               profile_reduction=0,
-               tip_fillet=0,
-               root_fillet=0,
-               tip_reduction=0,
-               inside_teeth=False,
-               enable_undercut=False)
+    @classmethod
+    def null(cls):
+        return cls(n_teeth=0,
+                n_cutout_teeth=0,
+                module=0,
+                pressure_angle=0,
+                cone_angle=0,
+                axis_offset=0,
+                center=np.array([0, 0, 0]),
+                angle=0,
+                orientation=np.zeros((3,3)),
+                h_a=0,
+                h_d=0,
+                h_o=0,
+                profile_shift=0,
+                profile_reduction=0,
+                tip_fillet=0,
+                root_fillet=0,
+                tip_reduction=0,
+                inside_teeth=False,
+                enable_undercut=False)
 
 
 
@@ -287,9 +295,9 @@ class GearCurveGenerator():
             return self.r_height_func_spherical(point)
 
     def r_height_func_cylindrical(self,point):
-        return np.linalg.norm((point-self.center)[:2])
+        return self.polar_transform(point)[0]
     def r_height_func_spherical(self,point):
-        return self.R*(PI-xyz_to_spherical(point,center=self.center)[2])
+        return self.polar_transform(point)[0]
 
     def generate_ref_base_circles(self):
 
@@ -889,6 +897,7 @@ class InvoluteGear():
         if params is None:
             params=InvoluteGearParamManager()
         self.params = params
+        self.paramref = self.params(0)
         self.z_vals = self.params.z_vals
 
     def setup_generator(self,params):
@@ -930,3 +939,48 @@ class InvoluteGear():
             profile_reduction = profile_reduction,
             h_d = h_d,
             enable_undercut = enable_undercut).tooth_curve
+    
+    def mesh_to(self,other:'InvoluteGear', 
+                target_dir=RIGHT,
+                distance_offset=0):
+        '''
+        Move this gear into a meshing position with other gear,
+        so that the point of contact of the pitch circles is in target_dir direction.
+        '''
+        target_dir_norm = target_dir - \
+            np.dot(target_dir,other.paramref.axis)*other.paramref.axis
+        if np.linalg.norm(target_dir_norm)<1E-12:
+            # target_dir is parallel to x axis
+            target_dir_norm = other.paramref.x_axis
+        else:
+            target_dir_norm = normalize_vector(target_dir_norm)
+        
+        target_plane_norm = np.cross(other.paramref.axis,target_dir_norm)
+
+        target_angle_other = angle_between_vectors(other.paramref.x_axis,target_dir_norm) * \
+            np.sign(np.dot(np.cross(other.paramref.x_axis,target_dir_norm),other.paramref.axis))
+        target_phase_other = ((target_angle_other-other.paramref.angle) / other.paramref.pitch_angle)%1
+        
+
+        if self.paramref.gamma==0 and other.paramref.gamma==0:
+            # both are cylindrical
+            self.params.orientation=other.params.orientation
+            target_angle_self = target_angle_other + PI
+
+            angle_offs = target_angle_self +\
+                    ((target_phase_other)-0.5)*self.paramref.pitch_angle
+            distance_ref = self.paramref.rp + other.paramref.rp +\
+                  (self.paramref.profile_shift + other.paramref.profile_shift)*self.paramref.module
+            center_offs = distance_ref*target_dir_norm
+            params_upd = InvoluteGearParamManager.null()
+            params_upd.z_vals = self.params.z_vals
+            params_upd.angle = angle_offs
+            params_upd.center = center_offs
+            self.params = self.params + params_upd
+
+        elif self.paramref.gamma!=0 and other.paramref.gamma!=0:
+            # both are spherical
+            pass
+        else:
+            # one is cylindrical, the other is spherical
+            Warning('Meshing cylindrical and spherical gears are not supported')

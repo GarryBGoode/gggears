@@ -29,20 +29,21 @@ def nppoint2Vector(p: np.ndarray):
         return [Vector((p[k,0],p[k,1],p[k,2])) for k in range(p.shape[0])]
 
 
-class GearBuilder2(GearToNurbs):
+class GearBuilder(GearToNurbs):
     def __init__(self,
-                 params:gg.InvoluteGearParamManager,
+                 gear:gg.InvoluteGear,
                  n_points_hz=4,
                  n_points_vert=4,
                  oversampling_ratio=2.5,
                  add_plug=False,
                  method='fast'):
-        super().__init__(params=params,
+        super().__init__(gear=gear,
                          n_points_hz=n_points_hz,
                          n_points_vert=n_points_vert,
                          oversampling_ratio=oversampling_ratio,
                          convertmethod=method)
         surfaces = []
+        ro_surfaces = []
         for k in range(len(self.params.z_vals)-1):
             surfdata_z = self.side_surf_data[k]
 
@@ -51,6 +52,7 @@ class GearBuilder2(GearToNurbs):
                 weights = patch['weights']
                 vpoints = [nppoint2Vector(points[k]) for k in range(points.shape[0])]
                 surfaces.append(Face.make_bezier_surface(vpoints,weights.tolist()))
+            ro_surfaces.append(surfaces[-2])
         self.surfaces = surfaces
         top_points,  top_weights = self.side_surf_data[-1].points[-1,:,:], self.side_surf_data[-1].weights[-1,:]
         top_curve = crv.NURBSCurve.from_points(top_points,knots=self.side_surf_data[-1].knots,weights=top_weights)
@@ -61,10 +63,18 @@ class GearBuilder2(GearToNurbs):
         bot_curve = crv.NURBSCurve.from_points(bot_points,knots=self.side_surf_data[0].knots,weights=bot_weights)
         splines = [self.gen_splines(curve) for curve in bot_curve.get_curves()]
         bot_surface = Face.make_surface(Wire(splines))
+
+        if len(ro_surfaces)>1:
+            ro_surface = Face.fuse(*ro_surfaces)
+        else:
+            ro_surface = ro_surfaces[0]
+        ro_spline_top = self.gen_splines(top_curve.get_curves()[-2])
+        ro_spline_bot = self.gen_splines(bot_curve.get_curves()[-2])
         surfaces.insert(0,bot_surface)
         surfaces.append(top_surface)
         shell = Shell(surfaces)
         solid1 = Solid(shell)
+
         if not solid1.is_valid():
             Warning("Tooth profile solid is not valid")
 
@@ -108,7 +118,19 @@ class GearBuilder2(GearToNurbs):
         else:
             self.solid = solid2_to_fuse[0].clean()
 
+        plug_surfaces = []
+        plug_splines_top = []
+        plug_splines_bot = []
         if add_plug:
+            for k in range(n_teeth):
+                plug_surfaces.append(ro_surface.rotate(axis1,self.params.pitch_angle*RAD2DEG*k).translate(nppoint2Vector(self.params.center(0))))
+                plug_splines_bot.append(ro_spline_bot.rotate(axis1,self.params.pitch_angle*RAD2DEG*k))
+                plug_splines_top.append(ro_spline_top.rotate(axis1,self.params.pitch_angle*RAD2DEG*k))
+            plug_top = Face.make_surface(Wire(plug_splines_top))
+            plug_bot = Face.make_surface(Wire(plug_splines_bot))
+            plug_surfaces.insert(0,plug_bot)
+            plug_surfaces.append(plug_top)
+            plug = Solid(Shell(plug_surfaces))
             self.solid = self.solid.fuse(plug).clean()
 
         print(f"fuse time: {time.time()-start}")
@@ -124,39 +146,59 @@ class GearBuilder2(GearToNurbs):
 if __name__ == "__main__":
     start = time.time()
 
-    num_teeth = 9
+    num_teeth = 12
     #module
     m=4
     # half cone angle
-    gamma=0.5*PI/2
+    gamma=0.0*PI/2
 
     axis=OUT
     axis2=RIGHT
-    param = InvoluteGearParamManager(z_vals=[0,2,4],
+    beta=0.1
+    param = InvoluteGearParamManager(z_vals=[0,4],
                                      n_teeth=num_teeth,
                                      module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
                                      center=lambda z: m*z*axis*np.cos(gamma),
                                      cone_angle=gamma*2,
-                                     angle=lambda z: abs(z-2)*0.2,
-                                     axis=axis,
+                                     angle=lambda z: z*beta+0.2,
                                      h_d=1.4,
                                      h_a=1.2,
                                      h_o=2.5,
                                      root_fillet=0.0,
                                      tip_fillet=0.0,
-                                     tip_reduction=0.1,
+                                     tip_reduction=0.0,
                                      profile_reduction=0,
-                                     profile_shift=0,
+                                     profile_shift=0.2,
                                      enable_undercut=True,
                                      inside_teeth=False)
-    gear1 = GearBuilder2(params=param,
+    
+    param2 = copy.deepcopy(param)
+    param2.n_teeth = 8
+    param2.n_cutout_teeth = 0
+    param2.angle=lambda z: -z*beta*12/8
+    param2.profile_shift=0.4
+    param2.tip_reduction=0.1
+    gear_ref = InvoluteGear(param)
+    gear_ref_2 = InvoluteGear(param2)
+    gear_ref_2.mesh_to(gear_ref,target_dir=rotate_vector(RIGHT, 2*PI/4 * 0.0))
+
+    gear2 = GearBuilder(gear=gear_ref_2,
                         n_points_vert=3,
-                        n_points_hz=4,
+                        n_points_hz=3,
                         add_plug=False,
                         method='slow')
+
+    gear1 = GearBuilder(gear=gear_ref,
+                        n_points_vert=3,
+                        n_points_hz=3,
+                        add_plug=False,
+                        method='slow')
+    
+
     print(f"gear build time: {time.time()-start}")
     
-    solid1 = gear1.solid.translate(nppoint2Vector(-gear1.gear_generator_ref.center_sphere))
-    solid2 = solid1.rotate(Axis.Y,90).mirror(Plane.XY).rotate(Axis.X,gear1.gear_generator_ref.pitch_angle*RAD2DEG*0.5)
-    show(solid1,solid2)
+    show(gear1.solid,gear2.solid)
+    # solid1 = gear1.solid.translate(nppoint2Vector(-gear1.gear_generator_ref.center_sphere))
+    # solid2 = solid1.rotate(Axis.Y,90).mirror(Plane.XY).rotate(Axis.X,gear1.gear_generator_ref.pitch_angle*RAD2DEG*0.5)
+    # show(solid1,solid2)
 

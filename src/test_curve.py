@@ -10,41 +10,79 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 '''
+
 import gggears.curve as crv
 import matplotlib.pyplot as plt
 import numpy as np
 from gggears.defs import *
-# curve1 = Curve(arc_from_2_point_center,params={'p0': DOWN,'p1':RIGHT,'center':ORIGIN})
-# curve2 = Curve(arc_from_2_point_center,params={'p0': RIGHT,'p1':RIGHT*2+DOWN,'center':RIGHT*2})
+import pytest as pytest
 
-curve1 = crv.ArcCurve.from_radius_center_angle(radius=0.5,center=RIGHT*0.5,angle_start=-PI/2,angle_end=0)
-print(curve1(-1))
-print(curve1.t2p(curve1.p2t(-1)))
-print(curve1(np.linspace(-1,2,5)))
+@pytest.mark.parametrize("radius", [0, 1, 3])
+@pytest.mark.parametrize("t", np.linspace(0, 1, 31))
+def test_curve_length_param(radius, t):
+    '''
+    Basic test of curve class. Tests the lenght-parametrization of an arc curve.
+    '''
 
-curve2 = crv.ArcCurve(radius=1,angle=-PI/2,center=RIGHT+DOWN,yaw=PI/2)
+    # this arc is kind of badly parameterized with t
+    def arc(t, radius=radius):
+        return np.array([t*radius, radius*np.sqrt(1 - t**2), 0])
 
-curve3 = crv.ArcCurve(radius=1,angle=PI/2,center=ORIGIN,yaw=-PI/2,roll=PI/2)
+    # the curve will update the length-lookup parametrization upon creation
+    curve1 = crv.Curve(arc, active=True, t0=-1, t1=1, params={'radius': radius}, enable_vectorize=True)
+    assert curve1.length == pytest.approx(np.pi*radius,rel=1e-3,abs=1e-3)
+    # redo the length-lookup with a higher resolution cause otherwise the accuracy is abysmal
+    curve1.len_approx_N = int(1E4)
+    curve1.update_lengths()
+    # the result should be close to an angle-parameterized arc
+    expected = np.array([np.cos((1-t)*np.pi),np.sin((1-t)*np.pi),0])*radius
 
-chain1 = crv.CurveChain(curve1,curve2)
+    assert curve1(t) == pytest.approx(expected,rel=1e-3,abs=1e-3)
 
-chain1(0.2)
-chain1(0.8)
+@pytest.mark.parametrize("t", np.linspace(0, 1, 31))
+def test_curve_algebra(t):
+    '''
+    Test the algebraic operations of the curve class.
+    '''
+    def arc(t, radius=1):
+        return np.array([radius*np.cos(t),radius*np.sin(t), 0])
 
-print(len(chain1))
-p1 = curve3(np.linspace(0,1,101))
+    curve1 = crv.Curve(arc, active=True, t0=0, t1=np.pi, params={'radius': 1}, enable_vectorize=True)
+    curve2 = crv.Curve(arc, active=True, t0=0, t1=np.pi, params={'radius': 1.5}, enable_vectorize=True)
 
-props=chain1.get_length_portions()
-chain2 = chain1.fillet(radius=0.05,location=props[1])
-# chain2.set_start_on(0.5,preserve_inactive_curves=True)
-# chain2.set_end_on(0.8)
+    # averaging here should result in an arc with radius 1.5
+    curve_mix = (curve1+curve1*2)/2
 
-chain3 = crv.MirroredCurve(chain2)
-print(curve1)
-# chain2[1].active=0
-# chain2(0.8)
-p2 = chain1(np.linspace(0,1,101))
+    assert curve_mix(t) == pytest.approx(curve2(t),rel=1e-3,abs=1e-3)
 
-plt.plot(p1[:,0],p1[:,2])
-# plt.plot(p2[:,0],p2[:,1])
-plt.show()
+
+
+def test_curve_chain():
+    '''
+    Test CurveChain basics.
+    '''
+
+    curve1 = crv.LineCurve(3*LEFT, RIGHT)
+    curve2 = crv.LineCurve(RIGHT, RIGHT+UP)
+    curve3 = crv.LineCurve(RIGHT+UP, UP)
+
+    chain = crv.CurveChain(curve1, curve2, curve3)
+
+    assert chain.length == pytest.approx(6,rel=1e-9,abs=1e-9)
+    assert not chain.is_closed
+    assert chain.is_continuous
+
+    curve4 = crv.LineCurve(UP, 3*LEFT)
+    chain.append(curve4)
+    assert chain.is_closed
+    assert chain.is_continuous
+    assert chain.length == pytest.approx(6+np.sqrt(3**2+1),rel=1e-9,abs=1e-9)
+
+    tvals = np.linspace(0,1,31)
+    diffs = np.linalg.norm(chain(tvals[0:-1])-chain(tvals[1:]),axis=1)
+    # points evenly spaced in t should have relatively equal distances
+    assert np.std(diffs/np.mean(diffs)) < 1E-1
+
+
+if __name__ == '__main__':
+    test_curve_chain()
