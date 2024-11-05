@@ -18,7 +18,6 @@ from scipy.optimize import minimize
 import dataclasses
 import gggears.curve as crv
 import copy
-from functools import lru_cache
 
 @dataclasses.dataclass
 class ZFunctionMixin():
@@ -108,11 +107,11 @@ class InvoluteGearParam():
     @property
     def pitch_angle(self):
         return 2*PI/self.n_teeth
-    
+
     @property
     def axis(self):
         return self.orientation[:,2]
-    
+
     @property
     def x_axis(self):
         return self.orientation[:,0]
@@ -151,7 +150,7 @@ class GearCurveGenerator():
                  axis_offset: float = 0,
                  center: np.ndarray = ORIGIN,
                  angle: float = 0,
-                 axis: np.ndarray = OUT,
+                 orientation: np.ndarray = np.eye(3),
                  h_a: float = 1,
                  h_d:float = 1.2,
                  h_o: float = 2,
@@ -168,7 +167,7 @@ class GearCurveGenerator():
         self.axis_offset = axis_offset
         self.center = center
         self.angle = angle
-        self.axis = axis
+        self.orientation = orientation
         self.h_a = h_a
         self.h_d = h_d
         self.h_o = h_o
@@ -190,6 +189,18 @@ class GearCurveGenerator():
         self.update_tip_fillet()
         self.update_root_fillet()
         self.generate_profile()
+
+    @property
+    def axis(self):
+        return self.orientation[:,2]
+    
+    @property
+    def axis_x(self):
+        return self.orientation[:,0]
+    
+    @property
+    def axis_y(self):
+        return self.orientation[:,1]
 
     @property
     def rp_ref(self):
@@ -235,23 +246,25 @@ class GearCurveGenerator():
         return self.ro_curve.r*self.module
 
     def base_transform(self,point):
-        rot_axis = np.cross(OUT,self.axis)
-        if np.linalg.norm(rot_axis)<1E-12:
-            # this can be if axis is OUT or -OUT
-            if all(abs(self.axis-OUT)<1E-12):
-                rot_angle = 0
-                rot_axis = RIGHT
-            else:
-                rot_angle = PI
-                rot_axis = RIGHT
-        else:
-            rot_angle = angle_between_vectors(OUT,self.axis)
-            rot_axis = normalize_vector(rot_axis)
+        # rot_axis = np.cross(OUT,self.axis)
+        # if np.linalg.norm(rot_axis)<1E-12:
+        #     # this can be if axis is OUT or -OUT
+        #     if all(abs(self.axis-OUT)<1E-12):
+        #         rot_angle = 0
+        #         rot_axis = RIGHT
+        #     else:
+        #         rot_angle = PI
+        #         rot_axis = RIGHT
+        # else:
+        #     rot_angle = angle_between_vectors(OUT,self.axis)
+        #     rot_axis = normalize_vector(rot_axis)
 
-        rot_z = scp_Rotation.from_euler('z',self.angle)
-        rot_axis = scp_Rotation.from_rotvec(rot_angle*rot_axis)
+        rot_z = scp_Rotation.from_euler('z',self.angle).as_matrix()
+        # rot_axis = scp_Rotation.from_rotvec(rot_angle*rot_axis)
+        rot_axis = self.orientation
 
-        return (rot_axis*rot_z).apply(point)*self.module + self.center
+        # return rot_axis@rot_z.apply(point)*self.module + self.center
+        return point @ rot_z.transpose() @ rot_axis.transpose() *self.module + self.center
 
     def polar_transform(self,point):
         if self.cone_angle==0:
@@ -490,7 +503,9 @@ class GearCurveGenerator():
             return angle_between_vector_and_plane(p,UP) < self.pitch_angle/2
 
         if self.root_fillet>0:
-            sol1 = crv.find_curve_intersect(self.tooth_curve,self.rd_circle,guess=[0,0])
+            sol1 = crv.find_curve_intersect(self.tooth_curve,
+                                            self.rd_circle,
+                                            guess=[0,self.pitch_angle/4/(2*PI)*1.01])
             if sol1.success and angle_check(self.rd_circle(sol1.x[1])):
                 sharp_root = False
                 guesses = np.asarray([0.5,1,1.5])*self.root_fillet
@@ -689,7 +704,9 @@ class InvoluteFlankGenerator():
         #  the involute shall not cross the x axis
         # find the point where the involute curve reaches the x axis,
         #  that shall be the end of the segment
-        sol1 = crv.find_curve_plane_intersect(self.involute_curve,plane_normal=UP,guess=1)
+        sol1 = crv.find_curve_plane_intersect(self.involute_curve,
+                                              plane_normal=UP,
+                                              guess=1)
         self.involute_curve.t_1 = self.involute_curve.p2t(sol1.x[0])
         self.involute_curve.update_lengths()
 
@@ -939,8 +956,8 @@ class InvoluteGear():
             profile_reduction = profile_reduction,
             h_d = h_d,
             enable_undercut = enable_undercut).tooth_curve
-    
-    def mesh_to(self,other:'InvoluteGear', 
+
+    def mesh_to(self,other:'InvoluteGear',
                 target_dir=RIGHT,
                 distance_offset=0):
         '''
@@ -954,23 +971,42 @@ class InvoluteGear():
             target_dir_norm = other.paramref.x_axis
         else:
             target_dir_norm = normalize_vector(target_dir_norm)
-        
+
         target_plane_norm = np.cross(other.paramref.axis,target_dir_norm)
 
-        target_angle_other = angle_between_vectors(other.paramref.x_axis,target_dir_norm) * \
-            np.sign(np.dot(np.cross(other.paramref.x_axis,target_dir_norm),other.paramref.axis))
+        target_angle_other = angle_between_vectors(other.paramref.x_axis,
+                                                   target_dir_norm) * \
+                            np.sign(np.dot(np.cross(other.paramref.x_axis,
+                                                    target_dir_norm),
+                                            other.paramref.axis))
         target_phase_other = ((target_angle_other-other.paramref.angle) / other.paramref.pitch_angle)%1
-        
+
 
         if self.paramref.gamma==0 and other.paramref.gamma==0:
             # both are cylindrical
             self.params.orientation=other.params.orientation
-            target_angle_self = target_angle_other + PI
 
+            if self.paramref.inside_teeth or other.paramref.inside_teeth:
+                phase_offset = 0
+                angle_turnaround = 0
+                phase_sign = -1
+            else:
+                phase_offset = 0.5
+                angle_turnaround = PI
+                phase_sign = 1
+
+            target_angle_self = target_angle_other + angle_turnaround
             angle_offs = target_angle_self +\
-                    ((target_phase_other)-0.5)*self.paramref.pitch_angle
-            distance_ref = self.paramref.rp + other.paramref.rp +\
-                  (self.paramref.profile_shift + other.paramref.profile_shift)*self.paramref.module
+                         (phase_sign*(target_phase_other)-phase_offset)*self.paramref.pitch_angle
+            r1 = self.paramref.rp + self.paramref.profile_shift * self.paramref.module
+            r2 = other.paramref.rp + other.paramref.profile_shift * other.paramref.module
+            if self.paramref.inside_teeth:
+                distance_ref = r2 - r1 + distance_offset
+            elif other.paramref.inside_teeth:
+                distance_ref = r1 - r2 - distance_offset
+            else:
+                distance_ref = r1 + r2 + distance_offset
+
             center_offs = distance_ref*target_dir_norm
             params_upd = InvoluteGearParamManager.null()
             params_upd.z_vals = self.params.z_vals
@@ -980,7 +1016,50 @@ class InvoluteGear():
 
         elif self.paramref.gamma!=0 and other.paramref.gamma!=0:
             # both are spherical
-            pass
+            # start off by identical orientation
+            self.params.orientation=other.params.orientation
+            # angle-phase math is the same as cylindrical
+            if self.paramref.inside_teeth or other.paramref.inside_teeth:
+                phase_offset = 0
+                angle_turnaround = 0
+                phase_sign = -1
+            else:
+                phase_offset = 0.5
+                angle_turnaround = PI
+                phase_sign = 1
+
+            target_angle_self = target_angle_other + angle_turnaround
+            angle_offs = target_angle_self +\
+                         (phase_sign*(target_phase_other)-phase_offset)*self.paramref.pitch_angle
+            r1 = self.paramref.rp + \
+                self.paramref.profile_shift * self.paramref.module
+            r2 = other.paramref.rp + \
+                other.paramref.profile_shift * other.paramref.module
+            
+            # compatible bevel gears should have the same spherical radius
+            # and the same center sphere when placed on xy plane at the orgin
+
+            if self.paramref.inside_teeth:
+                distance_ref = r2 - r1 + distance_offset
+            elif other.paramref.inside_teeth:
+                distance_ref = r1 - r2 - distance_offset
+            else:
+                distance_ref = r1 + r2 + distance_offset
+            
+            # angle_ref = distance_ref / self.paramref.R
+            angle_ref =self.paramref.gamma + other.paramref.gamma
+            center_sph = np.sqrt(self.paramref.R**2-self.paramref.rp**2) * OUT
+            center_sph_other = np.sqrt(other.paramref.R**2-other.paramref.rp**2) * OUT
+            rot1 = scp_Rotation.from_rotvec(-target_plane_norm*angle_ref)
+            center_offs = rot1.apply(-center_sph)+center_sph_other
+            params_upd = InvoluteGearParamManager.null()
+            params_upd.z_vals = self.params.z_vals
+            params_upd.angle = angle_offs
+            params_upd.center = center_offs
+            self.params = self.params + params_upd
+            self.params.orientation = other.params.orientation @ rot1.as_matrix()
+            self.params.center = lambda z: self.params.module(0)*z*rot1.as_matrix()[:,2]*np.cos(self.paramref.gamma)+center_offs
+            
         else:
             # one is cylindrical, the other is spherical
             Warning('Meshing cylindrical and spherical gears are not supported')
