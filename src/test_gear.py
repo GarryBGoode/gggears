@@ -10,13 +10,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 '''
-import gggears.curve as crv
 import gggears.gggears_core as gg
 import matplotlib.pyplot as plt
 import numpy as np
 from gggears.defs import *
 import pytest as pytest
 from scipy.spatial.transform import Rotation as scp_Rotation
+import shapely as shp
 
 def test_rotation():
     '''
@@ -31,45 +31,109 @@ def test_rotation():
     assert np.array([RIGHT,UP,LEFT,IN]) @ rot.as_matrix().transpose() == \
         pytest.approx(np.array([IN,UP,OUT,LEFT]),rel=1e-12,abs=1e-12)
 
-def test_gear(num_teeth=16,module=1,gamma=0.0,axis_pitch=0):
+
+@pytest.mark.parametrize("num_teeth", [8,13,25,62,121])
+@pytest.mark.parametrize("module", [0.5,2])
+@pytest.mark.parametrize("angle_ref", np.linspace(0,1,7))
+@pytest.mark.parametrize("root_fillet", [0,0.1,0.4])
+@pytest.mark.parametrize("tip_fillet", [0,0.1,0.4])
+def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enable_plotting = False):
+    '''
+    Test gears by probing intersection of two gears.
+    This test creates 2 gears and moves them into meshing position.
+    The test expects no intersecting area between them, while rotating one of the gears
+    slightly should result in an intersecting area.
+    '''
     m=module
-    orient_mat = scp_Rotation.from_euler('y',axis_pitch).as_matrix()
-    axis = orient_mat[:,2]
+
+    if root_fillet<0:
+        undercut = True
+        f0 = 0
+    else:
+        undercut = False
+        f0 = root_fillet
+
+    gamma=0
     param = gg.InvoluteGearParamManager(z_vals=[0,1],
                                         n_teeth=num_teeth,
                                         module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
-                                        center=lambda z: m*z*axis*np.cos(gamma),
-                                        orientation=orient_mat ,
+                                        center=lambda z: m*z*OUT*np.cos(gamma),
+                                        orientation=np.eye(3),
                                         cone_angle=gamma*2,
                                         angle=0,
-                                        h_d=1.0,
-                                        h_a=1.4,
+                                        h_d=1.2,
+                                        h_a=1.0,
                                         h_o=2.5,
-                                        root_fillet=0.3,
+                                        root_fillet=0,
+                                        tip_fillet=tip_fillet,
+                                        tip_reduction=0.0,
+                                        profile_reduction=0,
+                                        profile_shift=0.0,
+                                        enable_undercut=True,
+                                        inside_teeth=False)
+    param.angle = angle_ref*param.pitch_angle
+    num_teeth_2 = 52
+    param2 = gg.InvoluteGearParamManager(z_vals=[0,1],
+                                        n_teeth=num_teeth_2,
+                                        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
+                                        center=lambda z: m*z*OUT*np.cos(gamma),
+                                        orientation=np.eye(3),
+                                        cone_angle=gamma*2,
+                                        angle=0,
+                                        h_d=1.2,
+                                        h_a=1.0,
+                                        h_o=2.5,
+                                        root_fillet=f0,
                                         tip_fillet=0.0,
                                         tip_reduction=0.0,
                                         profile_reduction=0,
                                         profile_shift=0.0,
-                                        enable_undercut=False,
+                                        enable_undercut=undercut,
                                         inside_teeth=False)
-    
-    gear = gg.InvoluteGear(param)
-    gear_gen = gear.curve_gen_at_z(0)
-    outer_curve = gear_gen.generate_gear_pattern(gear_gen.profile)
-    points = outer_curve(np.linspace(0,1,101*num_teeth))
-    # points = gear_gen.profile(np.linspace(0,1,101))
 
-    gear_gen2 = gear.curve_gen_at_z(1)
-    outer_curve2 = gear_gen2.generate_gear_pattern(gear_gen.profile)
-    points2 = outer_curve2(np.linspace(0,1,101*num_teeth))
+    n_poly = 300
 
-    ax = plt.axes(projection='3d')
-    ax.plot(points[:,0],points[:,1],points[:,2])
-    ax.plot(points2[:,0],points2[:,1],points2[:,2])
-    ax.axis('equal')
-    plt.show()
+    gear1 = gg.InvoluteGear(param)
+    gear2 = gg.InvoluteGear(param2)
+    gear2.mesh_to(gear1)
+
+    gear_gen1 = gear1.curve_gen_at_z(0)
+    gear_gen2 = gear2.curve_gen_at_z(0)
+    outer_curve = gear_gen1.generate_gear_pattern(gear_gen1.profile)
+    points = outer_curve(np.linspace(-2/num_teeth,2/num_teeth,n_poly*num_teeth))
+
+    outer_curve2 = gear_gen2.generate_gear_pattern(gear_gen2.profile)
+    points2 = outer_curve2(np.linspace(-2/num_teeth_2,2/num_teeth_2,n_poly))
+
+
+    poly1 = shp.geometry.Polygon(points)
+    poly2 = shp.geometry.Polygon(points2)
+
+    # 0.3 degrees rotation
+    poly3 = shp.affinity.rotate(poly1,0.3,origin=(0,0))
+    poly4 = shp.affinity.rotate(poly1,-0.3,origin=(0,0))
+
+    if enable_plotting:
+        ax = plt.axes()
+        # ax.plot(points[:,0],points[:,1])
+        ax.plot(points2[:,0],points2[:,1])
+        ax.plot(poly4.exterior.xy[0],poly3.exterior.xy[1])
+        ax.axis('equal')
+        plt.show()
+
+    its1 = poly1.intersection(poly2)
+    its2 = poly3.intersection(poly2)
+    its3 = poly4.intersection(poly2)
+    assert its1.area == pytest.approx(0,abs=1e-4)
+    assert its2.area != pytest.approx(0,abs=1e-4)
+    assert its3.area != pytest.approx(0,abs=1e-4)
+
+
+
 
 if __name__ == '__main__':
     test_rotation()
-    test_gear(gamma=PI/4,axis_pitch=PI/4)
-    
+    test_gear_intersect(num_teeth = 8, module = 0.5, angle_ref = 0.5, root_fillet = 0, tip_fillet = 0,
+               enable_plotting=True)
+
+
