@@ -35,7 +35,7 @@ def test_rotation():
 @pytest.mark.parametrize("num_teeth", [8,13,25,62,121])
 @pytest.mark.parametrize("module", [0.5,2])
 @pytest.mark.parametrize("angle_ref", np.linspace(0,1,7))
-@pytest.mark.parametrize("root_fillet", [0,0.1,0.4])
+@pytest.mark.parametrize("root_fillet", [-1,0,0.1,0.4])
 @pytest.mark.parametrize("tip_fillet", [0,0.1,0.4])
 def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enable_plotting = False):
     '''
@@ -61,7 +61,7 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
                                         orientation=np.eye(3),
                                         cone_angle=gamma*2,
                                         angle=0,
-                                        h_d=1.2,
+                                        h_d=1+1E-4,
                                         h_a=1.0,
                                         h_o=2.5,
                                         root_fillet=0,
@@ -80,7 +80,7 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
                                         orientation=np.eye(3),
                                         cone_angle=gamma*2,
                                         angle=0,
-                                        h_d=1.2,
+                                        h_d=1+f0,
                                         h_a=1.0,
                                         h_o=2.5,
                                         root_fillet=f0,
@@ -115,9 +115,9 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
 
     if enable_plotting:
         ax = plt.axes()
-        # ax.plot(points[:,0],points[:,1])
+        ax.plot(points[:,0],points[:,1])
         ax.plot(points2[:,0],points2[:,1])
-        ax.plot(poly4.exterior.xy[0],poly3.exterior.xy[1])
+        # ax.plot(poly4.exterior.xy[0],poly3.exterior.xy[1])
         ax.axis('equal')
         plt.show()
 
@@ -132,8 +132,8 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
 
 
 if __name__ == '__main__':
-    test_rotation()
-    test_gear_intersect(num_teeth = 8, module = 0.5, angle_ref = 0.5, root_fillet = 0, tip_fillet = 0,
+
+    test_gear_intersect(num_teeth = 62, module = 0.5, angle_ref = 0.16666666666666666, root_fillet = 0.4, tip_fillet = 0,
                enable_plotting=True)
 
 
