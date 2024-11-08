@@ -55,9 +55,8 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
 
     gamma=0
     param = gg.InvoluteGearParamManager(z_vals=[0,1],
-                                        n_teeth=num_teeth,
-                                        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
-                                        center=lambda z: m*z*OUT*np.cos(gamma),
+                                        num_teeth=num_teeth,
+                                        module=m,
                                         orientation=np.eye(3),
                                         cone_angle=gamma*2,
                                         angle=0,
@@ -74,9 +73,8 @@ def test_gear_intersect(num_teeth,module,angle_ref, root_fillet,tip_fillet, enab
     param.angle = angle_ref*param.pitch_angle
     num_teeth_2 = 52
     param2 = gg.InvoluteGearParamManager(z_vals=[0,1],
-                                        n_teeth=num_teeth_2,
-                                        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
-                                        center=lambda z: m*z*OUT*np.cos(gamma),
+                                        num_teeth=num_teeth_2,
+                                        module=m,
                                         orientation=np.eye(3),
                                         cone_angle=gamma*2,
                                         angle=0,

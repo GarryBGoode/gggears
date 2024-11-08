@@ -19,25 +19,26 @@ set_port(3939)
 # and serve as manual testing templates for the developer.
 
 def spur_helical_gear():
+
     param = InvoluteGearParamManager(
         z_vals=[0,4], # combined with the center function this defines gear height
-        n_teeth=8, # number of teeth
+        num_teeth=8, # number of teeth
         module=2, # module
-        center=lambda z: z*OUT, # center function
         cone_angle=0, # cone angle for bevel gears
-        angle=0, # progress angle, can be used for helical
-        h_d=1.2, # dedendum height coefficient
-        h_a=1.0, # addendum height coefficient
-        h_o=2.5, # outer ring (or inner ring) coefficient
-        root_fillet=0.0, # root fillet radius coefficient
-        tip_fillet=0.0, # tip fillet radius coefficient
-        tip_reduction=0.2, # tip reduction (truncation) coefficient
-        profile_reduction=0, # profile reduction coefficient (for backlash)
-        profile_shift=0.8, # profile shift coefficient
+        center=ORIGIN,
         enable_undercut=True, # enable undercut - don't use with root fillet at the same time
         inside_teeth=False # inside teeth for ring gears
-        )
-
+    )
+    param.z_params.angle=0 # progress angle, can be used for helical
+    param.z_params.h_d=1.2 # dedendum height coefficient
+    param.z_params.h_a=1.0 # addendum height coefficient
+    param.z_params.h_o=2.5 # outer ring (or inner ring) coefficient
+    param.z_params.root_fillet=0.0 # root fillet radius coefficient
+    param.z_params.tip_fillet=0.0 # tip fillet radius coefficient
+    param.z_params.tip_reduction=0.2 # tip reduction (truncation) coefficient
+    param.z_params.profile_reduction=0 # profile reduction coefficient (for backlash)
+    param.z_params.profile_shift=0.8 # profile shift coefficient  param.z_params.
+    param.z_params.fix_callables()
 
     gear_spur = InvoluteGear(param)
     gear_cad = GearBuilder(
@@ -49,11 +50,11 @@ def spur_helical_gear():
         )
 
     # being lazy with the parameters here, but a deepcopy might be better
-    param.n_teeth = 21
-    param.profile_shift = 0.0
+    param.num_teeth = 21
+    param.z_params.profile_shift = lambda z: 0.0
     # making the angle a function of z will make the gear helical
     # proper calculation of helix angle is not implemented yet
-    param.angle = lambda z: z*0.03
+    param.z_params.angle = lambda z: z*0.03
     gear_helical = InvoluteGear(param)
     gear_cad_helical = GearBuilder(
         gear=gear_helical,
@@ -72,9 +73,8 @@ def planetary_gear():
     # care must be taken with addendum and dedendum values, spur gear defaults may not work
     param_ring = InvoluteGearParamManager(
         z_vals=[0,12],
-        n_teeth=90,
+        num_teeth=90,
         module=m,
-        center=lambda z: m*z*OUT,
         h_d=1.0, # addendum coeff larger than dedendum for clearence
         h_a=1.2,
         h_o=2.5, # this controls the outer ring diameter relative to pitch diameter
@@ -88,9 +88,8 @@ def planetary_gear():
 
     param_sun = InvoluteGearParamManager(
         z_vals=[0,12],
-        n_teeth=12,
+        num_teeth=12,
         module=m,
-        center=lambda z: m*z*OUT,
         h_d=1.2,
         h_a=1.0,
         h_o=2.5,
@@ -102,9 +101,8 @@ def planetary_gear():
 
     param_planet = InvoluteGearParamManager(
         z_vals=[0,12],
-        n_teeth=39,
+        num_teeth=39,
         module=m,
-        center=lambda z: m*z*OUT,
         h_d=1.2,
         h_a=1.0,
         h_o=2.5,
@@ -163,7 +161,7 @@ def planetary_gear():
 
 def bevel_gear():
 
-    num_teeth_1 = 25
+    num_teeth_1 = 26
     num_teeth_2 = 13
     #module
     m=4
@@ -176,15 +174,11 @@ def bevel_gear():
 
     param1 = InvoluteGearParamManager(
         z_vals=[0,5],
-        n_teeth=num_teeth_1,
-        # these are necessary for bevel geometry,
-        # proper abstraction is not implemented yet
-        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth_1*2),
-        center=lambda z: m*z*axis*np.cos(gamma),
+        num_teeth=num_teeth_1,
+        module=m,
         # this is the half cone angle
         cone_angle=gamma*2,
         # note the abs function that corresponds to the breakpoint in z_vals
-        angle=lambda z: z*beta,
         h_d=1.2,
         h_a=1.0,
         h_o=2.5,
@@ -195,17 +189,16 @@ def bevel_gear():
         profile_shift=0.0,
         enable_undercut=False,
         inside_teeth=False)
+    param1.z_params.angle = lambda z: z*beta
+    param1.z_params.cone_angle = lambda z: gamma*2
 
     gamma2 = PI/2-gamma
     param2 = InvoluteGearParamManager(
         z_vals=[0,5],
-        n_teeth=num_teeth_2,
-        module=lambda t: m* (1-t*np.sin(gamma2)/num_teeth_2*2),
-        center=lambda z: m*z*axis*np.cos(gamma2),
-        # this is the half cone angle
+        num_teeth=num_teeth_2,
+        module=m,
         cone_angle=gamma2*2,
         # note the abs function that corresponds to the breakpoint in z_vals
-        angle=lambda z: -z*beta * num_teeth_1/num_teeth_2,
         h_d=1.2,
         h_a=1.0,
         h_o=2.5,
@@ -216,10 +209,11 @@ def bevel_gear():
         profile_shift=0.0,
         enable_undercut=True,
         inside_teeth=False)
-
+    param2.z_params.angle = lambda z: -z*beta * num_teeth_1/num_teeth_2
+    param2.z_params.cone_angle = lambda z: gamma2*2
     gear_1 = InvoluteGear(param1)
     gear_2 = InvoluteGear(param2)
-    gear_2.mesh_to(gear_1,target_dir=LEFT)
+    gear_2.mesh_to(gear_1,target_dir=normalize_vector(LEFT+UP*0.1))
 
     gear_cad1 = GearBuilder(gear=gear_1,
                            n_points_vert=3,
@@ -243,19 +237,14 @@ def fishbone_bevels():
     m=4
     # half cone angle
     gamma=PI/4
-    axis=OUT
-    
+
     param = InvoluteGearParamManager(
         # the middle value is used for enabling a breakpoint for the angle funciton
         z_vals=[0,2,4],
-        n_teeth=num_teeth,
-        # these are necessary for bevel geometry proper abstraction is not implemented yet
-        module=lambda t: m* (1-t*np.sin(gamma)/num_teeth*2),
-        center=lambda z: m*z*axis*np.cos(gamma),
-        # this is the half cone angle
+        num_teeth=num_teeth,
+        module=m,
+        # gamma is the half cone angle
         cone_angle=gamma*2,
-        # note the abs function that corresponds to the breakpoint in z_vals
-        angle=lambda z: np.abs(z-2)*0.2,
         h_d=1.4,
         h_a=1.35,
         h_o=2.5,
@@ -268,6 +257,9 @@ def fishbone_bevels():
         # yes, bevel gears can have undercuts
         enable_undercut=True,
         inside_teeth=False)
+    # note the abs function that corresponds to the breakpoint in z_vals
+    param.z_params.angle = lambda z: np.abs(z-param.z_vals[1])*0.2
+    param.z_params.cone_angle = lambda z: gamma*2
 
 
     gear_base = InvoluteGear(param)

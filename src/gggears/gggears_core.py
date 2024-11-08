@@ -18,56 +18,8 @@ from scipy.optimize import minimize
 import dataclasses
 import gggears.curve as crv
 import copy
+from typing import Callable
 
-@dataclasses.dataclass
-class ZFunctionMixin():
-    '''
-    This class is used to add capability to gear parameter classes to define
-    changing parameters along Z axis of 3D gear as functions of Z value.
-    Simple example would be changing the angle to create helical gears.
-    '''
-    z_vals: np.ndarray = np.array([0,1])
-
-    def __call__(self,z):
-        dict_loc = copy.deepcopy(self.__dict__)
-        class_loc = copy.deepcopy(self)
-        for key,value in dict_loc.items():
-            if callable(value):
-                class_loc = dataclasses.replace(class_loc,**{key:value(z)})
-        return class_loc
-
-    def __add__(self,other):
-        if isinstance(other,ZFunctionMixin):
-            z_vals = np.unique(np.concatenate((self.z_vals,other.z_vals)))
-            dict_loc = copy.deepcopy(self.__dict__)
-            dict_other = copy.deepcopy(other.__dict__)
-            class_loc = copy.deepcopy(self)
-
-            def lambda_adder(key):
-                if callable(dict_loc[key]) and callable(dict_other[key]):
-                    return lambda z: dict_loc[key](z) + dict_other[key](z)
-                elif callable(dict_loc[key]):
-                    return lambda z: dict_loc[key](z) + dict_other[key]
-                elif callable(dict_other[key]):
-                    return lambda z: dict_loc[key] + dict_other[key](z)
-                else:
-                    return dict_loc[key] + dict_other[key]
-
-            for key,value in dict_loc.items():
-                if callable(value):
-                    # dict_loc[key] = value(z)
-                    if callable(value):
-                        class_loc = dataclasses.replace(class_loc,
-                                                        **{key: lambda_adder(key)})
-                else:
-                    if not isinstance(value,bool):
-                        class_loc = dataclasses.replace(class_loc,
-                                                        **{key:value+dict_other[key]})
-            class_loc = dataclasses.replace(class_loc,**{'z_vals':z_vals})
-            return class_loc
-        else:
-            raise(TypeError('ZFunctionMixin can only be added to \
-                             another ZFunctionMixin'))
 
 
 @dataclasses.dataclass
@@ -193,11 +145,11 @@ class GearCurveGenerator():
     @property
     def axis(self):
         return self.orientation[:,2]
-    
+
     @property
     def axis_x(self):
         return self.orientation[:,0]
-    
+
     @property
     def axis_y(self):
         return self.orientation[:,1]
@@ -246,21 +198,7 @@ class GearCurveGenerator():
         return self.ro_curve.r*self.module
 
     def base_transform(self,point):
-        # rot_axis = np.cross(OUT,self.axis)
-        # if np.linalg.norm(rot_axis)<1E-12:
-        #     # this can be if axis is OUT or -OUT
-        #     if all(abs(self.axis-OUT)<1E-12):
-        #         rot_angle = 0
-        #         rot_axis = RIGHT
-        #     else:
-        #         rot_angle = PI
-        #         rot_axis = RIGHT
-        # else:
-        #     rot_angle = angle_between_vectors(OUT,self.axis)
-        #     rot_axis = normalize_vector(rot_axis)
-
         rot_z = scp_Rotation.from_euler('z',self.angle).as_matrix()
-        # rot_axis = scp_Rotation.from_rotvec(rot_angle*rot_axis)
         rot_axis = self.orientation
 
         # return rot_axis@rot_z.apply(point)*self.module + self.center
@@ -903,8 +841,130 @@ class InvoluteFlankGenerator():
 
 
 @dataclasses.dataclass
-class InvoluteGearParamManager(InvoluteGearParam, ZFunctionMixin):
-    z_vals: np.ndarray = np.array([0,1])
+class InvoluteGearZParam():
+    """
+    Parameter set that contains all parameters of 2 gear profile that can vary
+    along the z axis for 3D conversion.
+    """
+    module: Callable[[float],float] = lambda z: 1
+    pressure_angle: Callable[[float],float] = lambda z: 20*PI/180
+    cone_angle: Callable[[float],float] = lambda z: 0
+    center: Callable[[float],np.ndarray] = lambda z: ORIGIN
+    angle:  Callable[[float],float] = lambda z: 0
+    h_a: Callable[[float],float] = lambda z: 1
+    h_d: Callable[[float],float] = lambda z: 1.2
+    h_o: Callable[[float],float] = lambda z: 2
+    profile_shift: Callable[[float],float] = lambda z: 0
+    profile_reduction: Callable[[float],float] = lambda z: 0
+    tip_fillet: Callable[[float],float] = lambda z: 0
+    root_fillet: Callable[[float],float] = lambda z: 0
+    tip_reduction: Callable[[float],float] = lambda z: 0
+
+    def __post_init__(self):
+        self.fix_callables()
+
+    def fix_callables(self):
+        for key, value in self.__dict__.items():
+            if not callable(value):
+                # if isinstance(value, (float, int, np.ndarray)):
+                setattr(self, key, lambda z, v=value: v)
+
+
+class InvoluteGearParamManager():
+    def __init__(self,
+        z_vals: np.ndarray = np.array([0,1]),
+        num_teeth: float = 16,
+        num_cutout_teeth: int = 0,
+        angle: float = 0,
+        orientation: np.ndarray = np.eye(3),
+        center: np.ndarray = ORIGIN,
+        module: float = 1,
+        cone_angle: float = 0,
+        inside_teeth: bool = False,
+        enable_undercut: bool = True,
+        z_params: InvoluteGearZParam = None,
+        **kwargs
+    ):
+        if z_params is None:
+            z_params = InvoluteGearZParam(**kwargs)
+        self.z_params = z_params
+        self.z_vals = z_vals
+        self.num_teeth = num_teeth
+        self.num_cutout_teeth = num_cutout_teeth
+        self.angle = angle
+        self.orientation = orientation
+        self.center = center
+        self.module = module
+        self.cone_angle = cone_angle
+        self.inside_teeth = inside_teeth
+        self.enable_undercut = enable_undercut
+
+        if self.num_teeth<0:
+            self.inside_teeth = True
+            self.num_teeth = -self.num_teeth
+        if self.enable_undercut:
+            self.z_params.root_fillet = lambda z: 0
+
+        self.set_default_z_functions()
+
+
+    @property
+    def m(self):
+        return self.module
+
+    @property
+    def gamma(self):
+        return self.cone_angle/2
+
+    @property
+    def axis(self):
+        return self.orientation[:,2]
+
+    @property
+    def height(self):
+        return np.linalg.norm(
+            self.z_params.center(self.z_vals[1])-self.z_params.center(self.z_vals[0])
+            )
+    @property
+    def pitch_angle(self):
+        return 2*PI/self.num_teeth
+
+    def default_module_func(self,z):
+        return self.m * (1-z*2*np.sin(self.gamma)/self.num_teeth)
+
+    def default_center_function(self,z):
+        return self.m*z*self.axis*np.cos(self.gamma)+self.center
+
+    def default_cone_angle_func(self,z):
+        return self.cone_angle
+
+    def set_default_z_functions(self):
+        self.z_params.module = self.default_module_func
+        self.z_params.center = self.default_center_function
+        self.z_params.cone_angle = self.default_cone_angle_func
+
+    def get_params_at_z(self,z):
+        return InvoluteGearParam(
+                n_teeth=self.num_teeth,
+                n_cutout_teeth=self.num_cutout_teeth,
+                module=self.z_params.module(z),
+                pressure_angle=self.z_params.pressure_angle(z),
+                cone_angle=self.z_params.cone_angle(z),
+                axis_offset=0, # to be implemented
+                center=self.z_params.center(z),
+                angle=self.z_params.angle(z) + self.angle,
+                orientation=self.orientation,
+                h_a=self.z_params.h_a(z),
+                h_d=self.z_params.h_d(z),
+                h_o=self.z_params.h_o(z),
+                profile_shift=self.z_params.profile_shift(z),
+                profile_reduction=self.z_params.profile_reduction(z),
+                tip_fillet=self.z_params.tip_fillet(z),
+                root_fillet=self.z_params.root_fillet(z),
+                tip_reduction=self.z_params.tip_reduction(z),
+                inside_teeth=self.inside_teeth,
+                enable_undercut=self.enable_undercut
+        )
 
 class InvoluteGear():
     def __init__(self,
@@ -912,9 +972,10 @@ class InvoluteGear():
                  **kwargs):
         # use defaults
         if params is None:
-            params=InvoluteGearParamManager()
-        self.params = params
-        self.paramref = self.params(0)
+            self.params=InvoluteGearParamManager()
+        else:
+            self.params = copy.deepcopy(params)
+        self.paramref = self.params.get_params_at_z(0)
         self.z_vals = self.params.z_vals
 
     def setup_generator(self,params):
@@ -936,7 +997,7 @@ class InvoluteGear():
         return curve_generator
 
     def curve_gen_at_z(self,z):
-        return self.setup_generator(self.params(z))
+        return self.setup_generator(self.params.get_params_at_z(z))
 
     # somehow this is slower with cache!!! wtf
     # @lru_cache(maxsize=12)
@@ -975,12 +1036,15 @@ class InvoluteGear():
         target_plane_norm = np.cross(other.paramref.axis,target_dir_norm)
 
         target_angle_other = angle_between_vectors(other.paramref.x_axis,
-                                                   target_dir_norm) * \
-                            np.sign(np.dot(np.cross(other.paramref.x_axis,
-                                                    target_dir_norm),
-                                            other.paramref.axis))
-        target_phase_other = ((target_angle_other-other.paramref.angle) / other.paramref.pitch_angle)%1
-
+                                                   target_dir_norm)
+        sign_corrector =np.dot(
+            np.cross(other.paramref.x_axis,target_dir_norm),other.paramref.axis
+            )
+        if sign_corrector<0:
+            target_angle_other = -target_angle_other
+        
+        target_phase_other = (
+            (target_angle_other-other.paramref.angle) / other.paramref.pitch_angle)%1
 
         if self.paramref.gamma==0 and other.paramref.gamma==0:
             # both are cylindrical
@@ -1008,11 +1072,8 @@ class InvoluteGear():
                 distance_ref = r1 + r2 + distance_offset
 
             center_offs = distance_ref*target_dir_norm
-            params_upd = InvoluteGearParamManager.null()
-            params_upd.z_vals = self.params.z_vals
-            params_upd.angle = angle_offs
-            params_upd.center = center_offs
-            self.params = self.params + params_upd
+            self.params.center += center_offs
+            self.params.angle += angle_offs
 
         elif self.paramref.gamma!=0 and other.paramref.gamma!=0:
             # both are spherical
@@ -1035,7 +1096,7 @@ class InvoluteGear():
                 self.paramref.profile_shift * self.paramref.module
             r2 = other.paramref.rp + \
                 other.paramref.profile_shift * other.paramref.module
-            
+
             # compatible bevel gears should have the same spherical radius
             # and the same center sphere when placed on xy plane at the orgin
 
@@ -1045,21 +1106,18 @@ class InvoluteGear():
                 distance_ref = r1 - r2 - distance_offset
             else:
                 distance_ref = r1 + r2 + distance_offset
-            
+
             # angle_ref = distance_ref / self.paramref.R
             angle_ref =self.paramref.gamma + other.paramref.gamma
             center_sph = np.sqrt(self.paramref.R**2-self.paramref.rp**2) * OUT
             center_sph_other = np.sqrt(other.paramref.R**2-other.paramref.rp**2) * OUT
             rot1 = scp_Rotation.from_rotvec(-target_plane_norm*angle_ref)
             center_offs = rot1.apply(-center_sph)+center_sph_other
-            params_upd = InvoluteGearParamManager.null()
-            params_upd.z_vals = self.params.z_vals
-            params_upd.angle = angle_offs
-            params_upd.center = center_offs
-            self.params = self.params + params_upd
             self.params.orientation = other.params.orientation @ rot1.as_matrix()
-            self.params.center = lambda z: self.params.module(0)*z*rot1.as_matrix()[:,2]*np.cos(self.paramref.gamma)+center_offs
-            
+            self.params.center += center_offs
+            self.params.angle += angle_offs
+            pass
+
         else:
             # one is cylindrical, the other is spherical
             Warning('Meshing cylindrical and spherical gears are not supported')

@@ -18,6 +18,9 @@ from build123d import *
 from gggears.gggears_convert import *
 import numpy as np
 import time
+from ocp_vscode import show, set_port
+set_port(3939)
+
 
 
 def nppoint2Vector(p: np.ndarray):
@@ -78,7 +81,7 @@ class GearBuilder(GearToNurbs):
 
         self.profile_solid = solid1
 
-        n_teeth = int(np.floor(self.gear.params.n_teeth-self.gear.params.n_cutout_teeth))
+        n_teeth = int(np.floor(self.gear.params.num_teeth-self.gear.params.num_cutout_teeth))
         bin_n_teeth = bin(n_teeth)[2:]
         shape_dict = []
         solid2_to_fuse = []
@@ -95,18 +98,18 @@ class GearBuilder(GearToNurbs):
                 angle=0
             else:
                 angle = self.gear.params.pitch_angle*RAD2DEG*(2**(k-1))
-                rotshape = shape_dict[k-1].translate(nppoint2Vector(-self.params.center(0))
+                rotshape = shape_dict[k-1].translate(nppoint2Vector(-self.params.center)
                                                      ).rotate(axis1,angle).translate(
-                                                         nppoint2Vector(self.params.center(0)))
+                                                         nppoint2Vector(self.params.center))
                 shape_dict.append(shape_dict[k-1].fuse(rotshape,glue=False,tol=tol))
 
             if bin_n_teeth[-(k+1)]=='1':
 
 
                 angle_construct = angle_idx * self.gear.params.pitch_angle*RAD2DEG
-                rotshape = shape_dict[k].translate(nppoint2Vector(-self.params.center(0))
+                rotshape = shape_dict[k].translate(nppoint2Vector(-self.params.center)
                                                      ).rotate(axis1,angle_construct).translate(
-                                                         nppoint2Vector(self.params.center(0)))
+                                                         nppoint2Vector(self.params.center))
 
                 solid2_to_fuse.append(rotshape)
                 angle_idx = angle_idx+2**k
@@ -121,15 +124,15 @@ class GearBuilder(GearToNurbs):
         plug_splines_bot = []
         if add_plug:
             for k in range(n_teeth):
-                plug_surfaces.append(ro_surface.translate(nppoint2Vector(-self.params.center(0))
+                plug_surfaces.append(ro_surface.translate(nppoint2Vector(-self.params.center)
                                                           ).rotate(axis1,self.params.pitch_angle*RAD2DEG*k
-                                                                   ).translate(nppoint2Vector(self.params.center(0))))
-                plug_splines_bot.append(ro_spline_bot.translate(nppoint2Vector(-self.params.center(0))
+                                                                   ).translate(nppoint2Vector(self.params.center)))
+                plug_splines_bot.append(ro_spline_bot.translate(nppoint2Vector(-self.params.center)
                                                           ).rotate(axis1,self.params.pitch_angle*RAD2DEG*k
-                                                                   ).translate(nppoint2Vector(self.params.center(0))))
-                plug_splines_top.append(ro_spline_top.translate(nppoint2Vector(-self.params.center(0))
+                                                                   ).translate(nppoint2Vector(self.params.center)))
+                plug_splines_top.append(ro_spline_top.translate(nppoint2Vector(-self.params.center)
                                                           ).rotate(axis1,self.params.pitch_angle*RAD2DEG*k
-                                                                   ).translate(nppoint2Vector(self.params.center(0))))
+                                                                   ).translate(nppoint2Vector(self.params.center)))
             plug_top = Face.make_surface(Wire(plug_splines_top))
             plug_bot = Face.make_surface(Wire(plug_splines_bot))
             plug_surfaces.insert(0,plug_bot)

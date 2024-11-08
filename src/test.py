@@ -21,31 +21,8 @@ gamma = 0.5*np.pi/2
 axis = gg.OUT
 m=2
 
-param = gg.InvoluteGearParamManager(z_vals=[0,1,2],
-                                    n_teeth=n_z,
-                                    module=lambda z: m*(1-np.tan(gamma)*z/n_z*2),
-                                    center=lambda z: m*z*axis,
-                                    cone_angle=gamma*2,
-                                    angle=lambda z: 0.25*(z-1)**2 *0+0.1,
-                                    axis=axis,
-                                    h_d=1.4,
-                                    h_a=1.2,
-                                    h_o=2,
-                                    root_fillet=0.0,
-                                    tip_fillet=0.0,
-                                    tip_reduction=0.1,
-                                    profile_reduction=0,
-                                    profile_shift=0.0,
-                                    enable_undercut=True,
-                                    inside_teeth=False)
-gear1 = ggc.GearToNurbs(params=param,
-                        n_points_vert=3,
-                        n_points_hz=4)
+param = gg.InvoluteGearParamManager2()
+gear = gg.InvoluteGear(param)
+profile = gear.curve_gen_at_z(0).generate_profile_closed()
 
-
-
-points = gear1.nurb_profile_stacks[0][0](np.linspace(0,1,301))
-ax = plt.axes(projection='3d')
-ax.plot(points[:,0],points[:,1],points[:,2])
-ax.axis('equal')
-plt.show()
+print(profile(0))

@@ -87,7 +87,7 @@ class GearToNurbs():
             z_tweens = np.linspace(self.params.z_vals[ii],
                                    self.params.z_vals[ii+1],
                                    self.n_z_tweens)
-            gear_stack_loc = [self.gear.setup_generator(self.params(z)) for z in z_tweens]
+            gear_stack_loc = [self.gear.curve_gen_at_z(z) for z in z_tweens]
             gear_stacks.append(gear_stack_loc)
         return gear_stacks
 
