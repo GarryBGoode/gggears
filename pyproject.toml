@@ -35,6 +35,10 @@ dev = [
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["gggears"]
+package-dir = {"" = "src"}
+
 [tool.black]
 target-version = ["py39", "py310", "py311", "py312"]
 line-length = 88
@@ -46,6 +50,7 @@ profile = "black"
 minversion = "6.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
+pythonpath = "src"
 
 [tool.mypy]
 python_version = "3.9"
@@ -53,5 +58,5 @@ warn_return_any = true
 warn_unused_configs = true
 
 [tool.ruff]
-select = ["E","F", "W", "B"]
-ignore = ["F403", "F405"]
+lint.select = ["E","F", "W", "B"]
+lint.ignore = ["F403", "F405"]

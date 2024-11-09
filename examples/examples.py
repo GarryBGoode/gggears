@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from gggears_build123d import *
+from gggears.gggears_build123d import *
 
 
 # These examples are meant to showcase the functionality of the library,
