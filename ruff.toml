@@ -1,8 +1,0 @@
-[lint]
-select = ["E","F", "W", "B"]
-
-# 2. Avoid stuff
-ignore = ["F403", "F405"]
-
-# 3. Avoid trying to fix flake8-bugbear (`B`) violations.
-# unfixable = ["B"]

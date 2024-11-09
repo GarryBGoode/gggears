@@ -1,0 +1,57 @@
+[project]
+name = "gggears"
+version = "0.0.1"
+description = "A gear geometry generator in Python"
+authors = [
+{ name = "Gergely Bencsik", email = "bencsik.gergely.1@gmail.com"},
+]
+readme="README.md"
+requires-python = ">=3.9"
+classifiers = [
+"Programming Language :: Python :: 3",
+"License :: OSI Approved :: Apache-2.0",
+"Operating System :: OS Independent",
+]
+keywords = ["gears","CAD", "python"]
+
+[project_urls]
+Homepage = "https://github.com/GarryBGoode/gggears"
+
+[dependencies]
+numpy = "^1.24.3"
+scipy = "^1.10.1"
+build123d = "^0.6.0"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-xdist",
+    "shapely",
+    "matplotlib",
+    "ocp-vscode"
+]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+target-version = ["py39", "py310", "py311", "py312"]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.ruff]
+select = ["E","F", "W", "B"]
+ignore = ["F403", "F405"]

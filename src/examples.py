@@ -12,9 +12,7 @@ limitations under the License.
 """
 
 from gggears_build123d import *
-from ocp_vscode import show, set_port
 
-set_port(3939)
 
 # These examples are meant to showcase the functionality of the library,
 # and serve as manual testing templates for the developer.
@@ -66,7 +64,7 @@ def spur_helical_gear():
         method="fast",
     )
     # using build123d translate method to move them apart
-    show(
+    return (
         gear_cad.solid.translate((-20, 0, 0)),
         gear_cad_helical.solid.translate((25, 0, 0)),
     )
@@ -147,7 +145,7 @@ def planetary_gear():
         gear=gear_sun, n_points_vert=2, n_points_hz=3, add_plug=True, method="fast"
     )
 
-    show(
+    return (
         gear_ring_cad.solid,
         gear_sun_cad.solid,
         gear_planet1_cad.solid,
@@ -220,7 +218,7 @@ def bevel_gear():
     gear_cad2 = GearBuilder(
         gear=gear_2, n_points_vert=3, n_points_hz=4, add_plug=False, method="fast"
     )
-    show(gear_cad1.solid, gear_cad2.solid)
+    return (gear_cad1.solid, gear_cad2.solid)
 
 
 def fishbone_bevels():
@@ -279,12 +277,11 @@ def fishbone_bevels():
     solid3 = solid2.rotate(Axis.Z, 120)
     solid4 = solid2.rotate(Axis.Z, -120)
     solid5 = solid1.rotate(Axis.Y, 180)
-    show(solid1, solid2, solid3, solid4, solid5)
-
     # gears can be exported to step files
     # export_step(solid1,"fishbone_bevel_left.step")
     # solid1b = solid1.mirror(Plane.XZ)
     # export_step(solid1b,"fishbone_bevel_right.step")
+    return (solid1, solid2, solid3, solid4, solid5)
 
 
 if __name__ == "__main__":

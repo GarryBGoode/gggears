@@ -3,8 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# manual and local test files
+mytest.py
+
 # VS Code
 .vscode/
+
+# build
+*.egg-info/
+build/
 
 # Environments
 .env
