@@ -20,27 +20,30 @@ from gggears.gggears_build123d import *
 
 def spur_helical_gear():
 
-    param = InvoluteGearParamManager(
-        z_vals=[0, 4],  # combined with the center function this defines gear height
-        num_teeth=8,  # number of teeth
-        module=2,  # module
-        cone_angle=0,  # cone angle for bevel gears
-        center=ORIGIN,
-        enable_undercut=True,  # enable undercut - don't use with root fillet at the same time
-        inside_teeth=False,  # inside teeth for ring gears
-    )
-    param.z_params.angle = 0  # progress angle, can be used for helical
-    param.z_params.h_d = 1.2  # dedendum height coefficient
-    param.z_params.h_a = 1.0  # addendum height coefficient
-    param.z_params.h_o = 2.5  # outer ring (or inner ring) coefficient
-    param.z_params.root_fillet = 0.0  # root fillet radius coefficient
-    param.z_params.tip_fillet = 0.0  # tip fillet radius coefficient
-    param.z_params.tip_reduction = 0.2  # tip reduction (truncation) coefficient
-    param.z_params.profile_reduction = 0  # profile reduction coefficient (for backlash)
-    param.z_params.profile_shift = 0.8  # profile shift coefficient  param.z_params.
-    param.z_params.fix_callables()
+    # param = InvoluteGearParamManager(
+    #     z_vals=[0, 4],  # combined with the center function this defines gear height
+    #     num_teeth=8,  # number of teeth
+    #     module=2,  # module
+    #     cone_angle=0,  # cone angle for bevel gears
+    #     center=ORIGIN,
+    #     enable_undercut=True,  # enable undercut - don't use with root fillet at the same time
+    #     inside_teeth=False,  # inside teeth for ring gears
+    # )
+    # param.z_params.angle = 0  # progress angle, can be used for helical
+    # param.z_params.h_d = 1.2  # dedendum height coefficient
+    # param.z_params.h_a = 1.0  # addendum height coefficient
+    # param.z_params.h_o = 2.5  # outer ring (or inner ring) coefficient
+    # param.z_params.root_fillet = 0.0  # root fillet radius coefficient
+    # param.z_params.tip_fillet = 0.0  # tip fillet radius coefficient
+    # param.z_params.tip_reduction = 0.2  # tip reduction (truncation) coefficient
+    # param.z_params.profile_reduction = 0  # profile reduction coefficient (for backlash)
+    # param.z_params.profile_shift = 0.8  # profile shift coefficient  param.z_params.
+    # param.z_params.fix_callables()
 
-    gear_spur = InvoluteGear(param)
+    # gear_spur = InvoluteGear(param)
+    gear_spur = InvoluteGear2(
+        z_vals=np.array([0, 1]), module=1, tooth_param=GearTeethData(8)
+    )
     gear_cad = GearBuilder(
         gear=gear_spur,
         n_points_vert=2,  # nurb spline points in vertical direction
@@ -50,24 +53,26 @@ def spur_helical_gear():
     )
 
     # being lazy with the parameters here, but a deepcopy might be better
-    param.num_teeth = 21
-    param.z_params.profile_shift = lambda z: 0.0
+    # param.num_teeth = 21
+    # param.z_params.profile_shift = lambda z: 0.0
     # making the angle a function of z will make the gear helical
     # proper calculation of helix angle is not implemented yet
-    param.z_params.angle = lambda z: z * 0.03
-    gear_helical = InvoluteGear(param)
-    gear_cad_helical = GearBuilder(
-        gear=gear_helical,
-        n_points_vert=3,  # spiral curves need at least 3 points
-        n_points_hz=4,
-        add_plug=False,
-        method="fast",
-    )
-    # using build123d translate method to move them apart
-    return (
-        gear_cad.solid.translate((-20, 0, 0)),
-        gear_cad_helical.solid.translate((25, 0, 0)),
-    )
+    # param.z_params.angle = lambda z: z * 0.03
+    # gear_helical = InvoluteGear(param)
+    # gear_cad_helical = GearBuilder(
+    #     gear=gear_helical,
+    #     n_points_vert=3,  # spiral curves need at least 3 points
+    #     n_points_hz=4,
+    #     add_plug=False,
+    #     method="fast",
+    # )
+    # # using build123d translate method to move them apart
+    # return (
+    #     gear_cad.solid.translate((-20, 0, 0)),
+    #     gear_cad_helical.solid.translate((25, 0, 0)),
+    # )
+
+    return gear_cad.solid
 
 
 def planetary_gear():
@@ -285,4 +290,4 @@ def fishbone_bevels():
 
 
 if __name__ == "__main__":
-    bevel_gear()
+    spur_helical_gear()

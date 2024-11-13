@@ -16,6 +16,7 @@ from gggears.function_generators import *
 from gggears.curve import *
 from build123d import *
 from gggears.gggears_convert import *
+from scipy.spatial.transform import Rotation as scp_Rotation
 import numpy as np
 import time
 
@@ -46,7 +47,7 @@ class GearBuilder(GearToNurbs):
         )
         surfaces = []
         ro_surfaces = []
-        for k in range(len(self.params.z_vals) - 1):
+        for k in range(len(self.gear.z_vals) - 1):
             surfdata_z = self.side_surf_data[k]
 
             for patch in surfdata_z.get_patches():
@@ -92,18 +93,22 @@ class GearBuilder(GearToNurbs):
 
         self.profile_solid = solid1
 
-        n_teeth = int(
-            np.floor(self.gear.params.num_teeth - self.gear.params.num_cutout_teeth)
-        )
+        n_teeth = self.gear.tooth_param.num_teeth_act
         bin_n_teeth = bin(n_teeth)[2:]
         shape_dict = []
         solid2_to_fuse = []
         angle_construct = 0.0
         angle_idx = 0
         tol = 1e-6
-        axis1 = Axis(
-            (0, 0, 0), (self.params.axis[0], self.params.axis[1], self.params.axis[2])
-        )
+        # axis1 = Axis(
+        #     (0, 0, 0),
+        #     (
+        #         self.gear.transform.z_axis[0],
+        #         self.gear.transform.z_axis[1],
+        #         self.gear.transform.z_axis[2],
+        #     ),
+        # )
+        axis1 = Axis.Z
         start = time.time()
         print("starting fusion")
         for k in range(len(bin_n_teeth)):
@@ -112,23 +117,25 @@ class GearBuilder(GearToNurbs):
                 shape_dict.append(solid1)
                 angle = 0
             else:
-                angle = self.gear.params.pitch_angle * RAD2DEG * (2 ** (k - 1))
+                angle = self.gear.tooth_param.pitch_angle * RAD2DEG * (2 ** (k - 1))
                 rotshape = (
                     shape_dict[k - 1]
-                    .translate(nppoint2Vector(-self.params.center))
+                    # .translate(nppoint2Vector(-self.gear.transform.center))
                     .rotate(axis1, angle)
-                    .translate(nppoint2Vector(self.params.center))
+                    # .translate(nppoint2Vector(self.gear.transform.center))
                 )
                 shape_dict.append(shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol))
 
             if bin_n_teeth[-(k + 1)] == "1":
 
-                angle_construct = angle_idx * self.gear.params.pitch_angle * RAD2DEG
+                angle_construct = (
+                    angle_idx * self.gear.tooth_param.pitch_angle * RAD2DEG
+                )
                 rotshape = (
                     shape_dict[k]
-                    .translate(nppoint2Vector(-self.params.center))
+                    # .translate(nppoint2Vector(-self.gear.transform.center))
                     .rotate(axis1, angle_construct)
-                    .translate(nppoint2Vector(self.params.center))
+                    # .translate(nppoint2Vector(self.gear.transform.center))
                 )
 
                 solid2_to_fuse.append(rotshape)
@@ -145,19 +152,22 @@ class GearBuilder(GearToNurbs):
         if add_plug:
             for k in range(n_teeth):
                 plug_surfaces.append(
-                    ro_surface.translate(nppoint2Vector(-self.params.center))
-                    .rotate(axis1, self.params.pitch_angle * RAD2DEG * k)
-                    .translate(nppoint2Vector(self.params.center))
+                    ro_surface
+                    # .translate(nppoint2Vector(-self.gear.transform.center))
+                    .rotate(axis1, self.gear.tooth_param.pitch_angle * RAD2DEG * k)
+                    # .translate(nppoint2Vector(self.gear.transform.center))
                 )
                 plug_splines_bot.append(
-                    ro_spline_bot.translate(nppoint2Vector(-self.params.center))
-                    .rotate(axis1, self.params.pitch_angle * RAD2DEG * k)
-                    .translate(nppoint2Vector(self.params.center))
+                    ro_spline_bot
+                    # .translate(nppoint2Vector(-self.gear.transform.center))
+                    .rotate(axis1, self.gear.tooth_param.pitch_angle * RAD2DEG * k)
+                    # .translate(nppoint2Vector(self.gear.transform.center))
                 )
                 plug_splines_top.append(
-                    ro_spline_top.translate(nppoint2Vector(-self.params.center))
-                    .rotate(axis1, self.params.pitch_angle * RAD2DEG * k)
-                    .translate(nppoint2Vector(self.params.center))
+                    ro_spline_top
+                    # .translate(nppoint2Vector(-self.gear.transform.center))
+                    .rotate(axis1, self.gear.tooth_param.pitch_angle * RAD2DEG * k)
+                    # .translate(nppoint2Vector(self.gear.transform.center))
                 )
             plug_top = Face.make_surface(Wire(plug_splines_top))
             plug_bot = Face.make_surface(Wire(plug_splines_bot))
@@ -167,8 +177,33 @@ class GearBuilder(GearToNurbs):
             self.solid = self.solid.fuse(plug).clean()
 
         print(f"fuse time: {time.time()-start}")
+        self.solid = Part(self.solid)
+        # rot1 = scp_Rotation.from_matrix(self.gear.transform.orientation)
+
+        # degrees = rot1.as_euler("xyz", degrees=True)
+        # self.solid = self.solid.scale(self.gear.transform.scale)
+        # self.solid = (
+        #     Rotation(degrees[0], degrees[1], degrees[2])
+        #     * Rotation(0, 0, self.gear.transform.angle * 180 / PI)
+        #     * self.solid
+        # )
+        # self.solid = self.solid.translate(self.gear.transform.center)
 
     def gen_splines(self, curve_bezier: Curve):
         vectors = nppoint2Vector(curve_bezier.points)
         weights = curve_bezier.weights.tolist()
         return Edge.make_bezier(*vectors, weights=weights)
+
+
+def apply_transform_part(part: Part, transform: GearBaseTransform):
+    rot1 = scp_Rotation.from_matrix(transform.orientation)
+    degrees = rot1.as_euler("zyx", degrees=True)
+    part = part.scale(transform.scale)
+    part = Rotation(0, 0, transform.angle * 180 / PI) * part
+    part = (
+        Rotation(Z=degrees[2], Y=degrees[1], X=degrees[0], ordering=Extrinsic.ZYX)
+        * part
+    )
+
+    part = part.translate(transform.center)
+    return part

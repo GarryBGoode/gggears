@@ -12,6 +12,7 @@ limitations under the License.
 """
 
 import gggears.gggears_core as gg
+import gggears.curve as crv
 import matplotlib.pyplot as plt
 import numpy as np
 from gggears.defs import *
@@ -67,59 +68,48 @@ def test_gear_intersect(
         undercut = False
         f0 = root_fillet
 
-    gamma = 0
-    param = gg.InvoluteGearParamManager(
-        z_vals=[0, 1],
-        num_teeth=num_teeth,
-        module=m,
-        orientation=np.eye(3),
-        cone_angle=gamma * 2,
-        angle=0,
-        h_d=1 + 1e-4,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=0,
-        tip_fillet=tip_fillet,
-        tip_reduction=0.0,
-        profile_reduction=0,
-        profile_shift=0.0,
-        enable_undercut=True,
-        inside_teeth=False,
-    )
-    param.angle = angle_ref * param.pitch_angle
+    gamma = 0.0
+
     num_teeth_2 = 52
-    param2 = gg.InvoluteGearParamManager(
+
+    n_poly = 3600
+
+    gear1 = gg.InvoluteGear(
         z_vals=[0, 1],
-        num_teeth=num_teeth_2,
         module=m,
-        orientation=np.eye(3),
-        cone_angle=gamma * 2,
-        angle=0,
-        h_d=1 + f0,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=f0,
-        tip_fillet=0.0,
-        tip_reduction=0.0,
-        profile_reduction=0,
-        profile_shift=0.0,
-        enable_undercut=undercut,
-        inside_teeth=False,
+        tooth_param=gg.GearTeethData(num_teeth),
+        cone=gg.ConicData(cone_angle=gamma * 2),
+        enable_undercut=True,
     )
+    gear1.shape_param.limits.h_d = 1 + 1e-4
+    gear1.shape_param.limits.h_a = 1.0
+    gear1.shape_param.fillet.tip_fillet = tip_fillet
+    gear1.transform.angle = angle_ref * gear1.tooth_param.pitch_angle
 
-    n_poly = 300
-
-    gear1 = gg.InvoluteGear(param)
-    gear2 = gg.InvoluteGear(param2)
+    gear2 = gg.InvoluteGear(
+        z_vals=[0, 1],
+        module=m,
+        tooth_param=gg.GearTeethData(num_teeth_2),
+        cone=gg.ConicData(cone_angle=gamma * 2),
+        enable_undercut=undercut,
+    )
+    gear2.shape_param.limits.h_d = 1 + f0
+    gear2.shape_param.limits.h_a = 1.0
+    gear2.shape_param.fillet.root_fillet = f0
+    # gear2.transform.angle = 0.1
     gear2.mesh_to(gear1)
 
     gear_gen1 = gear1.curve_gen_at_z(0)
     gear_gen2 = gear2.curve_gen_at_z(0)
-    outer_curve = gear_gen1.generate_gear_pattern(gear_gen1.profile)
-    points = outer_curve(np.linspace(-2 / num_teeth, 2 / num_teeth, n_poly * num_teeth))
+    outer_curve = crv.TransformedCurve(
+        gear1.transform, gg.generate_boundary(gear_gen1, gear1.tooth_param)
+    )
+    points = outer_curve(np.linspace(-0.25, 0.25, n_poly))
 
-    outer_curve2 = gear_gen2.generate_gear_pattern(gear_gen2.profile)
-    points2 = outer_curve2(np.linspace(-2 / num_teeth_2, 2 / num_teeth_2, n_poly))
+    outer_curve2 = crv.TransformedCurve(
+        gear2.transform, gg.generate_boundary(gear_gen2, gear2.tooth_param)
+    )
+    points2 = outer_curve2(np.linspace(-0.25, 0.25, n_poly))
 
     poly1 = shp.geometry.Polygon(points)
     poly2 = shp.geometry.Polygon(points2)
@@ -130,9 +120,10 @@ def test_gear_intersect(
 
     if enable_plotting:
         ax = plt.axes()
-        ax.plot(points[:, 0], points[:, 1])
-        ax.plot(points2[:, 0], points2[:, 1])
-        # ax.plot(poly4.exterior.xy[0],poly3.exterior.xy[1])
+        # ax.plot(points[:, 0], points[:, 1])
+        # ax.plot(points2[:, 0], points2[:, 1])
+        ax.plot(poly1.exterior.xy[0], poly1.exterior.xy[1])
+        ax.plot(poly2.exterior.xy[0], poly2.exterior.xy[1])
         ax.axis("equal")
         plt.show()
 
@@ -148,9 +139,9 @@ if __name__ == "__main__":
 
     test_gear_intersect(
         num_teeth=62,
-        module=0.5,
-        angle_ref=0.16666666666666666,
+        module=2,
+        angle_ref=1.0,
         root_fillet=0.4,
-        tip_fillet=0,
+        tip_fillet=0.4,
         enable_plotting=True,
     )

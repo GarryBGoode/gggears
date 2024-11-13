@@ -18,6 +18,7 @@ from scipy.optimize import minimize
 from gggears.defs import *
 from gggears.function_generators import bezierdc
 import dataclasses
+from typing import Union, List
 
 
 class GearToNurbs:
@@ -29,15 +30,16 @@ class GearToNurbs:
         oversampling_ratio=2.5,
         convertmethod="fast",
     ):
-        self.params = gear.params
+        # self.params = gear.params
         self.gear = gear
+        self.z_vals = gear.z_vals
         self.n_points_hz = n_points_hz
         self.n_points_vert = n_points_vert
         self.oversamp_ratio = oversampling_ratio
         self.n_z_tweens = int(
             np.ceil((self.n_points_vert - 2) * self.oversamp_ratio) + 2
         )
-        self.gear_stacks = self.generate_gear_stacks()
+        self.gear_stacks: List[gg.GearRefProfile] = self.generate_gear_stacks()
         self.gear_generator_ref = self.gear_stacks[0][0]
         self.nurb_profile_stacks = self.generate_nurbs()
         self.side_surf_data = self.generate_surface_points_sides(method=convertmethod)
@@ -47,7 +49,9 @@ class GearToNurbs:
         for gear_stack_loc in self.gear_stacks:
             nurb_stack = []
             for gearprofile in gear_stack_loc:
-                gearprofile.generate_profile_closed(rd_coeff_right=1, rd_coeff_left=0)
+                closed_profile_curve = gg.generate_profile_closed(
+                    gearprofile, self.gear.shape_param(0).cone
+                )
                 rd_nurb = crv.convert_curve_nurbezier(gearprofile.rd_curve)
                 tooth_nurb = crv.convert_curve_nurbezier(
                     gearprofile.tooth_curve,
@@ -56,11 +60,12 @@ class GearToNurbs:
                 )
                 ra_nurb = crv.convert_curve_nurbezier(gearprofile.ra_curve)
                 ro_nurb = crv.convert_curve_nurbezier(gearprofile.ro_curve)
+                ro_nurb.reverse()
                 ro_connector_1_nurb = crv.convert_curve_nurbezier(
-                    gearprofile.ro_connector_1
+                    closed_profile_curve[-3]
                 )
                 ro_connector_0_nurb = crv.convert_curve_nurbezier(
-                    gearprofile.ro_connector_0
+                    closed_profile_curve[-1]
                 )
 
                 tooth_mirror_nurb = tooth_nurb.copy()
@@ -69,34 +74,35 @@ class GearToNurbs:
                 )
                 tooth_mirror_nurb.reverse()
                 # tooth_mirror_nurb.update_lengths()
+                curve_list = [
+                    rd_nurb,
+                    *tooth_nurb.get_curves(),
+                    ra_nurb,
+                    *tooth_mirror_nurb.get_curves(),
+                    ro_connector_1_nurb,
+                    ro_nurb,
+                    ro_connector_0_nurb,
+                ]
 
                 NurbsConv = crv.NURBSCurve(
-                    *[
-                        rd_nurb,
-                        *tooth_nurb.get_curves(),
-                        ra_nurb,
-                        *tooth_mirror_nurb.get_curves(),
-                        ro_connector_1_nurb,
-                        ro_nurb,
-                        ro_connector_0_nurb,
-                    ]
+                    *[curve for curve in curve_list if curve.active]
                 )
 
                 NurbsConv.enforce_continuity()
                 for nurb in NurbsConv:
-                    nurb.points = gearprofile.base_transform(nurb.points)
+                    nurb.points = gearprofile.transform(nurb.points)
                 nurb_stack.append(NurbsConv)
             nurb_profile_stacks.append(nurb_stack)
         return nurb_profile_stacks
 
     def generate_gear_stacks(self):
         gear_stacks = []
-        for ii in range(len(self.params.z_vals) - 1):
+        for ii in range(len(self.z_vals) - 1):
             # need more gear slices than nurb points to produce 'best' fit without overfitting
             # oversamp ratio controls how many more
             # the 2 end points will be locked down, the middle points are approximated by fitting
             z_tweens = np.linspace(
-                self.params.z_vals[ii], self.params.z_vals[ii + 1], self.n_z_tweens
+                self.z_vals[ii], self.z_vals[ii + 1], self.n_z_tweens
             )
             gear_stack_loc = [self.gear.curve_gen_at_z(z) for z in z_tweens]
             gear_stacks.append(gear_stack_loc)
@@ -104,7 +110,7 @@ class GearToNurbs:
 
     def generate_surface_points_sides(self, method="fast"):
         surface_data = []
-        for ii in range(len(self.params.z_vals) - 1):
+        for ii in range(len(self.z_vals) - 1):
             # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
             stack = self.nurb_profile_stacks[ii]
             points_asd = np.stack([nurbs.points for nurbs in stack], axis=0)
@@ -200,6 +206,27 @@ class GearToNurbs:
         points_out = points_sol[:, :, :3]
         weights_out = points_sol[:, :, 3]
         return sol, points_out, weights_out
+
+
+@dataclasses.dataclass
+class NurbSurfaceData:
+    """
+    Dataclass for storing surface data of b-spline strips.
+    """
+
+    points: np.ndarray
+    weights: np.ndarray
+    knots: np.ndarray
+    n_points_vert: int = 4
+
+    def get_patches(self):
+        for ui in range(len(self.knots) - 1):
+
+            u0 = self.knots[ui]
+            u1 = self.knots[ui + 1]
+            points = self.points[:, u0 : u1 + 1, :]
+            weights = self.weights[:, u0 : u1 + 1]
+            yield {"points": points, "weights": weights}
 
 
 @dataclasses.dataclass
