@@ -42,7 +42,7 @@ def spur_helical_gear():
 
     # gear_spur = InvoluteGear(param)
     gear_spur = InvoluteGear2(
-        z_vals=np.array([0, 1]), module=1, tooth_param=GearTeethData(8)
+        z_vals=np.array([0, 1]), module=1, tooth_param=GearToothParam(8)
     )
     gear_cad = GearBuilder(
         gear=gear_spur,

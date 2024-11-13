@@ -50,7 +50,7 @@ class GearToNurbs:
             nurb_stack = []
             for gearprofile in gear_stack_loc:
                 closed_profile_curve = gg.generate_profile_closed(
-                    gearprofile, self.gear.shape_param(0).cone
+                    gearprofile, self.gear.shape_recipe(0).cone
                 )
                 rd_nurb = crv.convert_curve_nurbezier(gearprofile.rd_curve)
                 tooth_nurb = crv.convert_curve_nurbezier(

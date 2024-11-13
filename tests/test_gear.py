@@ -77,25 +77,25 @@ def test_gear_intersect(
     gear1 = gg.InvoluteGear(
         z_vals=[0, 1],
         module=m,
-        tooth_param=gg.GearTeethData(num_teeth),
+        tooth_param=gg.GearToothParam(num_teeth),
         cone=gg.ConicData(cone_angle=gamma * 2),
         enable_undercut=True,
     )
-    gear1.shape_param.limits.h_d = 1 + 1e-4
-    gear1.shape_param.limits.h_a = 1.0
-    gear1.shape_param.fillet.tip_fillet = tip_fillet
+    gear1.shape_recipe.limits.h_d = 1 + 1e-4
+    gear1.shape_recipe.limits.h_a = 1.0
+    gear1.shape_recipe.fillet.tip_fillet = tip_fillet
     gear1.transform.angle = angle_ref * gear1.tooth_param.pitch_angle
 
     gear2 = gg.InvoluteGear(
         z_vals=[0, 1],
         module=m,
-        tooth_param=gg.GearTeethData(num_teeth_2),
+        tooth_param=gg.GearToothParam(num_teeth_2),
         cone=gg.ConicData(cone_angle=gamma * 2),
         enable_undercut=undercut,
     )
-    gear2.shape_param.limits.h_d = 1 + f0
-    gear2.shape_param.limits.h_a = 1.0
-    gear2.shape_param.fillet.root_fillet = f0
+    gear2.shape_recipe.limits.h_d = 1 + f0
+    gear2.shape_recipe.limits.h_a = 1.0
+    gear2.shape_recipe.fillet.root_fillet = f0
     # gear2.transform.angle = 0.1
     gear2.mesh_to(gear1)
 

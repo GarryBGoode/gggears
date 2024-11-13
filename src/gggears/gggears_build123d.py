@@ -195,7 +195,7 @@ class GearBuilder(GearToNurbs):
         return Edge.make_bezier(*vectors, weights=weights)
 
 
-def apply_transform_part(part: Part, transform: GearBaseTransform):
+def apply_transform_part(part: Part, transform: GearTransform):
     rot1 = scp_Rotation.from_matrix(transform.orientation)
     degrees = rot1.as_euler("zyx", degrees=True)
     part = part.scale(transform.scale)

@@ -22,8 +22,13 @@ import copy
 from typing import Callable
 
 
+# If a dataclass tends to be user input, it should be named param.
+# If a dataclass tends to be generated or manipulated by functions,
+# it should be named data.
+
+
 @dataclasses.dataclass
-class BaseTransformData:
+class TransformData:
     center: np.ndarray = np.zeros(3)
     orientation: np.ndarray = np.eye(3)
     scale: float = 1.0
@@ -41,17 +46,17 @@ class BaseTransformData:
         return self.orientation[:, 2]
 
 
-def apply_base_transform(points: np.ndarray, data: BaseTransformData):
+def apply_transform(points: np.ndarray, data: TransformData):
     return points @ data.orientation.transpose() * data.scale + data.center
 
 
-class BaseTransform(BaseTransformData):
+class Transform(TransformData):
     def __call__(self, points):
-        return apply_base_transform(points, self)
+        return apply_transform(points, self)
 
 
 @dataclasses.dataclass
-class GearBaseTransformData(BaseTransformData):
+class GearTransformData(TransformData):
     """
     Data class for gear base transformation.
     Besides the general base transform, the gear's angle is included.
@@ -62,7 +67,7 @@ class GearBaseTransformData(BaseTransformData):
     angle: float = 0
 
 
-def apply_gear_base_transform(points: np.ndarray, data: GearBaseTransformData):
+def apply_gear_transform(points: np.ndarray, data: GearTransformData):
     rot_z = scp_Rotation.from_euler("z", data.angle).as_matrix()
     return (
         points @ rot_z.transpose() @ data.orientation.transpose() * data.scale
@@ -70,13 +75,13 @@ def apply_gear_base_transform(points: np.ndarray, data: GearBaseTransformData):
     )
 
 
-class GearBaseTransform(GearBaseTransformData):
+class GearTransform(GearTransformData):
     def __call__(self, points):
-        return apply_gear_base_transform(points, self)
+        return apply_gear_transform(points, self)
 
 
 @dataclasses.dataclass
-class GearTeethData:
+class GearToothParam:
     """
     Data class for gear teeth.
     By convention, negative teeth number results inverting the gear
@@ -104,19 +109,18 @@ class GearTeethData:
 
 
 @dataclasses.dataclass
-class GearToothLimitParams:
+class ToothLimitParam:
     h_a: float = 1
     h_d: float = 1.2
     h_o: float = 2
 
 
 @dataclasses.dataclass
-class GearToothLimitCurves:
-    r_a_curve: crv.ArcCurve
-    r_p_curve: crv.ArcCurve
-    r_d_curve: crv.ArcCurve
-    r_o_curve: crv.ArcCurve
-    # natural_transform: Callable[[np.ndarray], np.ndarray] = lambda z: z
+class GearRefCircles:
+    r_a_curve: crv.ArcCurve  # addendum circle
+    r_p_curve: crv.ArcCurve  # pitch circle
+    r_d_curve: crv.ArcCurve  # dedendum circle
+    r_o_curve: crv.ArcCurve  # outside (or inside) ring circle
 
     @property
     def r_a(self):
@@ -170,6 +174,13 @@ class GearPolarTransform(ConicData):
     def __init__(self, cone_angle=0, base_radius=1):
         self.cone_angle = cone_angle
         self.base_radius = base_radius
+
+    def __call__(self, point):
+        return self.polar_transform(point)
+
+    # shorthand
+    def inv(self, point):
+        return self.inverse_polar_transform(point)
 
     def polar_transform(self, point):
         """
@@ -225,7 +236,7 @@ class GearPolarTransform(ConicData):
 
 
 @dataclasses.dataclass
-class InvoluteProfileParam:
+class InvoluteConstructData:
     pressure_angle: float = 20 * PI / 180
     angle_pitch_ref: float = PI / 32  # normally a quarter of the pitch angle
     pitch_radius: float = 8.0
@@ -240,14 +251,14 @@ class UndercutData:
 
 
 @dataclasses.dataclass
-class FilletData:
+class FilletParam:
     tip_fillet: float = 0.0
     root_fillet: float = 0.0
     tip_reduction: float = 0.0
 
 
 def generate_involute_curve(
-    input: InvoluteProfileParam, conic_transform: GearPolarTransform
+    input: InvoluteConstructData, conic_transform: GearPolarTransform
 ):
     rp = input.pitch_radius
     alpha = input.pressure_angle
@@ -324,8 +335,8 @@ def generate_involute_curve(
 
 
 def generate_involute_rack_curve(
-    input: InvoluteProfileParam,
-    ref_limits: GearToothLimitParams,
+    input: InvoluteConstructData,
+    ref_limits: ToothLimitParam,
     conic_transform: GearPolarTransform,
 ):
     if conic_transform.cone_angle == 0:
@@ -409,8 +420,8 @@ def trim_involute_undercut(tooth_curve, undercut_curve, guess=(0.5, 1)):
     return crv.CurveChain(undercut_curve, tooth_curve)
 
 
-def generate_base_circles(
-    rp, limitparam: GearToothLimitParams, coneparam: GearPolarTransform
+def generate_reference_circles(
+    rp, limitparam: ToothLimitParam, coneparam: GearPolarTransform
 ):
     p0 = RIGHT * rp
     pa = coneparam.inverse_polar_transform(
@@ -435,7 +446,7 @@ def generate_base_circles(
     ro_circle = crv.ArcCurve.from_point_center_angle(
         p0=po, center=OUT * po[2], angle=2 * PI
     )
-    return GearToothLimitCurves(ra_circle, rp_circle, rd_circle, ro_circle)
+    return GearRefCircles(ra_circle, rp_circle, rd_circle, ro_circle)
 
 
 def apply_tip_reduction(
@@ -572,14 +583,14 @@ class GearRefProfile:
     tooth_curve_mirror: crv.MirroredCurve
     profile: crv.CurveChain
     pitch_angle: float
-    transform: GearBaseTransform = GearBaseTransform()
+    transform: GearTransform = GearTransform()
 
 
-def generate_profile(
+def trim_reference_profile(
     tooth_curve: crv.Curve,
-    ref_curves: GearToothLimitCurves,
+    ref_curves: GearRefCircles,
     # transform: GearPolarTransform,
-    fillet: FilletData,
+    fillet: FilletParam,
     pitch_angle: float,
 ):
 
@@ -693,38 +704,38 @@ class InvoluteProfileDataCollector:
     for an involute gear.
     """
 
-    involute: InvoluteProfileParam
+    involute: InvoluteConstructData
     cone: ConicData
-    limits: GearToothLimitParams
+    limits: ToothLimitParam
     pitch_angle: float
-    transform: GearBaseTransformData
-    fillet: FilletData
+    transform: GearTransformData
+    fillet: FilletParam
 
     @classmethod
     def from_teeth_data(
-        cls, teeth_data: GearTeethData, module: float = 1, cone_angle=0
+        cls, teeth_data: GearToothParam, module: float = 1, cone_angle=0
     ):
         rp_ref = teeth_data.num_teeth / 2
         pitch_angle = 2 * PI / teeth_data.num_teeth
         return cls(
-            involute=InvoluteProfileParam(
+            involute=InvoluteConstructData(
                 pressure_angle=20 * PI / 180,
                 angle_pitch_ref=pitch_angle / 4,
                 pitch_radius=rp_ref,
             ),
             cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
-            limits=GearToothLimitParams(),
+            limits=ToothLimitParam(),
             pitch_angle=teeth_data.pitch_angle,
-            transform=GearBaseTransformData(scale=module),
-            fillet=FilletData(),
+            transform=GearTransformData(scale=module),
+            fillet=FilletParam(),
         )
 
 
-def generate_involute_profile(
+def generate_reference_profile(
     inputdata: InvoluteProfileDataCollector, enable_undercut=True
 ) -> GearRefProfile:
     conic_transform = GearPolarTransform(inputdata.cone.cone_angle, inputdata.cone.r)
-    ref_curves = generate_base_circles(
+    ref_curves = generate_reference_circles(
         inputdata.involute.pitch_radius, inputdata.limits, conic_transform
     )
     tooth_curve = generate_involute_curve(inputdata.involute, conic_transform)
@@ -769,10 +780,10 @@ def generate_involute_profile(
             inputdata.fillet.root_fillet,
             direction=1,
         )
-    profile = generate_profile(
+    profile = trim_reference_profile(
         tooth_curve, ref_curves, inputdata.fillet, inputdata.pitch_angle
     )
-    profile.transform = GearBaseTransform(**(inputdata.transform.__dict__))
+    profile.transform = GearTransform(**(inputdata.transform.__dict__))
     return profile
 
 
@@ -801,7 +812,10 @@ def generate_profile_closed(profile: GearRefProfile, cone_data: ConicData):
     )
 
 
-def generate_boundary_chain(profile: GearRefProfile, toothdata: GearTeethData):
+def generate_boundary_chain(profile: GearRefProfile, toothdata: GearToothParam):
+    """
+    Create gear boundary by repeating reference profile in a CurveChain.
+    """
     crv_list = []
     for i in range(toothdata.num_teeth_act):
         crv_list.append(
@@ -812,7 +826,11 @@ def generate_boundary_chain(profile: GearRefProfile, toothdata: GearTeethData):
     return crv.CurveChain(*crv_list)
 
 
-def generate_boundary(profile: GearRefProfile, toothdata: GearTeethData):
+def generate_boundary(profile: GearRefProfile, toothdata: GearToothParam):
+    """
+    Create gear boundary by defining custom repeating function for the profile.
+    """
+
     def loc_func(t, curve=profile.profile):
         i = t * toothdata.num_teeth_act // 1
         t2 = t * toothdata.num_teeth_act % 1
@@ -825,12 +843,20 @@ def generate_boundary(profile: GearRefProfile, toothdata: GearTeethData):
 
 
 class ZFunctionMixin:
-    # def __post_init__(self):
-    #     make_callables(self.__dict__)
+    """
+    Mixin class to seemlessly handle callable parameters in dataclasses.
+    3D gear features are sometimes defined by one or more of their parameters
+    being a function z.
+    """
 
     def __call__(self, z):
+        # copy the dict to avoid changing the original
         dict_vals = copy.deepcopy(self.__dict__)
+        # replace all callable values with their evaluated value
         dict_vals = eval_callables(dict_vals, z)
+        # This is interesting in the inheritance context.
+        # When a class inherits from a parameter dataclass and this mixin,
+        # the returned class should be backward compatible with the original dataclass.
         return self.__class__(**dict_vals)
 
 
@@ -839,7 +865,6 @@ def make_callables(indict):
         if isinstance(value, dict):
             make_callables(value)
         elif not callable(value):
-            # if isinstance(value, (float, int, np.ndarray)):
             indict[key] = lambda z, v=value: v
 
 
@@ -850,23 +875,48 @@ def eval_callables(indict, z):
     return indict
 
 
+# "Recipe" names should refer to parameter sets that define certain kinds of gears in
+# 3D, eg. bevel, helical, etc. using callable parameters that represent the
+# parameter value as a function of the extrusion distance z.
+
+
 @dataclasses.dataclass
 class InvoluteToothRecipe(InvoluteProfileDataCollector, ZFunctionMixin):
     pass
 
 
-def default_gear_recipe(teeth_data: GearTeethData, module: float = 1, cone_angle=0):
+class InvoluteProfileParamRecipe(InvoluteConstructData, ZFunctionMixin):
+    pass
+
+
+class ConicDataRecipe(ConicData, ZFunctionMixin):
+    pass
+
+
+class GearToothLimitParamsRecipe(ToothLimitParam, ZFunctionMixin):
+    pass
+
+
+class GearBaseTransformDataRecipe(GearTransformData, ZFunctionMixin):
+    pass
+
+
+class FilletDataRecipe(FilletParam, ZFunctionMixin):
+    pass
+
+
+def default_gear_recipe(teeth_data: GearToothParam, module: float = 1, cone_angle=0):
     rp_ref = teeth_data.num_teeth / 2
     pitch_angle = 2 * PI / teeth_data.num_teeth
     gamma = cone_angle / 2
     return InvoluteToothRecipe(
-        involute=InvoluteProfileParam(
+        involute=InvoluteConstructData(
             pressure_angle=20 * PI / 180,
             angle_pitch_ref=pitch_angle / 4,
             pitch_radius=rp_ref,
         ),
         cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
-        limits=GearToothLimitParams(),
+        limits=ToothLimitParam(),
         pitch_angle=teeth_data.pitch_angle,
         transform=GearBaseTransformDataRecipe(
             scale=lambda z: 1 * (1 - z * 2 * np.sin(gamma) / teeth_data.num_teeth),
@@ -876,34 +926,14 @@ def default_gear_recipe(teeth_data: GearTeethData, module: float = 1, cone_angle
     )
 
 
-class InvoluteProfileParamRecipe(InvoluteProfileParam, ZFunctionMixin):
-    pass
-
-
-class ConicDataRecipe(ConicData, ZFunctionMixin):
-    pass
-
-
-class GearToothLimitParamsRecipe(GearToothLimitParams, ZFunctionMixin):
-    pass
-
-
-class GearBaseTransformDataRecipe(GearBaseTransformData, ZFunctionMixin):
-    pass
-
-
-class FilletDataRecipe(FilletData, ZFunctionMixin):
-    pass
-
-
 class InvoluteGear:
     def __init__(
         self,
         z_vals: np.ndarray = np.array([0, 1]),
         module: float = 1,
-        tooth_param: GearTeethData = None,
-        shape_param: InvoluteToothRecipe = None,
-        transform: GearBaseTransform = None,
+        tooth_param: GearToothParam = None,
+        shape_recipe: InvoluteToothRecipe = None,
+        transform: GearTransform = None,
         cone: ConicData = None,
         enable_undercut: bool = True,
     ):
@@ -911,7 +941,7 @@ class InvoluteGear:
         self.z_vals = z_vals
         self.enable_undercut = enable_undercut
         if tooth_param is None:
-            self.tooth_param = GearTeethData()
+            self.tooth_param = GearToothParam()
         else:
             self.tooth_param = tooth_param
         if cone is None:
@@ -919,20 +949,20 @@ class InvoluteGear:
         else:
             self.cone = cone
         self.cone.base_radius = tooth_param.num_teeth / 2
-        if shape_param is None:
-            self.shape_param = default_gear_recipe(
+        if shape_recipe is None:
+            self.shape_recipe = default_gear_recipe(
                 teeth_data=tooth_param, module=module, cone_angle=cone.cone_angle
             )
         else:
-            self.shape_param = shape_param
+            self.shape_recipe = shape_recipe
         if transform is None:
-            self.transform = GearBaseTransform(scale=self.module)
+            self.transform = GearTransform(scale=self.module)
         else:
             self.transform = transform
 
     @property
     def rp(self):
-        return self.shape_param(0).involute.pitch_radius * self.module
+        return self.shape_recipe(0).involute.pitch_radius * self.module
 
     @property
     def R(self):
@@ -943,7 +973,7 @@ class InvoluteGear:
         return self.tooth_param.pitch_angle
 
     def curve_gen_at_z(self, z):
-        return generate_involute_profile(self.shape_param(z), self.enable_undercut)
+        return generate_reference_profile(self.shape_recipe(z), self.enable_undercut)
 
     def mesh_to(self, other: "InvoluteGear", target_dir=RIGHT, distance_offset=0):
         """
