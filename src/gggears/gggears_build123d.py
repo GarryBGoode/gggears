@@ -178,16 +178,7 @@ class GearBuilder(GearToNurbs):
 
         print(f"fuse time: {time.time()-start}")
         self.solid = Part(self.solid)
-        # rot1 = scp_Rotation.from_matrix(self.gear.transform.orientation)
-
-        # degrees = rot1.as_euler("xyz", degrees=True)
-        # self.solid = self.solid.scale(self.gear.transform.scale)
-        # self.solid = (
-        #     Rotation(degrees[0], degrees[1], degrees[2])
-        #     * Rotation(0, 0, self.gear.transform.angle * 180 / PI)
-        #     * self.solid
-        # )
-        # self.solid = self.solid.translate(self.gear.transform.center)
+        self.solid_transformed = apply_transform_part(self.solid, self.gear.transform)
 
     def gen_splines(self, curve_bezier: Curve):
         vectors = nppoint2Vector(curve_bezier.points)

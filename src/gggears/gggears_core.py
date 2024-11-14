@@ -951,7 +951,7 @@ class InvoluteGear:
         self.cone.base_radius = tooth_param.num_teeth / 2
         if shape_recipe is None:
             self.shape_recipe = default_gear_recipe(
-                teeth_data=tooth_param, module=module, cone_angle=cone.cone_angle
+                teeth_data=tooth_param, module=module, cone_angle=self.cone.cone_angle
             )
         else:
             self.shape_recipe = shape_recipe
@@ -972,8 +972,22 @@ class InvoluteGear:
     def pitch_angle(self):
         return self.tooth_param.pitch_angle
 
+    @property
+    def center(self):
+        return self.transform.center
+
+    @property
+    def center_sphere(self):
+        return (
+            self.transform.center
+            + self.R * np.cos(self.cone.gamma) * self.transform.z_axis
+        )
+
     def curve_gen_at_z(self, z):
         return generate_reference_profile(self.shape_recipe(z), self.enable_undercut)
+
+    def copy(self) -> "InvoluteGear":
+        return copy.deepcopy(self)
 
     def mesh_to(self, other: "InvoluteGear", target_dir=RIGHT, distance_offset=0):
         """
@@ -1078,8 +1092,8 @@ class InvoluteGear:
             rot1 = scp_Rotation.from_rotvec(-target_plane_norm * angle_ref)
             center_offs = rot1.apply(-center_sph) + center_sph_other
             self.transform.orientation = other.transform.orientation @ rot1.as_matrix()
-            self.transform.center += center_offs
-            self.transform.angle += angle_offs
+            self.transform.center = self.transform.center + center_offs
+            self.transform.angle = self.transform.angle + angle_offs
 
         else:
             # one is cylindrical, the other is spherical
