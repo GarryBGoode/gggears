@@ -72,7 +72,7 @@ def test_gear_intersect(
 
     num_teeth_2 = 52
 
-    n_poly = 3600
+    n_poly = 600
 
     gear1 = gg.InvoluteGear(
         z_vals=[0, 1],
@@ -104,12 +104,14 @@ def test_gear_intersect(
     outer_curve = crv.TransformedCurve(
         gear1.transform, gg.generate_boundary(gear_gen1, gear1.tooth_param)
     )
-    points = outer_curve(np.linspace(-0.25, 0.25, n_poly))
+    points = outer_curve(np.linspace(-2 / num_teeth, 2 / num_teeth, n_poly))
+    points = np.append(points, gear1.transform.center[np.newaxis, :], axis=0)
 
     outer_curve2 = crv.TransformedCurve(
         gear2.transform, gg.generate_boundary(gear_gen2, gear2.tooth_param)
     )
-    points2 = outer_curve2(np.linspace(-0.25, 0.25, n_poly))
+    points2 = outer_curve2(np.linspace(-2 / num_teeth_2, 2 / num_teeth_2, n_poly))
+    points2 = np.append(points2, gear2.transform.center[np.newaxis, :], axis=0)
 
     poly1 = shp.geometry.Polygon(points)
     poly2 = shp.geometry.Polygon(points2)
@@ -138,10 +140,10 @@ def test_gear_intersect(
 if __name__ == "__main__":
 
     test_gear_intersect(
-        num_teeth=62,
+        num_teeth=121,
         module=2,
         angle_ref=1.0,
-        root_fillet=0.4,
-        tip_fillet=0.4,
+        root_fillet=-1,
+        tip_fillet=0,
         enable_plotting=True,
     )

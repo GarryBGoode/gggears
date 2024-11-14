@@ -29,8 +29,8 @@ from typing import Callable
 
 @dataclasses.dataclass
 class TransformData:
-    center: np.ndarray = np.zeros(3)
-    orientation: np.ndarray = np.eye(3)
+    center: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
+    orientation: np.ndarray = dataclasses.field(default_factory=lambda: UNIT3X3)
     scale: float = 1.0
 
     @property
@@ -247,7 +247,7 @@ class InvoluteConstructData:
 class UndercutData:
     pitch_radius: float = 8.0
     cone_angle: float = 0
-    undercut_ref_point: np.ndarray = ORIGIN
+    undercut_ref_point: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
 
 
 @dataclasses.dataclass
@@ -583,7 +583,9 @@ class GearRefProfile:
     tooth_curve_mirror: crv.MirroredCurve
     profile: crv.CurveChain
     pitch_angle: float
-    transform: GearTransform = GearTransform()
+    transform: GearTransform = dataclasses.field(
+        default_factory=lambda: GearTransform()
+    )
 
 
 def trim_reference_profile(
@@ -710,25 +712,6 @@ class InvoluteProfileDataCollector:
     pitch_angle: float
     transform: GearTransformData
     fillet: FilletParam
-
-    @classmethod
-    def from_teeth_data(
-        cls, teeth_data: GearToothParam, module: float = 1, cone_angle=0
-    ):
-        rp_ref = teeth_data.num_teeth / 2
-        pitch_angle = 2 * PI / teeth_data.num_teeth
-        return cls(
-            involute=InvoluteConstructData(
-                pressure_angle=20 * PI / 180,
-                angle_pitch_ref=pitch_angle / 4,
-                pitch_radius=rp_ref,
-            ),
-            cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
-            limits=ToothLimitParam(),
-            pitch_angle=teeth_data.pitch_angle,
-            transform=GearTransformData(scale=module),
-            fillet=FilletParam(),
-        )
 
 
 def generate_reference_profile(
@@ -880,7 +863,6 @@ def eval_callables(indict, z):
 # parameter value as a function of the extrusion distance z.
 
 
-@dataclasses.dataclass
 class InvoluteToothRecipe(InvoluteProfileDataCollector, ZFunctionMixin):
     pass
 
