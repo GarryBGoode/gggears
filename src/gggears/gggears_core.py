@@ -32,7 +32,7 @@ class InvoluteGearParam():
     axis_offset: float = 0
     center: np.ndarray = dataclasses.field(default_factory=ORIGIN)
     angle: float = 0
-    orientation: np.ndarray = np.eye(3)
+    orientation: np.ndarray = dataclasses.field(default_factory=np.eye(3))
     h_a: float = 1
     h_d: float = 1.2
     h_o: float = 2
