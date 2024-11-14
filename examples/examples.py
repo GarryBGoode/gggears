@@ -12,7 +12,8 @@ limitations under the License.
 """
 
 from gggears.gggears_build123d import *
-
+from ocp_vscode import show, set_port
+import time
 
 # These examples are meant to showcase the functionality of the library,
 # and serve as manual testing templates for the developer.
@@ -20,27 +21,24 @@ from gggears.gggears_build123d import *
 
 def spur_helical_gear():
 
-    param = InvoluteGearParamManager(
-        z_vals=[0, 4],  # combined with the center function this defines gear height
-        num_teeth=8,  # number of teeth
-        module=2,  # module
-        cone_angle=0,  # cone angle for bevel gears
-        center=ORIGIN,
-        enable_undercut=True,  # enable undercut - don't use with root fillet at the same time
-        inside_teeth=False,  # inside teeth for ring gears
+    gear_spur = InvoluteGear(
+        z_vals=np.array([0, 4]),
+        module=2,
+        tooth_param=GearToothParam(num_teeth=8),
+        enable_undercut=True,
     )
-    param.z_params.angle = 0  # progress angle, can be used for helical
-    param.z_params.h_d = 1.2  # dedendum height coefficient
-    param.z_params.h_a = 1.0  # addendum height coefficient
-    param.z_params.h_o = 2.5  # outer ring (or inner ring) coefficient
-    param.z_params.root_fillet = 0.0  # root fillet radius coefficient
-    param.z_params.tip_fillet = 0.0  # tip fillet radius coefficient
-    param.z_params.tip_reduction = 0.2  # tip reduction (truncation) coefficient
-    param.z_params.profile_reduction = 0  # profile reduction coefficient (for backlash)
-    param.z_params.profile_shift = 0.8  # profile shift coefficient  param.z_params.
-    param.z_params.fix_callables()
 
-    gear_spur = InvoluteGear(param)
+    gear_spur.shape_recipe.transform.angle = (
+        0  # progress angle, can be used for helical
+    )
+    gear_spur.shape_recipe.limits.h_d = 1.2  # dedendum height coefficient
+    gear_spur.shape_recipe.limits.h_a = 1.0  # addendum height coefficient
+    gear_spur.shape_recipe.limits.h_o = 2.5  # outer ring (or inner ring) coefficient
+    gear_spur.shape_recipe.fillet.root_fillet = 0.0  # root fillet radius coefficient
+    gear_spur.shape_recipe.fillet.tip_fillet = 0.0  # tip fillet radius coefficient
+    # tip reduction (truncation) coefficient
+    gear_spur.shape_recipe.fillet.tip_reduction = 0.2
+
     gear_cad = GearBuilder(
         gear=gear_spur,
         n_points_vert=2,  # nurb spline points in vertical direction
@@ -49,13 +47,17 @@ def spur_helical_gear():
         method="fast",  # switch for slightly faster or slower nurb generation method
     )
 
-    # being lazy with the parameters here, but a deepcopy might be better
-    param.num_teeth = 21
-    param.z_params.profile_shift = lambda z: 0.0
+    gear_helical = gear_spur.copy()
+    gear_helical.tooth_param.num_teeth = 21
+    gear_helical.shape_recipe = default_gear_recipe(
+        teeth_data=gear_helical.tooth_param, module=2, cone_angle=0
+    )
     # making the angle a function of z will make the gear helical
     # proper calculation of helix angle is not implemented yet
-    param.z_params.angle = lambda z: z * 0.03
-    gear_helical = InvoluteGear(param)
+    gear_helical.shape_recipe.transform.angle = lambda z: 0.1 * z
+
+    # being lazy with the parameters here, but a deepcopy might be better
+
     gear_cad_helical = GearBuilder(
         gear=gear_helical,
         n_points_vert=3,  # spiral curves need at least 3 points
@@ -74,52 +76,38 @@ def planetary_gear():
     m = 3
     # ring gear convention: geometry is same as spur gear but cut out from ring block
     # care must be taken with addendum and dedendum values, spur gear defaults may not work
-    param_ring = InvoluteGearParamManager(
-        z_vals=[0, 12],
-        num_teeth=90,
+    gear_ring = InvoluteGear(
+        z_vals=np.array([0, 12]),
         module=m,
-        h_d=1.0,  # addendum coeff larger than dedendum for clearence
-        h_a=1.2,
-        h_o=2.5,  # this controls the outer ring diameter relative to pitch diameter
-        # ring gears can use undercut geometry but it most likely causes interference
-        # root fillet is preferred for ring gears
-        root_fillet=0.2,
+        tooth_param=GearToothParam(num_teeth=90, inside_teeth=True),
         enable_undercut=False,
-        tip_reduction=0.2,
-        inside_teeth=True,
     )
 
-    param_sun = InvoluteGearParamManager(
-        z_vals=[0, 12],
-        num_teeth=12,
+    gear_ring.shape_recipe.transform.angle = (
+        0  # progress angle, can be used for helical
+    )
+    gear_ring.shape_recipe.limits.h_d = 1.0  # dedendum height coefficient
+    gear_ring.shape_recipe.limits.h_a = 1.2  # addendum height coefficient
+    gear_ring.shape_recipe.limits.h_o = -2.5  # outer ring (or inner ring) coefficient
+    gear_ring.shape_recipe.fillet.root_fillet = 0.3  # root fillet radius coefficient
+    gear_ring.shape_recipe.fillet.tip_fillet = 0.0  # tip fillet radius coefficient
+
+    gear_sun = InvoluteGear(
+        z_vals=np.array([0, 12]),
         module=m,
-        h_d=1.2,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=0.0,
-        tip_reduction=0.2,
+        tooth_param=GearToothParam(num_teeth=12),
         enable_undercut=True,
-        inside_teeth=False,
     )
 
-    param_planet = InvoluteGearParamManager(
-        z_vals=[0, 12],
-        num_teeth=39,
+    gear_planet1 = InvoluteGear(
+        z_vals=np.array([0, 12]),
         module=m,
-        h_d=1.2,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=0.0,
-        tip_reduction=0.2,
+        tooth_param=GearToothParam(num_teeth=39),
         enable_undercut=True,
-        inside_teeth=False,
     )
 
-    gear_ring = InvoluteGear(param_ring)
-    gear_sun = InvoluteGear(param_sun)
-    gear_planet1 = InvoluteGear(param_planet)
-    gear_planet2 = InvoluteGear(param_planet)
-    gear_planet3 = InvoluteGear(param_planet)
+    gear_planet2 = gear_planet1.copy()
+    gear_planet3 = gear_planet1.copy()
 
     # using the mesh_to function to align planets with the sun
     gear_planet1.mesh_to(
@@ -146,71 +134,47 @@ def planetary_gear():
     )
 
     return (
-        gear_ring_cad.solid,
-        gear_sun_cad.solid,
-        gear_planet1_cad.solid,
-        gear_planet2_cad.solid,
-        gear_planet3_cad.solid,
+        gear_ring_cad.solid_transformed,
+        gear_sun_cad.solid_transformed,
+        gear_planet1_cad.solid_transformed,
+        gear_planet2_cad.solid_transformed,
+        gear_planet3_cad.solid_transformed,
     )
 
 
 def bevel_gear():
 
     num_teeth_1 = 26
-    num_teeth_2 = 13
+    num_teeth_2 = 9
+    beta = 0.05
     # module
     m = 4
     # half cone angle
     # this calculation ensures that bevels will generate a 90 degree axial angle
     gamma = np.arctan2(num_teeth_1, num_teeth_2)
-    axis = OUT
 
-    beta = 0.05
-
-    param1 = InvoluteGearParamManager(
+    gear_1 = InvoluteGear(
         z_vals=[0, 5],
-        num_teeth=num_teeth_1,
+        tooth_param=GearToothParam(num_teeth=num_teeth_1),
+        cone=ConicData(cone_angle=gamma * 2),
         module=m,
-        # this is the half cone angle
-        cone_angle=gamma * 2,
-        # note the abs function that corresponds to the breakpoint in z_vals
-        h_d=1.2,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=0.2,
-        tip_fillet=0.2,
-        tip_reduction=0.2,
-        profile_reduction=0,
-        profile_shift=0.0,
-        enable_undercut=False,
-        inside_teeth=False,
+        enable_undercut=True,
     )
-    param1.z_params.angle = lambda z: z * beta
-    param1.z_params.cone_angle = lambda z: gamma * 2
+    gear_1.shape_recipe.transform.angle = lambda z: z * beta
 
     gamma2 = PI / 2 - gamma
-    param2 = InvoluteGearParamManager(
+    gear_2 = InvoluteGear(
         z_vals=[0, 5],
-        num_teeth=num_teeth_2,
+        tooth_param=GearToothParam(num_teeth=num_teeth_2),
+        cone=ConicData(cone_angle=gamma2 * 2),
         module=m,
-        cone_angle=gamma2 * 2,
-        # note the abs function that corresponds to the breakpoint in z_vals
-        h_d=1.2,
-        h_a=1.0,
-        h_o=2.5,
-        root_fillet=0.0,
-        tip_fillet=0.2,
-        tip_reduction=0.2,
-        profile_reduction=0,
-        profile_shift=0.0,
         enable_undercut=True,
-        inside_teeth=False,
     )
-    param2.z_params.angle = lambda z: -z * beta * num_teeth_1 / num_teeth_2
-    param2.z_params.cone_angle = lambda z: gamma2 * 2
-    gear_1 = InvoluteGear(param1)
-    gear_2 = InvoluteGear(param2)
-    gear_2.mesh_to(gear_1, target_dir=normalize_vector(LEFT + UP * 0.1))
+    gear_2.shape_recipe.transform.angle = (
+        lambda z: -z * beta * num_teeth_1 / num_teeth_2
+    )
+
+    gear_2.mesh_to(gear_1, target_dir=rotate_vector(RIGHT, 3 * PI / 4))
 
     gear_cad1 = GearBuilder(
         gear=gear_1, n_points_vert=3, n_points_hz=4, add_plug=False, method="fast"
@@ -218,11 +182,15 @@ def bevel_gear():
     gear_cad2 = GearBuilder(
         gear=gear_2, n_points_vert=3, n_points_hz=4, add_plug=False, method="fast"
     )
-    return (gear_cad1.solid, gear_cad2.solid)
+    return (gear_cad1.solid_transformed, gear_cad2.solid_transformed)
 
 
 def fishbone_bevels():
-    # it is a bit slow to build the gear so time measurements are thrown in here and there
+    # This example was meant to stress the library a bit, and to generate
+    # interlocking bevel gears. In theory it should be possible to design them in a way
+    # that they form a 'ball' that mechanically locks together.
+    #
+    # It is a bit slow to build the gear so time measurements are thrown in here
     start = time.time()
 
     num_teeth = 9
@@ -230,54 +198,52 @@ def fishbone_bevels():
     m = 4
     # half cone angle
     gamma = PI / 4
+    beta = 0.65
 
-    param = InvoluteGearParamManager(
-        # the middle value is used for enabling a breakpoint for the angle funciton
+    gear_base = InvoluteGear(
         z_vals=[0, 2, 4],
-        num_teeth=num_teeth,
+        tooth_param=GearToothParam(num_teeth=num_teeth),
+        cone=ConicData(cone_angle=gamma * 2),
         module=m,
-        # gamma is the half cone angle
-        cone_angle=gamma * 2,
-        h_d=1.4,
-        h_a=1.35,
-        h_o=2.5,
-        root_fillet=0.0,
-        tip_fillet=0.0,
-        tip_reduction=0.2,
-        # some backlash is generated by the profile reduction
-        profile_reduction=0.01,
-        profile_shift=0.0,
-        # yes, bevel gears can have undercuts
         enable_undercut=True,
-        inside_teeth=False,
     )
-    # note the abs function that corresponds to the breakpoint in z_vals
-    param.z_params.angle = lambda z: np.abs(z - param.z_vals[1]) * 0.2
-    param.z_params.cone_angle = lambda z: gamma * 2
-
-    gear_base = InvoluteGear(param)
+    gear_base.shape_recipe.involute.pressure_angle = 35 * PI / 180
+    gear_base.shape_recipe.limits.h_a = 1.0
+    gear_base.shape_recipe.limits.h_d = 1.1
+    gear_base.shape_recipe.limits.h_o = 1.6
+    gear_base.shape_recipe.fillet.tip_reduction = 0.0
+    gear_base.shape_recipe.fillet.tip_fillet = 0.1
+    gear_base.shape_recipe.transform.angle = lambda z: np.abs(z - 2) * beta
 
     gear_cad = GearBuilder(
-        gear=gear_base, n_points_vert=3, n_points_hz=3, add_plug=True, method="slow"
+        gear=gear_base, n_points_vert=5, n_points_hz=4, add_plug=False, method="fast"
     )
 
     print(f"gear build time: {time.time()-start}")
 
-    solid1 = Part(
-        gear_cad.solid.translate(
-            nppoint2Vector(-gear_cad.gear_generator_ref.center_sphere)
-        )
+    gear2 = gear_base.copy()
+    gear2.mesh_to(gear_base, target_dir=rotate_vector(RIGHT, 0))
+    gear3 = gear_base.copy()
+    gear3.mesh_to(
+        gear_base,
+        target_dir=rotate_vector(
+            RIGHT,
+            np.round(2 * PI / 3 / gear_base.pitch_angle) * gear_base.pitch_angle,
+        ),
     )
-    solid1 = solid1 - Hole(radius=4, depth=50)
-    solid2 = (
-        solid1.rotate(Axis.Y, 90)
-        .mirror(Plane.XY)
-        .rotate(Axis.X, gear_cad.gear_generator_ref.pitch_angle * RAD2DEG * 0.5)
+    gear4 = gear_base.copy()
+    gear4.mesh_to(
+        gear_base,
+        target_dir=rotate_vector(
+            RIGHT, np.round(4 * PI / 3 / gear_base.pitch_angle) * gear_base.pitch_angle
+        ),
     )
-    solid3 = solid2.rotate(Axis.Z, 120)
-    solid4 = solid2.rotate(Axis.Z, -120)
-    solid5 = solid1.rotate(Axis.Y, 180)
-    # gears can be exported to step files
+
+    solid1 = gear_cad.solid_transformed
+    solid2 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear2.transform)
+    solid3 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear3.transform)
+    solid4 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear4.transform)
+    solid5 = solid1.rotate(Axis((0, 0, gear_base.center_sphere[2]), (0, 1, 0)), 180)
     # export_step(solid1,"fishbone_bevel_left.step")
     # solid1b = solid1.mirror(Plane.XZ)
     # export_step(solid1b,"fishbone_bevel_right.step")
@@ -285,4 +251,5 @@ def fishbone_bevels():
 
 
 if __name__ == "__main__":
-    bevel_gear()
+    set_port(3939)
+    show(fishbone_bevels())

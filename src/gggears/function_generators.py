@@ -366,6 +366,11 @@ def xyz_to_spherical(v, center=ORIGIN):
 
 
 def spherical_to_xyz(s, center=ORIGIN):
+    """
+    Convert to cartesian coordinates. Spherical center can be set as kwarg. Zero angles are at the north pole and along the x axis.
+    Input convention: s= [r, phi, theta] (radius, azimuth angle, polar angle)
+    Returns: x, y, z coordinates
+    """
     s = np.asarray(s)
     center = np.asarray(center)
     single_vector = s.ndim == 1
@@ -380,6 +385,12 @@ def spherical_to_xyz(s, center=ORIGIN):
 
 
 def xyz_to_cylindrical(v, center=ORIGIN):
+    """
+    Convert to cylindrical coordinates. Cylindrical center can be set as kwarg. Zero angles are at the x axis.
+    Returns:
+    r: radius,
+    phi: azimuth angle (rotation around z),
+    z: height"""
     v = np.asarray(v)
     center = np.asarray(center)
     single_vector = v.ndim == 1
@@ -393,6 +404,11 @@ def xyz_to_cylindrical(v, center=ORIGIN):
 
 
 def cylindrical_to_xyz(c, center=ORIGIN):
+    """
+    Convert to cartesian coordinates. Cylindrical center can be set as kwarg. Zero angles are at the x axis.
+    Input convention: c= [r, phi, z]
+    Returns: x, y, z coordinates
+    """
     c = np.asarray(c)
     center = np.asarray(center)
     single_vector = c.ndim == 1

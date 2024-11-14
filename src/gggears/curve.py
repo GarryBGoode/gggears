@@ -1196,6 +1196,10 @@ class SphericalInvoluteCurve(Curve):
         return (np.sqrt(self.R**2 - self.r**2) + self.z_offs) * OUT
 
     @property
+    def center_sphere(self):
+        return self.center
+
+    @property
     def R(self):
         return 1 / self.c_sphere
 
@@ -1246,7 +1250,7 @@ class MirroredCurve(TransformedCurve):
 
 
 class RotatedCurve(TransformedCurve):
-    def __init__(self, curve: Curve, angle=0, axis=OUT, center=ORIGIN):
+    def __init__(self, curve: Curve, angle=0.0, axis=OUT, center=ORIGIN):
         self.axis = normalize_vector(axis)
         self.angle = angle
         self.center = center
