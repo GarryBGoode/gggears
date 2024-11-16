@@ -206,6 +206,9 @@ class SpurGear:
             * (self.profile_shift * self.module + other.profile_shift * other.module),
         )
 
+    def copy(self):
+        return copy.deepcopy(self)
+
 
 class SpurRingGear(SpurGear):
     """
@@ -713,12 +716,15 @@ class BevelGear(SpurGear):
 
     Examples
     --------
-    >>> n1 = 12
-    >>> n2 = 24
-    >>> gamma = np.arctan2(n1, n2)
-    >>> gamma2 = np.pi/2-gamma
-    >>> gear1 = BevelGear(number_of_teeth=12, cone_angle=gamma, spiral_coefficient=0.5)
-    >>> gear2 = BevelGear(number_of_teeth=24, cone_angle=gamma2, spiral_coefficient=-0.5)
+    >>> num_teeth_1 = 16
+    >>> num_teeth_2 = 31
+    >>> beta = 0.5
+    >>> gamma = np.arctan2(num_teeth_1, num_teeth_2)
+    >>> gamma2 = np.pi / 2 - gamma
+    >>> height = 5
+    >>> m = 2
+    >>> gear1 = BevelGear(number_of_teeth=num_teeth_1,module=m,height=height,cone_angle=gamma * 2, spiral_coefficient=beta)
+    >>> gear2 = BevelGear(number_of_teeth=num_teeth_2,module=m,height=height,cone_angle=gamma2 * 2,spiral_coefficient=-beta)
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
@@ -801,7 +807,7 @@ class BevelGear(SpurGear):
                     tip_fillet=self.tip_fillet,
                     tip_reduction=self.tip_truncation,
                 ),
-                cone=ConicData(cone_angle=self.cone_angle, base_radius=self.rp),
+                cone=ConicData(cone_angle=self.cone_angle, base_radius=rp_ref),
                 pitch_angle=self.pitch_angle,
                 transform=GearTransformRecipe(
                     scale=lambda z: 1
