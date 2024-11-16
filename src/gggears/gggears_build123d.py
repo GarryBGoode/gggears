@@ -109,10 +109,9 @@ class GearBuilder(GearToNurbs):
         #     ),
         # )
         axis1 = Axis.Z
-        start = time.time()
-        print("starting fusion")
+
         for k in range(len(bin_n_teeth)):
-            print(f"fusion step: {k}")
+
             if k == 0:
                 shape_dict.append(solid1)
                 angle = 0
@@ -176,7 +175,6 @@ class GearBuilder(GearToNurbs):
             plug = Solid(Shell(plug_surfaces))
             self.solid = self.solid.fuse(plug).clean()
 
-        print(f"fuse time: {time.time()-start}")
         self.solid = Part(self.solid)
         self.solid_transformed = apply_transform_part(self.solid, self.gear.transform)
 
