@@ -875,11 +875,11 @@ class ConicDataRecipe(ConicData, ZFunctionMixin):
     pass
 
 
-class GearToothLimitParamsRecipe(ToothLimitParam, ZFunctionMixin):
+class ToothLimitParamRecipe(ToothLimitParam, ZFunctionMixin):
     pass
 
 
-class GearBaseTransformDataRecipe(GearTransformData, ZFunctionMixin):
+class GearTransformRecipe(GearTransformData, ZFunctionMixin):
     pass
 
 
@@ -900,7 +900,7 @@ def default_gear_recipe(teeth_data: GearToothParam, module: float = 1, cone_angl
         cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
         limits=ToothLimitParam(),
         pitch_angle=teeth_data.pitch_angle,
-        transform=GearBaseTransformDataRecipe(
+        transform=GearTransformRecipe(
             scale=lambda z: 1 * (1 - z * 2 * np.sin(gamma) / teeth_data.num_teeth),
             center=lambda z: 1 * z * OUT * np.cos(gamma),
         ),
@@ -957,6 +957,10 @@ class InvoluteGear:
     @property
     def center(self):
         return self.transform.center
+
+    @center.setter
+    def center(self, value):
+        self.transform.center = value
 
     @property
     def center_sphere(self):
@@ -1076,6 +1080,7 @@ class InvoluteGear:
             self.transform.orientation = other.transform.orientation @ rot1.as_matrix()
             self.transform.center = self.transform.center + center_offs
             self.transform.angle = self.transform.angle + angle_offs
+            pass  # to be able to stop here in debugging
 
         else:
             # one is cylindrical, the other is spherical
