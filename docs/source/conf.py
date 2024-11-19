@@ -9,8 +9,8 @@ import sys
 
 # import gggears
 
-sys.path.insert(0, os.path.abspath("../src"))
-sys.path.insert(0, os.path.abspath("../src/gggears"))
+sys.path.insert(0, os.path.abspath("../../src"))
+sys.path.insert(0, os.path.abspath("../../src/gggears"))
 
 
 # -- Project information -----------------------------------------------------
