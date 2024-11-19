@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.abspath("../src/gggears"))
 project = "gggears"
 copyright = "2024, Gergely Bencsik"
 author = "Gergely Bencsik"
-release = "0.0.1"
+release = "0.1"
+version = "0.1.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
