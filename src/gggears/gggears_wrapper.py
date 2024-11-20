@@ -12,6 +12,7 @@
 import numpy as np
 from gggears.gggears_core import *
 from gggears.gggears_build123d import *
+from build123d import Part
 
 
 class SpurGear:
@@ -124,17 +125,21 @@ class SpurGear:
 
     @property
     def rp(self):
+        """Pitch radius of the gear at z=0."""
         return self.module * self.number_of_teeth / 2
 
     @property
     def pitch_angle(self):
+        """Pitch angle of the gear."""
         return 2 * PI / self.number_of_teeth
 
     def update_tooth_param(self):
+        """Updates the tooth parameters for the gear. (pitch angle calculated here)"""
         return GearToothParam(self.number_of_teeth)
 
     def calc_params(self):
-
+        """Sets up the internal construction recipe for the gear based on the
+        parameters."""
         # reference pitch radius with module 1
         rp_ref = self.rp / self.module
 
@@ -181,7 +186,12 @@ class SpurGear:
             ),
         )
 
-    def build_part(self):
+    def build_part(self) -> Part:
+        """Creates the build123d Part object of the gear. This may take several seconds.
+
+        Returns
+        -------
+        Part"""
         if self.crowning == 0:
             n_vert = 2
         else:
@@ -196,6 +206,8 @@ class SpurGear:
         return self.builder.solid_transformed
 
     def update_part(self):
+        """Updates the build123d Part object accordingly if
+        the current gear was moved or rotated"""
         if self.builder is None:
             self.build_part()
         self.builder.solid_transformed = apply_transform_part(
@@ -204,6 +216,16 @@ class SpurGear:
         return self.builder.solid_transformed
 
     def mesh_to(self, other: "SpurGear", target_dir: np.ndarray = RIGHT):
+        """Aligns this gear to another gear object.
+
+        Arguments
+        ---------
+        other: SpurGear
+            The other gear object to align to.
+        target_dir: np.ndarray
+            The direction in which the gear should be placed in relation to the other gear.
+            Should be a unit vector. Default is RIGHT (x).
+        """
         if (
             self.gearcore.tooth_param.inside_teeth
             or other.gearcore.tooth_param.inside_teeth
@@ -219,6 +241,7 @@ class SpurGear:
         )
 
     def copy(self):
+        """:no-index:"""
         return copy.deepcopy(self)
 
 
@@ -330,9 +353,11 @@ class SpurRingGear(SpurGear):
             self.gearcore.shape_recipe.limits.h_o *= -1
 
     def update_tooth_param(self):
+        """:no-index:"""
         return GearToothParam(self.number_of_teeth, inside_teeth=True)
 
     def build_part(self):
+        """:no-index:"""
         if self.crowning == 0:
             n_vert = 2
         else:
@@ -472,15 +497,18 @@ class HelicalGear(SpurGear):
             self.gearcore.shape_recipe.transform.angle = (
                 lambda z, coeff=angle_coeff: z * coeff
             )
+        cosbeta = np.cos(beta)
         self.gearcore.shape_recipe.transform.center = (
-            lambda z, coeff=np.cos(beta): OUT * z * coeff
+            lambda z, coeff=cosbeta: OUT * z * coeff
         )
 
     @property
     def beta(self):
+        """Beta = helix angle of the gear."""
         return self.helix_angle
 
     def build_part(self):
+        """:no-index:"""
         max_zval = np.max(self.gearcore.z_vals[1:] - self.gearcore.z_vals[:-1])
         twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
         if twist_angle < PI / 16:
@@ -619,9 +647,11 @@ class HelicalRingGear(HelicalGear):
             self.gearcore.shape_recipe.limits.h_o *= -1
 
     def update_tooth_param(self):
+        """:no-index:"""
         return GearToothParam(self.number_of_teeth, inside_teeth=True)
 
     def build_part(self):
+        """:no-index:"""
         max_zval = np.max(self.gearcore.z_vals[1:] - self.gearcore.z_vals[:-1])
         twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
         if twist_angle < PI / 16:
@@ -784,7 +814,6 @@ class BevelGear(SpurGear):
             crowning=crowning,
             profile_shift=0,
         )
-        # self.gearcore.shape_recipe.cone = ConicData(cone_angle=PI / 4)
 
     def calc_params(self):
 
