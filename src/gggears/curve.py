@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Module for representing curves in 3D space."""
 
 from gggears.defs import *
 from gggears.function_generators import *
@@ -20,6 +21,31 @@ from enum import Enum
 class Curve:
     """
     A class to represent a curve in space.
+
+    Calling a Curve object with a parameter (s) will return the point on the curve at that parameter.
+    The parameter (s) is in the range [0, 1] and is lenght-equalized, meaning equally distributed (s)
+    values will result in (approximately) equally distanced points in space.
+    s=0 is considered the start and s=1 is considered the end of the curve.
+    Extrapolation outside this range is possible, but not recommended.
+
+    Attributes
+    ----------
+    curve_function : callable
+        The mathematical function to generate curve points.
+        Has to have 1 input argument, but can have multiple keyword arguments.
+        Has to return one or more points in 3D space. Points has to correspond to the input argument.
+    active : bool
+        Used in CurveChains to show if curve is degenerate, such as a 0 length line.
+    t_0 : float
+        Start of the curve in its natural parameter.
+    t_1 : float
+        End of the curve in its natural parameter.
+    params : dict
+        Keyword arguments for the curve_function.
+    enable_vectorize : bool
+        Vectorize feature is used to iterate over np.array inputs,
+        to eg. generate 100 points on the curve with np.linspace.
+        If curve_function already handles array inputs (common for numpy functions), this can be disabled.
     """
 
     def __init__(
@@ -48,7 +74,7 @@ class Curve:
         self.length = 0
         self.len_approx_N = 101
         # used for length-parametrization conversion
-        self.t2l = {"t": np.array([-1e6, 1e6]), "l": np.array([-1e6, 1e6])}
+        self.t2s_lookup = {"t": np.array([-1e6, 1e6]), "s": np.array([-1e6, 1e6])}
 
         # vectorize feature is used to iterate over np.array inputs,
         # to eg. generate 100 points on the curve with np.linspace
@@ -58,92 +84,95 @@ class Curve:
             # update_lengths might be CP expensive so only done if active
             self.update_lengths()
 
-    def __call__(self, p):
-        t = self.p2t(p)
+    def __call__(self, s):
+        t = self.s2t(s)
         if self.enable_vectorize:
             return vectorize(self.function)(t, **self.params)
         else:
             return self.function(t, **self.params)
 
-    def p2t(self, p):
+    def s2t(self, s):
+        """Convert length-proportional parameter s to natural parameter t."""
         # numpy interp is faster and more efficient but cannot extrapolate
-        retval = np.interp(p, self.t2l["l"], self.t2l["t"])
+        retval = np.interp(s, self.t2s_lookup["s"], self.t2s_lookup["t"])
         # custom interpolation function used for extrapolation
-        if np.ndim(p) > 0:
-            if any(p < 0):
-                retval[p < 0] = interpolate(
-                    p[p < 0],
-                    self.t2l["l"][0],
-                    self.t2l["l"][1],
-                    self.t2l["t"][0],
-                    self.t2l["t"][1],
+        if np.ndim(s) > 0:
+            if any(s < 0):
+                retval[s < 0] = interpolate(
+                    s[s < 0],
+                    self.t2s_lookup["s"][0],
+                    self.t2s_lookup["s"][1],
+                    self.t2s_lookup["t"][0],
+                    self.t2s_lookup["t"][1],
                 )
-            if any(p > 1):
-                retval[p > 1] = interpolate(
-                    p[p > 1],
-                    self.t2l["l"][-1],
-                    self.t2l["l"][-2],
-                    self.t2l["t"][-1],
-                    self.t2l["t"][-2],
+            if any(s > 1):
+                retval[s > 1] = interpolate(
+                    s[s > 1],
+                    self.t2s_lookup["s"][-1],
+                    self.t2s_lookup["s"][-2],
+                    self.t2s_lookup["t"][-1],
+                    self.t2s_lookup["t"][-2],
                 )
         else:
-            if p < 0:
+            if s < 0:
                 retval = interpolate(
-                    p,
-                    self.t2l["l"][0],
-                    self.t2l["l"][1],
-                    self.t2l["t"][0],
-                    self.t2l["t"][1],
+                    s,
+                    self.t2s_lookup["s"][0],
+                    self.t2s_lookup["s"][1],
+                    self.t2s_lookup["t"][0],
+                    self.t2s_lookup["t"][1],
                 )
-            elif p > 1:
+            elif s > 1:
                 retval = interpolate(
-                    p,
-                    self.t2l["l"][-1],
-                    self.t2l["l"][-2],
-                    self.t2l["t"][-1],
-                    self.t2l["t"][-2],
+                    s,
+                    self.t2s_lookup["s"][-1],
+                    self.t2s_lookup["s"][-2],
+                    self.t2s_lookup["t"][-1],
+                    self.t2s_lookup["t"][-2],
                 )
         return retval
 
-    def t2p(self, t):
-        retval = np.interp(t, self.t2l["t"], self.t2l["l"])
+    def t2s(self, t):
+        """Convert natural parameter t to length-proportional parameter s."""
+        retval = np.interp(t, self.t2s_lookup["t"], self.t2s_lookup["s"])
         if np.ndim(t) > 0:
             if any(t < self.t_0):
                 retval[t < self.t_0] = interpolate(
                     t[t < self.t_0],
-                    self.t2l["t"][0],
-                    self.t2l["t"][1],
-                    self.t2l["l"][0],
-                    self.t2l["l"][1],
+                    self.t2s_lookup["t"][0],
+                    self.t2s_lookup["t"][1],
+                    self.t2s_lookup["s"][0],
+                    self.t2s_lookup["s"][1],
                 )
             if any(t > self.t_1):
                 retval[t > self.t_1] = interpolate(
                     t[t > self.t_1],
-                    self.t2l["t"][-1],
-                    self.t2l["t"][-2],
-                    self.t2l["l"][-1],
-                    self.t2l["l"][-2],
+                    self.t2s_lookup["t"][-1],
+                    self.t2s_lookup["t"][-2],
+                    self.t2s_lookup["s"][-1],
+                    self.t2s_lookup["s"][-2],
                 )
         else:
             if t < self.t_0:
                 retval = interpolate(
                     t,
-                    self.t2l["t"][0],
-                    self.t2l["t"][1],
-                    self.t2l["l"][0],
-                    self.t2l["l"][1],
+                    self.t2s_lookup["t"][0],
+                    self.t2s_lookup["t"][1],
+                    self.t2s_lookup["s"][0],
+                    self.t2s_lookup["s"][1],
                 )
             elif t > self.t_1:
                 retval = interpolate(
                     t,
-                    self.t2l["t"][-1],
-                    self.t2l["t"][-2],
-                    self.t2l["l"][-1],
-                    self.t2l["l"][-2],
+                    self.t2s_lookup["t"][-1],
+                    self.t2s_lookup["t"][-2],
+                    self.t2s_lookup["s"][-1],
+                    self.t2s_lookup["s"][-2],
                 )
         return retval
 
     def update_lengths(self):
+        """Update the length of the curve and the length-proportional parameter lookup."""
         t_range = np.linspace(self.t_0, self.t_1, self.len_approx_N)
         if self.enable_vectorize:
             value_array = vectorize(self.function)(t_range, **self.params)
@@ -160,26 +189,34 @@ class Curve:
         # 0 length curve is degenerate, but division by 0 should still be avoided
         # if curve length is 0 then any point selected at (t) will return the same point
         if self.length == 0:
-            self.t2l["l"] = np.linspace(0, 1, self.len_approx_N)
+            self.t2s_lookup["s"] = np.linspace(0, 1, self.len_approx_N)
         else:
-            self.t2l["l"] = curve_len / self.length
-        self.t2l["t"] = t_range
+            self.t2s_lookup["s"] = curve_len / self.length
+        self.t2s_lookup["t"] = t_range
 
     def reverse(self):
+        """Reverse the curve in place."""
         self.t_0, self.t_1 = self.t_1, self.t_0
-        self.t2l["t"] = np.flip(self.t2l["t"])
+        self.t2s_lookup["t"] = np.flip(self.t2s_lookup["t"])
         return self
 
     def derivative(self, t, direction=0, n=1, delta=DELTA):
         """
         Numerically approximate the curve gradient at t.
-        t: curve parameter where the derivative is evaluated at.
-        direction: 1: forward, -1: backward, 0: balanced derivative.
-        n: derivative order (n=2: second derivative, etc.)
-            0 and negative value (integral) does not work, this is not calculus.
-        delta: small value used for numeric differentiation.
+
+        Parameters
+        ----------
+        t: float
+            curve parameter where the derivative is evaluated at.
+        direction: int
+            1: forward, -1: backward, 0: balanced derivative.
+        n: int
+            derivative order (n=2: second derivative, etc.)
+            0 and negative value (integral) does not work.
+        delta: float
+            small value used for numeric differentiation.
             Hint: consider using larger deltas for higher order derivatives,
-            it is easy to run into floating point issues.
+            it is easy to run into floating point issues even on double precision.
         """
 
         def numeric_diff(function, t, direction, delta):
@@ -196,6 +233,7 @@ class Curve:
             return numeric_diff(self.derivative, t, direction, n - 1, delta)
 
     def cut(self, t):
+        """Cut the curve at t and return two new curves."""
         curve1 = copy.deepcopy(self)
         curve2 = copy.deepcopy(self)
         curve1.set_end_on(t)
@@ -203,22 +241,28 @@ class Curve:
         return curve1, curve2
 
     def copy(self):
+        """Deepcopy of the curve"""
         return copy.deepcopy(self)
 
-    def set_start_and_end_on(self, t0, t1):
-        self.t_0 = self.p2t(t0)
-        self.t_1 = self.p2t(t1)
+    def set_start_and_end_on(self, s0, s1):
+        """Set the start and end of the curve in length-proportional parameter s."""
+        self.t_0 = self.s2t(s0)
+        self.t_1 = self.s2t(s1)
         self.update_lengths()
 
-    def set_start_on(self, t0):
-        self.t_0 = self.p2t(t0)
+    def set_start_on(self, s0):
+        """Set the start of the curve in length-proportional parameter s."""
+        self.t_0 = self.s2t(s0)
         self.update_lengths()
 
-    def set_end_on(self, t1):
-        self.t_1 = self.p2t(t1)
+    def set_end_on(self, s1):
+        """Set the end of the curve in length-proportional parameter s."""
+        self.t_1 = self.s2t(s1)
         self.update_lengths()
 
     def __add__(self, other: "Curve"):
+        """Add two curves together. Output vectors are added."""
+
         def add_func(t, curve=self, other=other):
             return curve(t) + other(t)
 
@@ -232,6 +276,8 @@ class Curve:
         )
 
     def __sub__(self, other: "Curve"):
+        """Subtract two curves. Output vectors are subtracted."""
+
         def sub_func(t, curve=self, other=other):
             return curve(t) - other(t)
 
@@ -245,6 +291,7 @@ class Curve:
         )
 
     def __mul__(self, other):
+        """Multiply the curve by a scalar. Output vectors are multiplied."""
         if isinstance(other, (int, float)):
 
             def mult_func(t, curve=self, val=other):
@@ -264,9 +311,11 @@ class Curve:
             )
 
     def __rmul__(self, other):
+        """Multiply the curve by a scalar. Output vectors are multiplied."""
         return self.__mul__(other)
 
     def __truediv__(self, other):
+        """Divide the curve by a scalar. Output vectors are divided."""
         if isinstance(other, (int, float)):
             return Curve(
                 lambda t: self(t) / other,
@@ -283,17 +332,15 @@ class Curve:
 
     @property
     def is_closed(self):
+        """Property to check if the curve starts and ends on the same point."""
         return np.linalg.norm(self(0) - self(1)) < DELTA / 100
 
 
 class CurveChain(Curve):
-    """
-    A class that chains together multiple curves while also being callable,
-      and can be used as a single curve.
-    """
+    """A class to represent a kind of polyline made up of Curves. Also can behave like a Curve."""
 
     def __init__(self, *curves: "Curve", active=True, **kwargs):
-        self.curves = [*curves]
+        self.curves: list[Curve] = [*curves]
         self._active = active
         self.update_lengths()
         # super().__init__() is actually not needed.
@@ -304,6 +351,7 @@ class CurveChain(Curve):
 
     @property
     def active(self):
+        """A CurveChain is active if its own _active attribute is True and has at least 1 subcurve that is active."""
         return self._active and any([curve.active for curve in self.curves])
 
     @active.setter
@@ -321,6 +369,7 @@ class CurveChain(Curve):
 
     @property
     def length_array(self):
+        """Return the lengths of each curve in the chain in an array."""
         return np.array([curve.length if curve.active else 0 for curve in self.curves])
 
     @property
@@ -328,34 +377,50 @@ class CurveChain(Curve):
         return np.sum(self.length_array)
 
     # these might still show up some time
-    def p2t(self, p):
+    # needed to override these from inherited functions, but not needed for CurveChain
+    def s2t(self, p):
         return p
 
-    def t2p(self, t):
+    def t2s(self, t):
         return t
 
     @property
     def idx_active_min(self):
+        """Find the first active curve in the chain."""
         try:
             return [curve.active for curve in self.curves].index(True)
+        # normally this shouldn't be called if the entire curve is inactive but just in case
         except ValueError:
             return len(self.curves)
 
     @property
     def idx_active_max(self):
+        """Find the last active curve in the chain."""
         try:
             return (
                 len(self.curves)
                 - [curve.active for curve in reversed(self.curves)].index(True)
                 - 1
             )
+        # normally this shouldn't be called if the entire curve is inactive but just in case
         except ValueError:
             return -1
 
-    def get_p_index(self, t):
-        """find which curve index t belongs to and how far along it is in the curve"""
+    def get_s_index(self, s):
+        """Find which curve index s belongs to and how far along it is in the curve.
+
+        Parameters
+        ----------
+        s : float
+            Length-proportional parameter of the chain.
+
+        Returns
+        -------
+        tuple : (int, float)
+            Index of the curve in the chain and the length-proportional parameter of the indexed curve.
+        """
         length_portions = self.get_length_portions()
-        idx = np.searchsorted(length_portions, t)
+        idx = np.searchsorted(length_portions, s)
 
         if idx > self.idx_active_max + 1:
             idx = self.idx_active_max + 1
@@ -363,26 +428,27 @@ class CurveChain(Curve):
             idx = self.idx_active_min + 1
 
         if (length_portions[idx] - length_portions[idx - 1]) != 0:
-            t3 = (t - length_portions[idx - 1]) / (
+            s_idx = (s - length_portions[idx - 1]) / (
                 length_portions[idx] - length_portions[idx - 1]
             )
         else:
-            t3 = 0.5
-        return idx - 1, t3
+            s_idx = 0.5
+        return idx - 1, s_idx
 
     def get_t_for_index(self, idx):
         length_portions = self.get_length_portions()
         return length_portions[idx], length_portions[idx + 1]
 
     def get_length_portions(self):
+        """Return an array of lenght-parameters of the curve starting and ending points."""
         length_sum = np.cumsum(self.length_array)
         length_portions = np.concatenate([[0], length_sum / self.length])
         return length_portions
 
-    def curve_list_eval(self, t):
-
-        idx, t2 = self.get_p_index(t)
-        point_out = self.curves[idx](t2)
+    def curve_list_eval(self, s):
+        """Return the point corresponding to length-proportional parameter s."""
+        idx, s2 = self.get_s_index(s)
+        point_out = self.curves[idx](s2)
         return point_out
 
     def __call__(self, p):
@@ -392,6 +458,7 @@ class CurveChain(Curve):
         return vectorize(self.curve_list_eval)(p)
 
     def get_curves(self, lerp_inactive=False):
+        """Return the list of curves in the chain. Flattens the array structure if there are nested chains."""
         curve_list = []
         for curve in self.curves:
             if isinstance(curve, CurveChain):
@@ -460,39 +527,78 @@ class CurveChain(Curve):
         for curve in self.curves:
             curve.reverse()
 
-    def set_start_and_end_on(self, t0, t1, preserve_inactive_curves=False):
-        idx, t2 = self.get_p_index(t0)
+    def set_start_and_end_on(self, s0, s1, preserve_inactive_curves=False):
+        """Set the start and end of the chain in length-proportional parameter s.
+
+        Parameters
+        ----------
+        s0 : float
+            Start of the chain in length-proportional parameter s.
+        s1 : float
+            End of the chain in length-proportional parameter s.
+        preserve_inactive_curves : bool
+            If True, curves that are not part of the range will remain in the curves array of
+            the chain, with active=False status.
+            If False, curves outside of the range get removed.
+        """
+        idx, s2 = self.get_s_index(s0)
         if preserve_inactive_curves:
             for curve in self.curves[:idx]:
                 curve.active = False
-            self.curves[idx].set_start_on(t2)
+            self.curves[idx].set_start_on(s2)
         else:
             self.curves = self.curves[idx:]
-            self.curves[0].set_start_on(t2)
+            self.curves[0].set_start_on(s2)
 
-        idx, t2 = self.get_p_index(t1)
+        idx, s2 = self.get_s_index(s1)
         if preserve_inactive_curves:
             for curve in self.curves[idx + 1 :]:
                 curve.active = False
-            self.curves[idx].set_end_on(t2)
+            self.curves[idx].set_end_on(s2)
         else:
             self.curves = self.curves[: idx + 1]
-            self.curves[-1].set_end_on(t2)
+            self.curves[-1].set_end_on(s2)
         self.update_lengths()
 
-    def set_start_on(self, t0, preserve_inactive_curves=False):
-        idx, t2 = self.get_p_index(t0)
+    def set_start_on(self, s0, preserve_inactive_curves=False):
+        """Set the start of the chain in length-proportional parameter s.
+
+        Parameters
+        ----------
+        s0 : float
+            Start of the chain in length-proportional parameter s.
+        s1 : float
+            End of the chain in length-proportional parameter s.
+        preserve_inactive_curves : bool
+            If True, curves that are not part of the range will remain in the curves array of
+            the chain, with active=False status.
+            If False, curves outside of the range get removed.
+        """
+        idx, s2 = self.get_s_index(s0)
         if preserve_inactive_curves:
             for curve in self.curves[:idx]:
                 curve.active = False
-            self.curves[idx].set_start_on(t2)
+            self.curves[idx].set_start_on(s2)
         else:
             self.curves = self.curves[idx:]
-            self.curves[0].set_start_on(t2)
+            self.curves[0].set_start_on(s2)
         self.update_lengths()
 
-    def set_end_on(self, t1, preserve_inactive_curves=False):
-        idx, t2 = self.get_p_index(t1)
+    def set_end_on(self, s1, preserve_inactive_curves=False):
+        """Set the end of the chain in length-proportional parameter s.
+
+        Parameters
+        ----------
+        s0 : float
+            Start of the chain in length-proportional parameter s.
+        s1 : float
+            End of the chain in length-proportional parameter s.
+        preserve_inactive_curves : bool
+            If True, curves that are not part of the range will remain in the curves array of
+            the chain, with active=False status.
+            If False, curves outside of the range get removed.
+        """
+        idx, t2 = self.get_s_index(s1)
         if preserve_inactive_curves:
             for curve in self.curves[idx + 1 :]:
                 curve.active = False
@@ -504,6 +610,7 @@ class CurveChain(Curve):
         self.update_lengths()
 
     def cut(self, t, preserve_inactive_curves=False):
+        """Cut the chain at t and return two new chains."""
         curve1 = copy.deepcopy(self)
         curve2 = copy.deepcopy(self)
 
@@ -515,6 +622,10 @@ class CurveChain(Curve):
         return curve1, curve2
 
     def fillet_at_locations(self, radius, locations=[0.5, 0.6]):
+        """Add a fillet (tangent arc) to the curve chain near the specified locations.
+
+        Suitable points for tangent arc are searched with starting points at the specified locations.
+        """
         arc, t1, t2 = fillet_curve(self, radius, start_locations=locations)
         curve1 = copy.deepcopy(self)
         curve2 = copy.deepcopy(self)
@@ -523,6 +634,10 @@ class CurveChain(Curve):
         return CurveChain(*curve1.get_curves(), arc, *curve2.get_curves())
 
     def fillet(self, radius, location=0.5):
+        """Add a fillet (tangent arc) to the curve chain at the specified location.
+
+        Suitable points for tangent arc are searched with starting points at the specified single location.
+        """
         return self.fillet_at_locations(
             radius, [location + radius / self.length, location - radius / self.length]
         )
@@ -533,6 +648,10 @@ class CurveChain(Curve):
 
     @property
     def continuity_list(self):
+        """A list of booleans showing if the curves in the chain are continuous with each other.
+
+        The last value shows if the curve is closed (continuity between last and first curve).
+        Inactive curves count as continuous."""
         out_list = []
         for k in range(self.num_curves):
             diff = np.linalg.norm(
@@ -565,6 +684,7 @@ def find_curve_intersect(
     guess=[0.5, 0.5],
     method: "IntersectMethod" = IntersectMethod.EQUALITY,
 ):
+    """Find the intersection point of two curves."""
     if method == IntersectMethod.EQUALITY:
         res = root(
             lambda t: curve1(t[0]) - curve2(t[1]), np.array([guess[0], guess[1], 0])
@@ -580,6 +700,7 @@ def find_curve_intersect(
 
 
 def find_curve_line_intersect(curve, offset=ORIGIN, line_direction=RIGHT, guess=0):
+    """Find the intersection point of a curve and a line."""
     res = root(
         lambda t: np.linalg.norm(np.cross((curve(t) - offset), line_direction)), guess
     )
@@ -587,6 +708,8 @@ def find_curve_line_intersect(curve, offset=ORIGIN, line_direction=RIGHT, guess=
 
 
 def find_curve_plane_intersect(curve, plane_normal=OUT, offset=ORIGIN, guess=0):
+    """Find the intersection point of a curve and a plane."""
+
     def target_func(t):
         val = np.dot((curve(t[0]) - offset), plane_normal)
         return val
@@ -596,6 +719,7 @@ def find_curve_plane_intersect(curve, plane_normal=OUT, offset=ORIGIN, guess=0):
 
 
 def find_curve_nearest_point(curve: Curve, point, guesses=[0.5]):
+    """Find the curve parameter where the curve is closest to a point."""
     results = []
     for guess in guesses:
         results.append(
@@ -609,6 +733,7 @@ def find_curve_nearest_point(curve: Curve, point, guesses=[0.5]):
 
 
 def fit_bezier_hermite(target_curve: Curve):
+    """Fit a cubic bezier curve to a curve using Hermite interpolation."""
     points = np.zeros((4, 3))
     points[0] = target_curve(0)
     points[3] = target_curve(1)
@@ -814,6 +939,13 @@ def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False, samp_ratio=
 
 
 def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
+    """Convert a curve to a NURBS curve.
+
+    If the input is a single Curve, it is converted to a NURB curve. If the input is a CurveChain,
+    it is converted to NURBS.
+    If the input is an arc (ArcCurve) shorter tha 180deg, it is converted to a 3-point NURB with exact solution.
+    If the input is a LineCurve, it is converted to a 2-point NURB.
+    Otherwise conversion is done via approximation using optimization."""
     if hasattr(input_curve, "__iter__"):
         out_curve_list = []
         for curve in input_curve:
@@ -939,6 +1071,8 @@ def fillet_curve(input_curves: CurveChain, radius: float, start_locations=[0.5, 
 
 
 class LineCurve(Curve):
+    """Class to represent a line as a Curve."""
+
     def __init__(self, p0=ORIGIN, p1=ORIGIN, active=True, enable_vectorize=False):
         self.p0 = p0
         self.p1 = p1
@@ -961,11 +1095,13 @@ class LineCurve(Curve):
 
     def update_lengths(self):
         self.length = np.linalg.norm(self.p1 - self.p0)
-        self.t2l["l"] = np.array([0, 1])
-        self.t2l["t"] = np.array([self.t_0, self.t_1])
+        self.t2s_lookup["s"] = np.array([0, 1])
+        self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 
 
 class ArcCurve(Curve):
+    """Class to represent an arc as a Curve."""
+
     def __init__(
         self, radius=1, angle=PI / 2, center=ORIGIN, yaw=0, pitch=0, roll=0, active=True
     ):
@@ -990,8 +1126,8 @@ class ArcCurve(Curve):
 
     def update_lengths(self):
         self.length = self.radius * self.angle
-        self.t2l["l"] = np.array([0, 1])
-        self.t2l["t"] = np.array([self.t_0, self.t_1])
+        self.t2s_lookup["s"] = np.array([0, 1])
+        self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 
     @property
     def radius(self):
@@ -1129,6 +1265,8 @@ class ArcCurve(Curve):
 
 
 class InvoluteCurve(Curve):
+    """Class to represent an involute curve as a Curve."""
+
     def __init__(
         self,
         r=1,
@@ -1157,6 +1295,8 @@ class InvoluteCurve(Curve):
 
 
 class SphericalInvoluteCurve(Curve):
+    """Class to represent a spherical involute curve as a Curve."""
+
     def __init__(
         self,
         r=1,
@@ -1204,6 +1344,8 @@ class SphericalInvoluteCurve(Curve):
 
 
 class TransformedCurve(Curve):
+    """Class for applying simple transformations to a Curve and using the result as a Curve."""
+
     def __init__(
         self,
         transform: callable,
@@ -1229,6 +1371,8 @@ class TransformedCurve(Curve):
 
 
 class MirroredCurve(TransformedCurve):
+    """Class for mirroring a Curve across a plane."""
+
     def __init__(self, curve: Curve, plane_normal=RIGHT, center=ORIGIN):
         self.plane_normal = normalize_vector(plane_normal)
         self.center = center
@@ -1249,6 +1393,8 @@ class MirroredCurve(TransformedCurve):
 
 
 class RotatedCurve(TransformedCurve):
+    """Class for rotating a Curve around an axis."""
+
     def __init__(self, curve: Curve, angle=0.0, axis=OUT, center=ORIGIN):
         self.axis = normalize_vector(axis)
         self.angle = angle
@@ -1264,6 +1410,8 @@ class RotatedCurve(TransformedCurve):
 
 
 class NurbCurve(Curve):
+    """Class to represent a NURB (a single piece of non-universial rational bezier) curve as a Curve."""
+
     def __init__(self, points, weights, active=True):
         self.points = points
         self.weights = weights
@@ -1284,6 +1432,8 @@ class NurbCurve(Curve):
 
 
 class NURBSCurve(CurveChain):
+    """Class to represent a NURBS curve chain as a CurveChain of NURB curves."""
+
     def __init__(self, *curves: "NurbCurve", active=True, **kwargs):
         self.curves = [*curves]
         self._active = active
