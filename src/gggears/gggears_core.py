@@ -1254,7 +1254,7 @@ class InvoluteGear:
             if self.tooth_param.inside_teeth:
                 distance_ref = r2 - r1 + distance_offset
             elif other.tooth_param.inside_teeth:
-                distance_ref = r1 - r2 - distance_offset
+                distance_ref = r2 - r1 - distance_offset
             else:
                 distance_ref = r1 + r2 + distance_offset
 
