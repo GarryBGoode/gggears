@@ -1,15 +1,13 @@
-"""
-Copyright 2024 Gergely Bencsik
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
+# Copyright 2024 Gergely Bencsik
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from gggears.function_generators import *
 from gggears.defs import *
@@ -29,6 +27,18 @@ from typing import Callable
 
 @dataclasses.dataclass
 class TransformData:
+    """Data class for general 3D transformation (move, rotate, scale).
+
+    Attributes
+    ----------
+    center : np.ndarray
+        Center displacement the transformation.
+    orientation : np.ndarray
+        Orientation matrix of the transformation.
+    scale : float
+        Scale factor of the transformation.
+    """
+
     center: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
     orientation: np.ndarray = dataclasses.field(default_factory=lambda: UNIT3X3)
     scale: float = 1.0
@@ -46,12 +56,32 @@ class TransformData:
         return self.orientation[:, 2]
 
 
-def apply_transform(points: np.ndarray, data: TransformData):
+def apply_transform(points: np.ndarray, data: TransformData) -> np.ndarray:
+    """
+    Apply a general 3D transformation to a set of points.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        An array of points to be transformed. Each point should be a 3D coordinate.
+    data : TransformData
+        An object containing the transformation data, including orientation, scale,
+        and center shift.
+
+    Returns
+    -------
+    np.ndarray
+        The transformed points as an array of the same shape as the input.
+    """
     return points @ data.orientation.transpose() * data.scale + data.center
 
 
 class Transform(TransformData):
-    def __call__(self, points):
+    """
+    A callable class for applying a general 3D transformation to a set of points.
+    """
+
+    def __call__(self, points) -> np.ndarray:
         return apply_transform(points, self)
 
 
@@ -62,12 +92,24 @@ class GearTransformData(TransformData):
     Besides the general base transform, the gear's angle is included.
     This helps track the gear's rotation-advance, phase angle, etc.
     separately from its orientation.
+
+    Attributes
+    ----------
+    center : np.ndarray
+        Center displacement the transformation.
+    orientation : np.ndarray
+        Orientation matrix of the transformation.
+    scale : float
+        Scale factor of the transformation.
+    angle : float
+        The angle of the gear in radians.
     """
 
     angle: float = 0
 
 
-def apply_gear_transform(points: np.ndarray, data: GearTransformData):
+def apply_gear_transform(points: np.ndarray, data: GearTransformData) -> np.ndarray:
+    """Apply GearTransform to a set of points."""
     rot_z = scp_Rotation.from_euler("z", data.angle).as_matrix()
     return (
         points @ rot_z.transpose() @ data.orientation.transpose() * data.scale
@@ -76,7 +118,10 @@ def apply_gear_transform(points: np.ndarray, data: GearTransformData):
 
 
 class GearTransform(GearTransformData):
-    def __call__(self, points):
+    """A callable class for applying a gear transformation to a set of points.
+    Inherited from GearTransformData."""
+
+    def __call__(self, points) -> np.ndarray:
         return apply_gear_transform(points, self)
 
 
@@ -88,6 +133,25 @@ class GearToothParam:
     (i.e. inside teeth).
     Non-integer teeth number results in the actual number rounded down,
     but the size of the gear and teeth matching the rational input.
+
+    Notes
+    -----
+    It makes no sense for a gear to have a non-integer number of teeth,
+    but it can make sense to design a single tooth or a partial gear with
+    a size corresponding to a non-integer number of teeth.
+
+    There is no lower limit for the number of teeth,
+    but a value around 0...3 might break things.
+
+    Attributes
+    ----------
+    num_teeth : float
+        Number of teeth. Negative will set inside teeth.
+        Non-integer will be rounded down, but there will be a gap.
+    num_cutout_teeth : int
+        Number of teeth not realized in the gear.
+    inside_teeth : bool
+        Used for creating inside-ring gears.
     """
 
     num_teeth: float = 16
@@ -101,15 +165,29 @@ class GearToothParam:
 
     @property
     def num_teeth_act(self):
+        """Actual (integer) number of teeth, considering rounding and cutout."""
         return int(np.floor(self.num_teeth - self.num_cutout_teeth))
 
     @property
     def pitch_angle(self):
+        """Pitch angle in radians"""
         return 2 * PI / self.num_teeth
 
 
 @dataclasses.dataclass
 class ToothLimitParam:
+    """Dataclass for radial limiting coefficients (addendum, dedendum, etc.).
+
+    Attributes
+    ----------
+    h_a : float
+        Addendum height coefficient.
+    h_d : float
+        Dedendum height coefficient.
+    h_o : float
+        Outside ring height coefficient.
+    """
+
     h_a: float = 1
     h_d: float = 1.2
     h_o: float = 2
@@ -117,6 +195,20 @@ class ToothLimitParam:
 
 @dataclasses.dataclass
 class GearRefCircles:
+    """Data class for gear reference circles as Curve objects.
+
+    Attributes
+    ----------
+    r_a_curve : crv.ArcCurve
+        Addendum circle.
+    r_p_curve : crv.ArcCurve
+        Pitch circle.
+    r_d_curve : crv.ArcCurve
+        Dedendum circle.
+    r_o_curve : crv.ArcCurve
+        Outside (or inside) ring circle.
+    """
+
     r_a_curve: crv.ArcCurve  # addendum circle
     r_p_curve: crv.ArcCurve  # pitch circle
     r_d_curve: crv.ArcCurve  # dedendum circle
@@ -124,23 +216,29 @@ class GearRefCircles:
 
     @property
     def r_a(self):
+        """Radius of the addendum circle."""
         return self.r_a_curve.r
 
     @property
     def r_p(self):
+        """Radius of the pitch circle."""
         return self.r_p_curve.r
 
     @property
     def r_d(self):
+        """Radius of the dedendum circle."""
         return self.r_d_curve.r
 
     @property
     def r_o(self):
+        """Radius of the outside (or inside) ring circle."""
         return self.r_o_curve.r
 
 
 @dataclasses.dataclass
 class ConicData:
+    """Dataclass for cone parameters."""
+
     cone_angle: float = 0
     base_radius: float = 1
 
@@ -154,6 +252,7 @@ class ConicData:
 
     @property
     def center(self):
+        """Spherical center (tip) of the cone."""
         return OUT * self.height
 
     @property
@@ -171,6 +270,10 @@ class ConicData:
 
 
 class GearPolarTransform(ConicData):
+    """Callable class for polar transformation of points.
+
+    Uses a cylindric transform for 0 cone angle, otherwise spherical polar transform."""
+
     def __init__(self, cone_angle=0, base_radius=1):
         self.cone_angle = cone_angle
         self.base_radius = base_radius
@@ -179,16 +282,26 @@ class GearPolarTransform(ConicData):
         return self.polar_transform(point)
 
     # shorthand
-    def inv(self, point):
+    def inv(self, point) -> np.ndarray:
         return self.inverse_polar_transform(point)
 
-    def polar_transform(self, point):
+    def polar_transform(self, point) -> np.ndarray:
         """
         Return polar coordinates helpful for gear generation.
-        Convention: [out - angle - height]
-        "out" is the quasi radial coordinate, the gear teeth grow in this direction.
-        "angle" is the angle around the gear.
-        "height" is the 3rd direction, typically the extrusion direction.
+
+        Parameters
+        ----------
+        point : np.ndarray
+            A 3D point to be transformed.
+
+        Returns
+        -------
+        np.ndarray
+            The transformed point in polar coordinates.
+            Convention: [out - angle - height]
+            "out" is the quasi radial coordinate, the gear teeth grow in this direction.
+            "angle" is the angle around the gear.
+            "height" is the 3rd direction, typically the extrusion direction.
         """
         if self.cone_angle == 0:
             return xyz_to_cylindrical(point)
@@ -215,7 +328,8 @@ class GearPolarTransform(ConicData):
                     ]
                 ).transpose()
 
-    def inverse_polar_transform(self, point):
+    def inverse_polar_transform(self, point) -> np.ndarray:
+        """Inverse of the `polar_transform`."""
         if self.cone_angle == 0:
             return cylindrical_to_xyz(point)
         else:
@@ -237,6 +351,21 @@ class GearPolarTransform(ConicData):
 
 @dataclasses.dataclass
 class InvoluteConstructData:
+    """Data class for involute curve construction.
+
+    Attributes
+    ----------
+    pressure_angle : float
+        Pressure angle in radians. Angle between radial direction and tooth flank
+        tangent at the ponit where the involute intersects the pitch circle.
+    angle_pitch_ref : float
+        Reference angle for the pitch circle in radians.
+        Normally a quarter of the pitch angle.
+        Angle-coordinate of the point where the involute intersects the pitch circle.
+    pitch_radius : float
+        Radius of the pitch circle.
+    """
+
     pressure_angle: float = 20 * PI / 180
     angle_pitch_ref: float = PI / 32  # normally a quarter of the pitch angle
     pitch_radius: float = 8.0
@@ -245,6 +374,18 @@ class InvoluteConstructData:
 
 @dataclasses.dataclass
 class UndercutData:
+    """Data class for undercut curve construction.
+
+    Attributes
+    ----------
+    pitch_radius : float
+        Radius of the pitch circle.
+    cone_angle : float
+        Cone angle in radians.
+    undercut_ref_point : np.ndarray
+        Offset vector used for constructing the undercut trochoid.
+    """
+
     pitch_radius: float = 8.0
     cone_angle: float = 0
     undercut_ref_point: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
@@ -252,6 +393,18 @@ class UndercutData:
 
 @dataclasses.dataclass
 class FilletParam:
+    """Data class for tooth tip and root modification parameters.
+
+    Attributes
+    ----------
+    tip_fillet : float
+        Tip fillet radius coefficent.
+    root_fillet : float
+        Root fillet radius coefficent.
+    tip_reduction : float
+        Tip reduction (truncation) coefficient.
+    """
+
     tip_fillet: float = 0.0
     root_fillet: float = 0.0
     tip_reduction: float = 0.0
@@ -259,7 +412,15 @@ class FilletParam:
 
 def generate_involute_curve(
     input: InvoluteConstructData, conic_transform: GearPolarTransform
-):
+) -> crv.CurveChain:
+    """Generate involute curve for a gear tooth.
+
+    Returns
+    -------
+    crv.CurveChain
+        A curve chain containing the involute curve and the connector line extending it
+        at the root. Curve starts at the connector bottom and moves towards the tip.
+    """
     rp = input.pitch_radius
     alpha = input.pressure_angle
     gamma = conic_transform.cone_angle / 2
@@ -338,7 +499,16 @@ def generate_involute_rack_curve(
     input: InvoluteConstructData,
     ref_limits: ToothLimitParam,
     conic_transform: GearPolarTransform,
-):
+) -> crv.Curve:
+    """Generate trapezoid reference rack curve for involute teeth.
+
+    Generates spherical rack curve for conical gears.
+    Genereates only 1 flank of the rack curve.
+
+    Returns
+    -------
+    crv.Curve
+        The flank of the rack curve."""
     if conic_transform.cone_angle == 0:
         rp = input.pitch_radius
         pitch_len_ref = rp * input.angle_pitch_ref
@@ -377,7 +547,8 @@ def generate_involute_rack_curve(
         return curve1
 
 
-def generate_undercut_curve(input: UndercutData):
+def generate_undercut_curve(input: UndercutData) -> crv.Curve:
+    """Generate undercut curve for involute teeth."""
     if input.cone_angle == 0:
         undercut_curve = crv.InvoluteCurve(
             r=input.pitch_radius,
@@ -411,7 +582,11 @@ def generate_undercut_curve(input: UndercutData):
     return undercut_curve
 
 
-def trim_involute_undercut(tooth_curve, undercut_curve, guess=(0.5, 1)):
+def trim_involute_undercut(
+    tooth_curve, undercut_curve, guess=(0.5, 1)
+) -> crv.CurveChain:
+    """Find the intersection and trim the tooth curve (involute curve)
+    with undercut curve."""
     sol = crv.find_curve_intersect(tooth_curve, undercut_curve, guess=guess)
     # solcheck = np.linalg.norm(tooth_curve(sol.x[0]) - undercut_curve(sol.x[1]))
 
@@ -422,7 +597,9 @@ def trim_involute_undercut(tooth_curve, undercut_curve, guess=(0.5, 1)):
 
 def generate_reference_circles(
     rp, limitparam: ToothLimitParam, coneparam: GearPolarTransform
-):
+) -> GearRefCircles:
+    """Generates reference circles as Curve objects for a gear tooth."""
+    # TODO: this could be a classmethod of GearRefCircles?
     p0 = RIGHT * rp
     pa = coneparam.inverse_polar_transform(
         coneparam.polar_transform(p0) + np.array([limitparam.h_a, 0, 0])
@@ -450,12 +627,21 @@ def generate_reference_circles(
 
 
 def apply_tip_reduction(
-    tooth_curve,
-    addendum_height,
-    dedendum_height,
-    tip_reduction,
+    tooth_curve: crv.CurveChain,
+    addendum_height: float,
+    dedendum_height: float,
+    tip_reduction: float,
     polar_transformer: GearPolarTransform,
-):
+) -> float:
+    """Apply tip reduction feature and return radius.
+
+    Checks if tip reduction is necessary (due to sharp point tip) and returns the
+    reduced addendum radius to be used for truncated tip.
+
+    Returns
+    -------
+    float
+        The reduced addendum radius."""
     soldata = []
     rah = addendum_height
     rdh = dedendum_height
@@ -484,7 +670,22 @@ def apply_fillet(
     target_circle: crv.ArcCurve,
     fillet_radius: float,
     direction=1,
-):
+) -> crv.CurveChain:
+    """Apply fillet to the tooth curve.
+
+    Parameters
+    ----------
+    tooth_curve : crv.CurveChain
+        The tooth curve to be filleted.
+    pitch_angle : float
+        The pitch angle of the gear in radians.
+    target_circle : crv.ArcCurve
+        The circle to be filleted to. Either addendum or dedendum circle.
+    fillet_radius : float
+        The radius of the fillet.
+    direction : int
+        Use -1 for tip fillet, 1 for root fillet."""
+
     def angle_check(p):
         angle = -np.arctan2(p[1], p[0])
         return 0 < angle < pitch_angle / 2
@@ -576,6 +777,11 @@ def apply_fillet(
 
 @dataclasses.dataclass
 class GearRefProfile:
+    """Data class collecting all curve segments for a single tooth's profile.
+
+    This class should contain all data necessary to construct a single tooth's profile,
+    which is 1 unit of the repeating pattern making up the gear."""
+
     ra_curve: crv.ArcCurve
     rd_curve: crv.ArcCurve
     ro_curve: crv.ArcCurve
@@ -594,7 +800,8 @@ def trim_reference_profile(
     # transform: GearPolarTransform,
     fillet: FilletParam,
     pitch_angle: float,
-):
+) -> GearRefProfile:
+    """Find intersections of tooth curve and reference curves and trim them."""
 
     # if tip fillet is used, tooth curve tip is already settled
     # in fact this solver tends to fail due to tangential nature of fillet
@@ -702,7 +909,7 @@ def trim_reference_profile(
 @dataclasses.dataclass
 class InvoluteProfileDataCollector:
     """
-    All data collected to be able to generate 1 reference profile
+    All input data collected to be able to generate 1 reference profile
     for an involute gear.
     """
 
@@ -717,6 +924,7 @@ class InvoluteProfileDataCollector:
 def generate_reference_profile(
     inputdata: InvoluteProfileDataCollector, enable_undercut=True
 ) -> GearRefProfile:
+    """Perform all steps to generate a single tooth profile for an involute gear."""
     conic_transform = GearPolarTransform(inputdata.cone.cone_angle, inputdata.cone.r)
     ref_curves = generate_reference_circles(
         inputdata.involute.pitch_radius, inputdata.limits, conic_transform
@@ -771,6 +979,12 @@ def generate_reference_profile(
 
 
 def generate_profile_closed(profile: GearRefProfile, cone_data: ConicData):
+    """Generate a closed profile for a gear tooth.
+
+    The profile contains 2 tooth flanks, 1 addendum and 1 dedendum curve segments,
+    the outside (or inside) ring curve segment, and 2 connector curves.
+    Ordering: dedendum->tooth->addendum->tooth_mirror->connector_1->outside_ring->connector_0.
+    """
     if cone_data.cone_angle == 0:
         ro_connector_0 = crv.LineCurve(p0=profile.ro_curve(0), p1=profile.profile(0))
         ro_connector_1 = crv.LineCurve(p1=profile.ro_curve(1), p0=profile.profile(1))
@@ -795,7 +1009,9 @@ def generate_profile_closed(profile: GearRefProfile, cone_data: ConicData):
     )
 
 
-def generate_boundary_chain(profile: GearRefProfile, toothdata: GearToothParam):
+def generate_boundary_chain(
+    profile: GearRefProfile, toothdata: GearToothParam
+) -> crv.CurveChain:
     """
     Create gear boundary by repeating reference profile in a CurveChain.
     """
@@ -809,7 +1025,7 @@ def generate_boundary_chain(profile: GearRefProfile, toothdata: GearToothParam):
     return crv.CurveChain(*crv_list)
 
 
-def generate_boundary(profile: GearRefProfile, toothdata: GearToothParam):
+def generate_boundary(profile: GearRefProfile, toothdata: GearToothParam) -> crv.Curve:
     """
     Create gear boundary by defining custom repeating function for the profile.
     """
@@ -887,7 +1103,14 @@ class FilletDataRecipe(FilletParam, ZFunctionMixin):
     pass
 
 
-def default_gear_recipe(teeth_data: GearToothParam, module: float = 1, cone_angle=0):
+def default_gear_recipe(
+    teeth_data: GearToothParam, module: float = 1, cone_angle=0
+) -> InvoluteToothRecipe:
+    """This creates the default recipe for a 3D gear tooth profile.
+
+    Recipe refers to a collection of parameter-generator callable functions that
+    describe how the tooth profile changes along the extrusion direction (z axis).
+    This function creates a recipe considering cone angle and number of teeth."""
     rp_ref = teeth_data.num_teeth / 2
     pitch_angle = 2 * PI / teeth_data.num_teeth
     gamma = cone_angle / 2
@@ -909,6 +1132,8 @@ def default_gear_recipe(teeth_data: GearToothParam, module: float = 1, cone_angl
 
 
 class InvoluteGear:
+    """Manager class that pulls everything together to generate a 3D gear."""
+
     def __init__(
         self,
         z_vals: np.ndarray = np.array([0, 1]),
@@ -1029,7 +1254,7 @@ class InvoluteGear:
             if self.tooth_param.inside_teeth:
                 distance_ref = r2 - r1 + distance_offset
             elif other.tooth_param.inside_teeth:
-                distance_ref = r1 - r2 - distance_offset
+                distance_ref = r2 - r1 - distance_offset
             else:
                 distance_ref = r1 + r2 + distance_offset
 

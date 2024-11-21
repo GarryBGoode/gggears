@@ -1,0 +1,5 @@
+sphinx==7.2.6
+sphinx_rtd_theme>=3.0.2
+numpy >= 1.24.3
+scipy >= 1.10.1
+build123d >= 0.6.0
