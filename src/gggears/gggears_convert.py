@@ -20,6 +20,8 @@ from typing import Union, List
 
 
 class GearToNurbs:
+    """A class to manage the conversion of gear profile curves into NURBS surfaces."""
+
     def __init__(
         self,
         gear: gg.InvoluteGear,
@@ -204,27 +206,6 @@ class GearToNurbs:
         points_out = points_sol[:, :, :3]
         weights_out = points_sol[:, :, 3]
         return sol, points_out, weights_out
-
-
-@dataclasses.dataclass
-class NurbSurfaceData:
-    """
-    Dataclass for storing surface data of b-spline strips.
-    """
-
-    points: np.ndarray
-    weights: np.ndarray
-    knots: np.ndarray
-    n_points_vert: int = 4
-
-    def get_patches(self):
-        for ui in range(len(self.knots) - 1):
-
-            u0 = self.knots[ui]
-            u1 = self.knots[ui + 1]
-            points = self.points[:, u0 : u1 + 1, :]
-            weights = self.weights[:, u0 : u1 + 1]
-            yield {"points": points, "weights": weights}
 
 
 @dataclasses.dataclass

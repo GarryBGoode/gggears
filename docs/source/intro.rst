@@ -10,8 +10,14 @@ It is also designed to be easily extensible via object oriented design, so that 
 
 Warning
 =======
-gggears is in early development. While functionality is checked for every merge on main branch, there is no stability yet in the API.
+``gggears`` is in early development. While functionality is checked for every merge on main branch, there is no stability yet in the API.
 
 Installation
 ============
-To be added...
+This project is not yet registered on pypi. You can install it from git via pip:
+
+```pip install git+https://github.com/GarryBGoode/gggears.git@main```
+
+Or download repository and install locally. Navigate to the repository folder and:
+
+```pip install .```

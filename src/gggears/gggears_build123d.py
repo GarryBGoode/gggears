@@ -30,6 +30,8 @@ def nppoint2Vector(p: np.ndarray):
 
 
 class GearBuilder(GearToNurbs):
+    """A class for building Part objects from gear profiles."""
+
     def __init__(
         self,
         gear: gg.InvoluteGear,
