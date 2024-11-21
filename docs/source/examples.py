@@ -40,8 +40,8 @@ def write_svg(part, viewpos=(-100, -100, 70)):
 # 1. Simple Spur Gears
 # [Ex. 1]
 
-gear1 = SpurGear(number_of_teeth=12)
-gear2 = SpurGear(number_of_teeth=24)
+gear1 = SpurGear(number_of_teeth=12, module=1.2, height=5)
+gear2 = SpurGear(number_of_teeth=24, module=1.2, height=5)
 gear1.mesh_to(gear2, target_dir=RIGHT)
 gear_part_1 = gear1.build_part()
 gear_part_2 = gear2.build_part()
