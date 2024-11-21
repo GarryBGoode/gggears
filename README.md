@@ -18,7 +18,8 @@ It is highly recommended, though not strictly necessary to use a python-CAD gui 
 See [OCP VSCode](https://github.com/bernhard-42/vscode-ocp-cad-viewer) and [CadQuery Editor](https://github.com/CadQuery/CQ-editor).
 
 
-
+# Documentation
+Docs hosted on [readthedocs](https://gggears.readthedocs.io/en/latest/)
 
 # Features
 
@@ -33,7 +34,7 @@ Gear generation:
 
 Gear positioning and alignment supported.
 
-![Bevel Gear Example](doc/media/bevel_gears.png)
+![Bevel Gear Example](misc/media/bevel_gears.png)
 
 Not yet supported:
 - Cycloid gears
