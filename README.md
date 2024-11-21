@@ -70,7 +70,7 @@ gear_part_2 = gear2.build_part()
 show(gear_part_1, gear_part_2)
 ```
 
-![Bevel Gear Example](doc/media/spur_gear_example.png)
+![Spur Gear Example](misc/media/spur_gear_example.png)
 
 # License
 Project is licensed under Apache 2.0, see license file for details.
