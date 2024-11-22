@@ -17,6 +17,7 @@ from gggears.defs import *
 from gggears.function_generators import bezierdc
 import dataclasses
 from typing import Union, List
+import time
 
 
 class GearToNurbs:
@@ -39,25 +40,36 @@ class GearToNurbs:
         self.n_z_tweens = int(
             np.ceil((self.n_points_vert - 2) * self.oversamp_ratio) + 2
         )
+        start = time.time()
         self.gear_stacks: List[gg.GearRefProfile] = self.generate_gear_stacks()
+        print(f"Gears generated in {time.time()-start} seconds")
         self.gear_generator_ref = self.gear_stacks[0][0]
+        start = time.time()
         self.nurb_profile_stacks = self.generate_nurbs()
+        print(f"Nurbs generated in {time.time()-start} seconds")
+        start = time.time()
         self.side_surf_data = self.generate_surface_points_sides(method=convertmethod)
+        print(f"Surfaces generated in {time.time()-start} seconds")
 
     def generate_nurbs(self):
         nurb_profile_stacks = []
         for gear_stack_loc in self.gear_stacks:
             nurb_stack = []
-            for gearprofile in gear_stack_loc:
+            for k in range(len(gear_stack_loc)):
+                gearprofile = gear_stack_loc[k]
+
                 closed_profile_curve = gg.generate_profile_closed(
                     gearprofile, self.gear.shape_recipe(0).cone
                 )
                 rd_nurb = crv.convert_curve_nurbezier(gearprofile.rd_curve)
+                # operation was performed before
+
                 tooth_nurb = crv.convert_curve_nurbezier(
                     gearprofile.tooth_curve,
                     n_points=self.n_points_hz,
                     samp_ratio=self.oversamp_ratio,
                 )
+
                 ra_nurb = crv.convert_curve_nurbezier(gearprofile.ra_curve)
                 ro_nurb = crv.convert_curve_nurbezier(gearprofile.ro_curve)
                 ro_nurb.reverse()
