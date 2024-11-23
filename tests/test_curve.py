@@ -29,7 +29,13 @@ def test_curve_length_param(radius, t):
 
     # the curve will update the length-lookup parametrization upon creation
     curve1 = crv.Curve(
-        arc, active=True, t0=-1, t1=1, params={"radius": radius}, enable_vectorize=True
+        arc,
+        active=True,
+        t0=-1,
+        t1=1,
+        params={"radius": radius},
+        enable_vectorize=True,
+        lenght_approx_ndiv=101,
     )
     assert curve1.length == pytest.approx(np.pi * radius, rel=1e-3, abs=1e-3)
     # redo the length-lookup with a higher resolution cause otherwise the accuracy is abysmal

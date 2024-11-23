@@ -12,9 +12,14 @@
 from gggears import *
 from ocp_vscode import show, set_port
 import time
+import logging
 
 # These examples are meant to showcase the functionality of the library,
 # and serve as manual testing templates for the developer.
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def spur_gears():
@@ -193,4 +198,5 @@ def fishbone_bevels():
 
 if __name__ == "__main__":
     set_port(3939)
-    show(planetary_helical_gear())
+
+    show(fishbone_bevels())

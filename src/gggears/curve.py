@@ -861,7 +861,6 @@ def fit_nurb_optim(
     return sol, points, weights
 
 
-@functools.lru_cache(maxsize=128)
 def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
     """Convert a curve to a NURBS curve.
 

@@ -18,6 +18,7 @@ from gggears.function_generators import bezierdc
 import dataclasses
 from typing import Union, List
 import time
+import logging
 
 
 class GearToNurbs:
@@ -42,14 +43,14 @@ class GearToNurbs:
         )
         start = time.time()
         self.gear_stacks: List[gg.GearRefProfile] = self.generate_gear_stacks()
-        print(f"Gears generated in {time.time()-start} seconds")
+        logging.info(f"Gears generated in {time.time()-start:.5f} seconds")
         self.gear_generator_ref = self.gear_stacks[0][0]
         start = time.time()
         self.nurb_profile_stacks = self.generate_nurbs()
-        print(f"Nurbs generated in {time.time()-start} seconds")
+        logging.info(f"Nurbs generated in {time.time()-start:.5f} seconds")
         start = time.time()
         self.side_surf_data = self.generate_surface_points_sides(method=convertmethod)
-        print(f"Surfaces generated in {time.time()-start} seconds")
+        logging.info(f"Surfaces generated in {time.time()-start:.5f} seconds")
 
     def generate_nurbs(self):
         nurb_profile_stacks = []
