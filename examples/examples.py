@@ -12,9 +12,14 @@
 from gggears import *
 from ocp_vscode import show, set_port
 import time
+import logging
 
 # These examples are meant to showcase the functionality of the library,
 # and serve as manual testing templates for the developer.
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def spur_gears():
@@ -34,7 +39,7 @@ def planetary_helical_gear():
     n_sun = 11
     n_planet = int(np.floor((n_ring - n_sun) / 2))
 
-    beta = 30 * PI / 180
+    beta = 15 * PI / 180
 
     height = 15
     # this hacky correction needs a better treatment later
@@ -70,11 +75,13 @@ def planetary_helical_gear():
     gear_planet2.mesh_to(gear_sun, target_dir=dir2)
     gear_planet3.mesh_to(gear_sun, target_dir=dir3)
 
+    start = time.time()
     gear_planet1_cad = gear_planet1.build_part()
     gear_planet2_cad = gear_planet2.build_part()
     gear_planet3_cad = gear_planet3.build_part()
     gear_sun_cad = gear_sun.build_part()
     gear_ring_cad = gear_ring.build_part()
+    print(f"gear build time: {time.time()-start}")
 
     return (
         gear_ring_cad,
@@ -150,7 +157,12 @@ def fishbone_bevels():
     gear_base.shape_recipe.transform.angle = lambda z: np.abs(z - 2) * beta
 
     gear_cad = GearBuilder(
-        gear=gear_base, n_points_vert=5, n_points_hz=4, add_plug=False, method="fast"
+        gear=gear_base,
+        n_points_vert=4,
+        n_points_hz=4,
+        add_plug=False,
+        method="slow",
+        oversampling_ratio=2.5,
     )
 
     print(f"gear build time: {time.time()-start}")
@@ -186,4 +198,5 @@ def fishbone_bevels():
 
 if __name__ == "__main__":
     set_port(3939)
-    show(bevel_gear())
+
+    show(fishbone_bevels())

@@ -20,6 +20,7 @@ from gggears.gggears_convert import *
 from scipy.spatial.transform import Rotation as scp_Rotation
 import numpy as np
 import time
+import logging
 
 
 def nppoint2Vector(p: np.ndarray):
@@ -50,6 +51,8 @@ class GearBuilder(GearToNurbs):
         )
         surfaces = []
         ro_surfaces = []
+
+        start = time.time()
         for k in range(len(self.gear.z_vals) - 1):
             surfdata_z = self.side_surf_data[k]
 
@@ -91,6 +94,10 @@ class GearBuilder(GearToNurbs):
         shell = Shell(surfaces)
         solid1 = Solid(shell)
 
+        logging.log(
+            logging.INFO, f"Gear 1-tooth solid build time: {time.time()-start:.5f}"
+        )
+        start = time.time()
         if not solid1.is_valid():
             Warning("Tooth profile solid is not valid")
 
@@ -171,6 +178,9 @@ class GearBuilder(GearToNurbs):
             plug = Solid(Shell(plug_surfaces))
             self.solid = self.solid.fuse(plug).clean()
 
+        logging.log(
+            logging.INFO, f"Gear solid fuse time: {time.time()-start:.5f} seconds"
+        )
         self.solid = Part(self.solid)
         self.solid_transformed = apply_transform_part(self.solid, self.gear.transform)
 
