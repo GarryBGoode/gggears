@@ -1,6 +1,6 @@
 [project]
 name = "gggears"
-version = "0.0.1"
+version = "0.0.2"
 description = "A gear geometry generator in Python"
 authors = [
 { name = "Gergely Bencsik", email = "bencsik.gergely.1@gmail.com"},
