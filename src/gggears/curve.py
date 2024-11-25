@@ -16,6 +16,8 @@ from gggears.function_generators import *
 from scipy.optimize import root, minimize
 import copy
 from enum import Enum
+import functools
+import logging
 
 
 class Curve:
@@ -56,6 +58,7 @@ class Curve:
         t1=1,
         params=None,
         enable_vectorize=True,
+        lenght_approx_ndiv=21,
     ):
         # active is used to show if curve is degenerate, such as a 0 length line
         if params is None:
@@ -72,7 +75,7 @@ class Curve:
 
         # length of the curve is stored in the object, calculated by update_lengths()
         self.length = 0
-        self.len_approx_N = 101
+        self.len_approx_N = lenght_approx_ndiv
         # used for length-parametrization conversion
         self.t2s_lookup = {"t": np.array([-1e6, 1e6]), "s": np.array([-1e6, 1e6])}
 
@@ -732,7 +735,7 @@ def find_curve_nearest_point(curve: Curve, point, guesses=[0.5]):
     return min(results, key=lambda res: res.fun).x[0]
 
 
-def fit_bezier_hermite(target_curve: Curve):
+def fit_bezier_hermite_cubic(target_curve: Curve):
     """Fit a cubic bezier curve to a curve using Hermite interpolation."""
     points = np.zeros((4, 3))
     points[0] = target_curve(0)
@@ -742,61 +745,22 @@ def fit_bezier_hermite(target_curve: Curve):
     return points
 
 
-def fit_bezier_optim(target_curve: Curve):
-
-    def point_allocator(x):
-        points = np.zeros((4, 3))
-        points[0] = target_curve(0)
-        points[3] = target_curve(1)
-
-        points[1] = np.array([x[0], x[1], x[2]])
-        points[2] = np.array([x[3], x[4], x[5]])
-        return points
-
-    def inverse_allocator(points):
-        x = np.zeros((6))
-        x[0], x[1], x[2] = points[1][:]
-        x[3], x[4], x[5] = points[2][:]
-        return x
-
-    # the 2 edge points are enforced
-    n_points = 9
-    tvals = np.linspace(0, 1, n_points + 2)[1:-1]
-    initpoints = target_curve(np.linspace(0, 1, 4))
-    init_guess = inverse_allocator(initpoints)
-
-    BZcurve = Curve(
-        bezier,
-        params={
-            "points": initpoints,
-        },
-    )
-    BZcurve.len_approx_N = n_points * 2
-    target_points = target_curve(tvals)
-
-    def cost_func(x):
-        points = point_allocator(x)
-        BZcurve.params["points"] = points
-        bz_tvals = np.array(
-            [
-                find_curve_nearest_point(BZcurve, target_point, [tval])
-                for target_point, tval in zip(target_points, tvals)
-            ]
-        )
-        return np.sum(np.linalg.norm(target_points - BZcurve(bz_tvals), axis=1))
-
-    def cost_func2(x):
-        points = point_allocator(x)
-        BZcurve.params["points"] = points
-        BZcurve.update_lengths()
-        return np.sum(np.linalg.norm(target_points - BZcurve(tvals), axis=1))
-
-    sol = minimize(cost_func2, init_guess)
-    point_out = point_allocator(sol.x)
-    return sol, point_out
+def fit_bezier_hermite_quadratic(target_curve: Curve):
+    """Fit a quadratic bezier curve to a curve using Hermite interpolation."""
+    points = np.zeros((3, 3))
+    points[0] = target_curve(0)
+    points[2] = target_curve(1)
+    d1 = np.linalg.norm(target_curve.derivative(0, 1, delta=1e-4) / 3)
+    d2 = np.linalg.norm(target_curve.derivative(1, -1, delta=1e-4) / 3)
+    # rooting is probably overkill but I don't want to think harder
+    sol = root(lambda x: points[0] + x[0] * d1 - points[2] - x[1] * d2, [0.5, 0.5])
+    points[1] = points[0] + sol.x[0] * d1
+    return points
 
 
-def fit_nurb_points(target_points: np.ndarray, n_points=4, force_2D=False):
+def fit_nurb_points(
+    target_points: np.ndarray, n_points=4, force_2D=False, initpoints=None
+):
     N_target = target_points.shape[0]
 
     N_Dim = 2 if force_2D else 3
@@ -804,19 +768,22 @@ def fit_nurb_points(target_points: np.ndarray, n_points=4, force_2D=False):
 
     def point_allocator(x):
         points = np.zeros((n_points, N_Dim))
-        points[0] = target_points[0, :N_Dim] * scaler
-        points[-1] = target_points[-1, :N_Dim] * scaler
+        points[0] = target_points[0, :N_Dim]
+        points[-1] = target_points[-1, :N_Dim]
         weights = np.ones((n_points))
         for k in range(1, n_points - 1):
             ii = N_Dim * (k - 1)
             points[k] = np.array([x[ii + j] for j in range(N_Dim)])
             weights[k] = x[N_Dim * (n_points - 2) + k - 1]
-        # t = np.linspace(0,1,N_target)
-        t = x[(N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target]
+        t = np.zeros((N_target))
+        t[1:-1] = x[
+            (N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target - 2
+        ]
+        t[-1] = 1
         return points, weights, t
 
     def inverse_allocator(points, weights, t):
-        x = np.zeros((N_Dim + 1) * (n_points - 2) + N_target)
+        x = np.zeros((N_Dim + 1) * (n_points - 2) + N_target - 2)
 
         for k in range(1, n_points - 1):
             ii = N_Dim * (k - 1)
@@ -824,11 +791,16 @@ def fit_nurb_points(target_points: np.ndarray, n_points=4, force_2D=False):
                 x[ii + j] = points[k, j]
             x[N_Dim * (n_points - 2) + k - 1] = weights[k]
 
-        x[(N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target] = t
+        x[
+            (N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target - 2
+        ] = t[1:-1]
         return x
 
+    if initpoints is None:
+        initpoints = bezierdc(t=np.linspace(0, 1, n_points), points=target_points)
+
     initguess_x = inverse_allocator(
-        points=bezierdc(t=np.linspace(0, 1, n_points), points=target_points),
+        points=initpoints,
         weights=np.ones(n_points),
         t=np.linspace(0, 1, N_target),
     )
@@ -836,88 +808,61 @@ def fit_nurb_points(target_points: np.ndarray, n_points=4, force_2D=False):
     def cost_fun(x):
         points, weights, t = point_allocator(x)
         diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
-        return np.sum(diff**2)
+        return np.sum(diff**2) / 2
 
-    sol = minimize(cost_fun, initguess_x, method="BFGS")
+    def deriv_func(x):
+        points, weights, t = point_allocator(x)
+        diff = (target_points[:, :N_Dim] - nurbezier(t, points, weights)) * scaler
+        deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
+        deriv_dweights = -nurbezier_diff_weights(t, points, weights)
+        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
+        dp = deriv_dpoints.T @ diff
+        dt = np.diag(diff @ deriv_dt.T)
+        dw = np.sum(
+            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
+        )
+        return inverse_allocator(dp, dw, dt)
+
+    def cost_fun_combined(x):
+        points, weights, t = point_allocator(x)
+        diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
+        costval = np.sum(diff**2) / 2
+
+        deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
+        deriv_dweights = -nurbezier_diff_weights(t, points, weights)
+        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
+        dp = deriv_dpoints.T @ diff
+        dt = np.diag(diff @ deriv_dt.T)
+        dw = np.sum(
+            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
+        )
+        diffval = inverse_allocator(dp, dw, dt)
+        return costval, diffval
+
+    sol = minimize(
+        cost_fun,
+        initguess_x,
+        # method="TNC",
+        method="BFGS",
+        jac=deriv_func,
+        # tol=1e-8,
+        # options={"eps": DELTA / 100},
+    )
+
+    logging.debug(
+        f"Nurbs point fit stats: n_iter: {sol.nit}, nfev: {sol.nfev}, status: {sol.status}"
+    )
+    logging.debug(f"Final cost: {sol.fun}")
+    logging.debug(f"message: {sol.message}")
 
     points, weights, t = point_allocator(sol.x)
 
     return sol, points, weights
 
 
-def fit_nurb_optim(target_curve: Curve, n_points=4, N_Dim=3):
-
-    scaler = 1
-    # N_Dim = 2 if force_2D else 3
-
-    def point_allocator(x):
-        points = np.zeros((n_points, N_Dim))
-        points[0] = target_curve(0)[:N_Dim] * scaler
-        points[-1] = target_curve(1)[:N_Dim] * scaler
-        weights = np.ones((n_points))
-        for k in range(1, n_points - 1):
-            ii = N_Dim * (k - 1)
-            points[k] = np.array([x[ii + j] for j in range(N_Dim)])
-            weights[k] = x[N_Dim * (n_points - 2) + k - 1]
-
-        return points, weights
-
-    def inverse_allocator(points, weights):
-        x = np.zeros(((n_points - 2) * 4))
-        for k in range(1, n_points - 1):
-            ii = N_Dim * (k - 1)
-            for j in range(N_Dim):
-                x[ii + j] = points[k, j]
-            x[N_Dim * (n_points - 2) + k - 1] = weights[k]
-
-        return x
-
-    n_fit_points = (n_points - 2) * 7
-    # the 2 edge points are enforced
-    tvals = np.linspace(0, 1, n_fit_points + 2)[1:-1]
-    initpoints = target_curve(np.linspace(0, 1, n_points))[:, :N_Dim] * scaler
-    initweights = np.ones((n_points))
-    init_guess = inverse_allocator(initpoints, initweights)
-
-    BZcurve = Curve(
-        nurbezier,
-        params={"points": initpoints, "weights": initweights},
-        enable_vectorize=False,
-    )
-    BZcurve.len_approx_N = n_fit_points * 3
-    target_curve.len_approx_N = n_fit_points * 3
-    target_curve.update_lengths()
-    target_points = (target_curve(tvals) * scaler)[:, :N_Dim]
-
-    def cost_func(x):
-        points, weights = point_allocator(x)
-        BZcurve.params["points"] = points
-        BZcurve.params["weights"] = weights
-        bz_tvals = np.array(
-            [
-                find_curve_nearest_point(BZcurve, target_point, [tval])
-                for target_point, tval in zip(target_points, tvals)
-            ]
-        )
-        return np.sum(np.linalg.norm(target_points - BZcurve(bz_tvals), axis=1))
-
-    def cost_func2(x):
-        points, weights = point_allocator(x)
-        BZcurve.params["points"] = points
-        BZcurve.params["weights"] = weights
-        BZcurve.update_lengths()
-        return np.sum(np.linalg.norm(target_points - BZcurve(tvals), axis=1))
-
-    sol = minimize(cost_func2, init_guess, method="Newton-CG")
-    point_out, weight_out = point_allocator(sol.x)
-
-    # if force_2D:
-    #     point_out = np.pad(point_out,((0,0),(0,3-N_Dim)))
-
-    return sol, point_out / scaler, weight_out
-
-
-def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False, samp_ratio=1.5):
+def fit_nurb_optim(
+    target_curve: Curve, n_points=4, force_2D=False, samp_ratio=1.5, initguess=None
+):
     N_Dim = 2 if force_2D else 3
 
     scaler = 1
@@ -925,11 +870,31 @@ def fit_nurb_optim2(target_curve: Curve, n_points=4, force_2D=False, samp_ratio=
     # each eval point uses 2 DoF known (xyz - t)
     # on average at least 2 eval points are needed per bezier point
 
-    n_fit_points = int(np.ceil((n_points) * 2 * samp_ratio))
+    n_fit_points = int(np.ceil((n_points - 2) * 2 * samp_ratio)) + 2
     # the 2 edge points are enforced
     tvals = np.linspace(0, 1, n_fit_points)
     target_points = (target_curve(tvals) * scaler)[:, :N_Dim]
-    sol, points, weights = fit_nurb_points(target_points, n_points, force_2D=force_2D)
+
+    if initguess is None:
+        if n_points == 3:
+            initpoints = fit_bezier_hermite_quadratic(target_curve)
+        elif n_points == 4:
+            initpoints = fit_bezier_hermite_cubic(target_curve)
+        else:
+            hermite_points = fit_bezier_hermite_cubic(target_curve)
+            initpoints = np.zeros((n_points, N_Dim))
+            initpoints[0] = hermite_points[0]
+            initpoints[-1] = hermite_points[-1]
+            initpoints[1] = hermite_points[1]
+            initpoints[-2] = hermite_points[2]
+            initpoints[2:-2] = np.linspace(
+                hermite_points[1], hermite_points[-1], n_points - 2
+            )[1:-1]
+    else:
+        initpoints = initguess
+    sol, points, weights = fit_nurb_points(
+        target_points, n_points, force_2D=force_2D, initpoints=initpoints
+    )
     if force_2D:
         points = np.pad(
             points, [(0, 0), (0, 1)], constant_values=np.mean(target_curve(tvals)[:, 2])
@@ -963,9 +928,9 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
                     input_curve(0), input_curve(1), input_curve.center
                 )
             else:
-                sol, bz_points, bz_weights = fit_nurb_optim2(input_curve, **kwargs)
+                sol, bz_points, bz_weights = fit_nurb_optim(input_curve, **kwargs)
         else:
-            sol, bz_points, bz_weights = fit_nurb_optim2(input_curve, **kwargs)
+            sol, bz_points, bz_weights = fit_nurb_optim(input_curve, **kwargs)
         # out_curve = Curve(nurbezier,params={'points':bz_points,'weights':bz_weights})
         out_curve = NurbCurve(bz_points, bz_weights, active=input_curve.active)
 

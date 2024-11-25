@@ -246,30 +246,38 @@ def bezier_coeff(t, n: int):
     )
 
 
-def bezierdc(t, points):
+def bezierdc(t, points: np.ndarray) -> np.ndarray:
     """
     Bezier curve evaluation using decasteljau algorithm. Works faster for arrays of t than iterating naive Bezier algorithm with bernstein polynomials.
     t: float or np 1darray
     points: 2d array of control points
     """
 
-    def decasteljau(t, points):
-        t_shape = t.shape + (1,) * (
-            points.ndim - 1
-        )  # Add as many singleton dimensions as needed
-        t_expanded = t.reshape(t_shape)
-        return (1 - t_expanded) * points[:, :-1] + (t_expanded) * points[:, 1:]
-
-    if hasattr(t, "__iter__"):
-        points2 = np.repeat(np.expand_dims(points, 0), t.shape[0], axis=0)
-        while points2.shape[1] > 1:
-            points2 = decasteljau(t, points2)
-        return points2.squeeze(1)
+    if not isinstance(t, np.ndarray):
+        t = np.array([t])
+        single_t = True
     else:
-        points2 = np.repeat(np.expand_dims(points, 0), 1, axis=0)
-        while points2.shape[1] > 1:
-            points2 = decasteljau(np.array([t]), points2)
-        return points2.squeeze((0, 1))
+        single_t = False
+
+    # points axis 0: control points listing, axis 1+ : coordinates
+    # t axis 0: t values
+    # working axis 0: t values, axis 1: control points listing, axis 2+ : coordinates
+
+    n = t.shape[0]
+    d = points.shape[0]
+    # Add as many singleton dimensions as needed
+    t_shape = t.shape + (1,) * (points.ndim)
+    t_expanded = t.reshape(t_shape)
+
+    points2 = np.repeat(np.expand_dims(points, 0), n, axis=0)
+
+    for k in range(d - 1):
+        points2 = (1 - t_expanded) * points2[:, :-1] + (t_expanded) * points2[:, 1:]
+
+    if single_t:
+        return points2.squeeze()
+    else:
+        return points2.squeeze(1)
 
 
 def lerp(t, a, b):
@@ -293,6 +301,114 @@ def nurbezier(t, points, weights):
         )
     else:
         return bezierdc(t, point2) / bezierdc(t, weights)
+
+
+def bezier_diff_t(t, points, n=1):
+    d = points.shape[0]
+    diffpoints = points
+    if n > k:
+        return np.zeros(t.shape + points.shape)
+    for k in range(n):
+        diffpoints = (d - k - 1) * (diffpoints[1:] - diffpoints[:-1])
+    # diffpoints = points[1:] - points[:-1]
+    diffpoints_bez = bezierdc(t, diffpoints)
+    return diffpoints_bez
+
+
+def nurbezier_diff_t(t, points, weights):
+    """Derivative of a NURB segment by t"""
+    n = points.shape[0]
+    wpoints = points * weights.reshape(n, 1)
+    diffpoints = (n - 1) * (wpoints[1:] - wpoints[:-1])
+    diffweights = (n - 1) * (weights[1:] - weights[:-1])
+
+    points_bez = bezierdc(t, wpoints)
+    weights_bez = bezierdc(t, weights)
+
+    diffpoints_bez = bezierdc(t, diffpoints)
+    diffweight_bez = bezierdc(t, diffweights)
+
+    if hasattr(t, "__iter__"):
+        diffpoints_bez = diffweight_bez.reshape(
+            diffweight_bez.shape + (1,) * (diffpoints_bez.ndim - 1)
+        )
+        weights_bez = weights_bez.reshape(
+            weights_bez.shape + (1,) * (points_bez.ndim - 1)
+        )
+
+    out_points = (
+        diffpoints_bez * weights_bez - points_bez * diffweight_bez
+    ) / weights_bez**2
+    return out_points
+
+
+def bezier_diff_p(t, n):
+    """The coefficients of points for a bezier same as differentiation by points"""
+    if not isinstance(t, np.ndarray):
+        t = np.array([t])
+        single_t = True
+    else:
+        single_t = False
+
+    nt = t.shape[0]
+    out_points = np.zeros((nt, n))
+    for k in range(n):
+        zero_one_arr = np.zeros(n)
+        zero_one_arr[k] = 1
+        out_points[:, k] = bezierdc(t, zero_one_arr)
+    if single_t:
+        return out_points.squeeze()
+    else:
+        return out_points
+
+
+def nurbezier_diff_points(t, n, weights):
+    """the derivative of a nurb segment by points"""
+    if not isinstance(t, np.ndarray):
+        t = np.array([t])
+        single_t = True
+    else:
+        single_t = False
+
+    outval = (
+        bezier_diff_p(t, n)
+        * weights[np.newaxis, :]
+        / bezierdc(t, weights)[:, np.newaxis]
+    )
+    if single_t:
+        return outval.squeeze()
+    else:
+        return outval
+
+
+def nurbezier_diff_weights(t, points, weights):
+    """Derivative of a NURB segment by weights"""
+    if not isinstance(t, np.ndarray):
+        t = np.array([t])
+        single_t = True
+    else:
+        single_t = False
+
+    # axis 0: t values, , axis 1 : weights/num degree, axis 2: control point dim
+
+    n = points.shape[0]
+    nurbez = nurbezier(t, points, weights)
+    bezier_diffp = bezier_diff_p(t, n)
+    bezier_weights = bezierdc(t, weights)
+    diffpart_1 = (
+        bezier_diffp[:, :, np.newaxis]
+        * points[np.newaxis, :, :]
+        / bezier_weights[:, np.newaxis, np.newaxis]
+    )
+    diffpart_2 = (
+        bezier_diffp[:, :, np.newaxis] / bezier_weights[:, np.newaxis, np.newaxis]
+    )
+
+    out = diffpart_1 - diffpart_2 * nurbez[:, np.newaxis, :]
+    if single_t:
+        return out.squeeze()
+    else:
+        return out
 
 
 def nurbezier_surface(u, v, points, weights):
