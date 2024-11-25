@@ -17,6 +17,7 @@ from scipy.optimize import root, minimize
 import copy
 from enum import Enum
 import functools
+import logging
 
 
 class Curve:
@@ -767,19 +768,22 @@ def fit_nurb_points(
 
     def point_allocator(x):
         points = np.zeros((n_points, N_Dim))
-        points[0] = target_points[0, :N_Dim] * scaler
-        points[-1] = target_points[-1, :N_Dim] * scaler
+        points[0] = target_points[0, :N_Dim]
+        points[-1] = target_points[-1, :N_Dim]
         weights = np.ones((n_points))
         for k in range(1, n_points - 1):
             ii = N_Dim * (k - 1)
             points[k] = np.array([x[ii + j] for j in range(N_Dim)])
             weights[k] = x[N_Dim * (n_points - 2) + k - 1]
-        # t = np.linspace(0,1,N_target)
-        t = x[(N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target]
+        t = np.zeros((N_target))
+        t[1:-1] = x[
+            (N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target - 2
+        ]
+        t[-1] = 1
         return points, weights, t
 
     def inverse_allocator(points, weights, t):
-        x = np.zeros((N_Dim + 1) * (n_points - 2) + N_target)
+        x = np.zeros((N_Dim + 1) * (n_points - 2) + N_target - 2)
 
         for k in range(1, n_points - 1):
             ii = N_Dim * (k - 1)
@@ -787,7 +791,9 @@ def fit_nurb_points(
                 x[ii + j] = points[k, j]
             x[N_Dim * (n_points - 2) + k - 1] = weights[k]
 
-        x[(N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target] = t
+        x[
+            (N_Dim + 1) * (n_points - 2) : (N_Dim + 1) * (n_points - 2) + N_target - 2
+        ] = t[1:-1]
         return x
 
     if initpoints is None:
@@ -802,16 +808,52 @@ def fit_nurb_points(
     def cost_fun(x):
         points, weights, t = point_allocator(x)
         diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
-        return np.sum(diff**2)
-        # return np.linalg.norm(diff)
+        return np.sum(diff**2) / 2
+
+    def deriv_func(x):
+        points, weights, t = point_allocator(x)
+        diff = (target_points[:, :N_Dim] - nurbezier(t, points, weights)) * scaler
+        deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
+        deriv_dweights = -nurbezier_diff_weights(t, points, weights)
+        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
+        dp = deriv_dpoints.T @ diff
+        dt = np.diag(diff @ deriv_dt.T)
+        dw = np.sum(
+            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
+        )
+        return inverse_allocator(dp, dw, dt)
+
+    def cost_fun_combined(x):
+        points, weights, t = point_allocator(x)
+        diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
+        costval = np.sum(diff**2) / 2
+
+        deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
+        deriv_dweights = -nurbezier_diff_weights(t, points, weights)
+        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
+        dp = deriv_dpoints.T @ diff
+        dt = np.diag(diff @ deriv_dt.T)
+        dw = np.sum(
+            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
+        )
+        diffval = inverse_allocator(dp, dw, dt)
+        return costval, diffval
 
     sol = minimize(
         cost_fun,
         initguess_x,
+        # method="TNC",
         method="BFGS",
-        # jac="3-point",
+        jac=deriv_func,
+        # tol=1e-8,
         # options={"eps": DELTA / 100},
     )
+
+    logging.debug(
+        f"Nurbs point fit stats: n_iter: {sol.nit}, nfev: {sol.nfev}, status: {sol.status}"
+    )
+    logging.debug(f"Final cost: {sol.fun}")
+    logging.debug(f"message: {sol.message}")
 
     points, weights, t = point_allocator(sol.x)
 
