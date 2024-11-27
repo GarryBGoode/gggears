@@ -26,7 +26,7 @@ class GearToNurbs:
 
     def __init__(
         self,
-        gear: gg.InvoluteGear,
+        gear: gg.Gear,
         n_points_hz=4,
         n_points_vert=4,
         oversampling_ratio=2.5,

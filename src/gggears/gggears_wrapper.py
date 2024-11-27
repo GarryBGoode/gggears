@@ -13,6 +13,7 @@ import numpy as np
 from gggears.gggears_core import *
 from gggears.gggears_build123d import *
 from build123d import Part
+from gggears.gearteeth import *
 
 
 class SpurGear:
@@ -120,7 +121,7 @@ class SpurGear:
         self.backlash = backlash
         self.crowning = crowning
         self.builder: GearBuilder = None
-        self.gearcore: InvoluteGear = None
+        self.gearcore: Gear = None
         self.calc_params()
 
     @property
@@ -154,21 +155,35 @@ class SpurGear:
             - self.backlash / rp_ref
         )
 
-        self.gearcore = InvoluteGear(
+        limits = ToothLimitParamRecipe(
+            h_d=self.dedendum_coefficient - self.profile_shift,
+            h_a=self.addendum_coefficient + self.profile_shift,
+        )
+
+        if self.enable_undercut:
+            tooth_generator = InvoluteUndercutTooth(
+                pressure_angle=self.pressure_angle,
+                pitch_radius=rp_ref,
+                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                ref_limits=limits,
+                cone_angle=0,
+            )
+        else:
+            tooth_generator = InvoluteTooth(
+                pressure_angle=self.pressure_angle,
+                pitch_radius=rp_ref,
+                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                cone_angle=0,
+            )
+
+        self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
             z_vals=np.array([0, self.height]),
             module=self.module,
             cone=ConicData(cone_angle=0),
-            shape_recipe=InvoluteToothRecipe(
-                involute=InvoluteProfileParamRecipe(
-                    pressure_angle=self.pressure_angle,
-                    pitch_radius=rp_ref,
-                    angle_pitch_ref=lambda z: crowning_func(z, tooth_angle),
-                ),
-                limits=ToothLimitParamRecipe(
-                    h_d=self.dedendum_coefficient - self.profile_shift,
-                    h_a=self.addendum_coefficient + self.profile_shift,
-                ),
+            shape_recipe=GearProfileRecipe(
+                tooth_generator=tooth_generator,
+                limits=limits,
                 fillet=FilletDataRecipe(
                     root_fillet=self.root_fillet,
                     tip_fillet=self.tip_fillet,
@@ -828,21 +843,41 @@ class BevelGear(SpurGear):
 
         tooth_angle = self.pitch_angle / 4 - self.backlash / rp_ref
 
-        self.gearcore = InvoluteGear(
+        #         tooth_angle = (
+        #     self.pitch_angle / 4
+        #     + self.profile_shift * np.tan(self.pressure_angle) / rp_ref
+        #     - self.backlash / rp_ref
+        # )
+
+        limits = ToothLimitParamRecipe(
+            h_d=self.dedendum_coefficient - self.profile_shift,
+            h_a=self.addendum_coefficient + self.profile_shift,
+        )
+
+        if self.enable_undercut:
+            tooth_generator = InvoluteUndercutTooth(
+                pressure_angle=self.pressure_angle,
+                pitch_radius=rp_ref,
+                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                ref_limits=limits,
+                cone_angle=self.cone_angle,
+            )
+        else:
+            tooth_generator = InvoluteTooth(
+                pressure_angle=self.pressure_angle,
+                pitch_radius=rp_ref,
+                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                cone_angle=self.cone_angle,
+            )
+
+        self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
             z_vals=np.array([0, self.height]),
             module=self.module,
             cone=ConicData(cone_angle=self.cone_angle),
-            shape_recipe=InvoluteToothRecipe(
-                involute=InvoluteProfileParamRecipe(
-                    pressure_angle=self.pressure_angle,
-                    pitch_radius=rp_ref,
-                    angle_pitch_ref=lambda z: crowning_func(z, tooth_angle),
-                ),
-                limits=ToothLimitParamRecipe(
-                    h_d=self.dedendum_coefficient - self.profile_shift,
-                    h_a=self.addendum_coefficient + self.profile_shift,
-                ),
+            shape_recipe=GearProfileRecipe(
+                tooth_generator=tooth_generator,
+                limits=limits,
                 fillet=FilletDataRecipe(
                     root_fillet=self.root_fillet,
                     tip_fillet=self.tip_fillet,

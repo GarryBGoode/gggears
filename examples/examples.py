@@ -24,7 +24,7 @@ logging.basicConfig(
 
 def spur_gears():
 
-    gear1 = SpurGear(number_of_teeth=12)
+    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.5)
     gear2 = SpurGear(number_of_teeth=24)
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
@@ -136,25 +136,35 @@ def fishbone_bevels():
 
     num_teeth = 9
     # module
-    m = 4
+    m = 1
     # half cone angle
     gamma = PI / 4
     beta = 0.65
 
-    gear_base = InvoluteGear(
+    gear_base = Gear(
         z_vals=[0, 2, 4],
         tooth_param=GearToothParam(num_teeth=num_teeth),
         cone=ConicData(cone_angle=gamma * 2),
         module=m,
         enable_undercut=True,
     )
-    gear_base.shape_recipe.involute.pressure_angle = 35 * PI / 180
+
     gear_base.shape_recipe.limits.h_a = 1.0
     gear_base.shape_recipe.limits.h_d = 1.1
     gear_base.shape_recipe.limits.h_o = 1.6
     gear_base.shape_recipe.fillet.tip_reduction = 0.0
     gear_base.shape_recipe.fillet.tip_fillet = 0.1
     gear_base.shape_recipe.transform.angle = lambda z: np.abs(z - 2) * beta
+
+    tooth_generator = InvoluteUndercutTooth(
+        pressure_angle=35 * PI / 180,
+        pitch_radius=gear_base.shape_recipe.tooth_generator.pitch_radius,
+        pitch_intersect_angle=gear_base.shape_recipe.tooth_generator.pitch_intersect_angle,
+        cone_angle=gamma * 2,
+        ref_limits=gear_base.shape_recipe.limits,
+    )
+
+    gear_base.shape_recipe.tooth_generator = tooth_generator
 
     gear_cad = GearBuilder(
         gear=gear_base,
