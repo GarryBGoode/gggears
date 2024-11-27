@@ -257,3 +257,61 @@ def trim_involute_undercut(
     tooth_curve.set_start_on(sol.x[0])
     undercut_curve.set_end_on(sol.x[1])
     return crv.CurveChain(undercut_curve, tooth_curve)
+
+
+class CycloidTooth(GearToothConicGenerator):
+    def __init__(
+        self,
+        pitch_intersect_angle: float = PI / 16,
+        pitch_radius: float = 1.0,
+        cone_angle: float = PI / 4,
+        rc_in: float = 0.2,
+        rc_out: float = 0.2,
+    ):
+        self.pitch_intersect_angle = pitch_intersect_angle
+        self.pitch_radius = pitch_radius
+        self.cone_angle = cone_angle
+        self.rc_in = rc_in
+        self.rc_out = rc_out
+
+    def generate_tooth_curve(self) -> crv.CurveChain:
+        return self.generate_cycloid_curve()
+
+    def generate_cycloid_curve(self) -> crv.CurveChain:
+        if self.cone_angle == 0:
+            lower_curve = crv.CycloidCurve(
+                rb=self.pitch_radius,
+                rc=-self.rc_in,
+                angle=-self.pitch_intersect_angle,
+                t0=-self.rc_in / self.pitch_radius * PI / 2,
+                t1=0,
+            )
+            upper_curve = crv.CycloidCurve(
+                rb=self.pitch_radius,
+                rc=self.rc_out,
+                angle=-self.pitch_intersect_angle,
+                t1=self.rc_out / self.pitch_radius * PI / 2,
+                t0=0,
+            )
+
+            return crv.CurveChain(lower_curve, upper_curve)
+        else:
+            R = self.pitch_radius / np.sin(self.cone_angle / 2)
+            lower_curve = crv.CycloidConicCurve(
+                rb=self.pitch_radius,
+                rc=-self.rc_in,
+                C=1 / R,
+                angle=-self.pitch_intersect_angle,
+                t0=-self.rc_in / self.pitch_radius * PI / 2,
+                t1=0,
+            )
+            upper_curve = crv.CycloidConicCurve(
+                rb=self.pitch_radius,
+                rc=self.rc_out,
+                C=1 / R,
+                angle=-self.pitch_intersect_angle,
+                t1=self.rc_out / self.pitch_radius * PI / 2,
+                t0=0,
+            )
+
+            return crv.CurveChain(lower_curve, upper_curve)

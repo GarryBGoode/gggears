@@ -295,7 +295,7 @@ class GearToothGenerator(ZFunctionMixin):
         self.pitch_radius = pitch_radius
 
     def generate_tooth_curve(self) -> crv.Curve:
-        p0 = scp_Rotation.from_euler("z", self.pitch_intersect_angle).apply(
+        p0 = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(
             (RIGHT * self.pitch_radius)
         )
         return crv.LineCurve(p0=p0 * 0.8, p1=p0 * 1.2)
@@ -304,7 +304,7 @@ class GearToothGenerator(ZFunctionMixin):
 class GearToothConicGenerator(GearToothGenerator):
     def __init__(
         self,
-        pitch_intersect_angle: float = -PI / 16,
+        pitch_intersect_angle: float = PI / 16,
         pitch_radius: float = 1.0,
         cone_angle: float = PI / 4,
     ):
@@ -321,9 +321,9 @@ class GearToothConicGenerator(GearToothGenerator):
         if self.cone_angle == 0:
             return super().generate_involute_curve()
         else:
-            axis = scp_Rotation.from_euler("z", self.pitch_intersect_angle).apply(out)
+            axis = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(out)
 
-            p0 = scp_Rotation.from_euler("z", self.pitch_intersect_angle).apply(
+            p0 = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(
                 (RIGHT * self.pitch_radius)
             )
             p1 = scp_Rotation.from_rotvec(axis * 0.1).apply(p0)

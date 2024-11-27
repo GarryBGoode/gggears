@@ -206,7 +206,83 @@ def fishbone_bevels():
     return (solid1, solid2, solid3, solid4, solid5)
 
 
+def cycloid_gear():
+    m = 1
+    num_teeth = 12
+    gamma = PI / 4 * 0
+    beta = 0.125
+    gear_base = Gear(
+        z_vals=[0, 4],
+        tooth_param=GearToothParam(num_teeth=num_teeth),
+        cone=ConicData(cone_angle=gamma * 2),
+        module=m,
+        enable_undercut=True,
+    )
+    gear_base.shape_recipe.limits.h_a = 1.3
+    gear_base.shape_recipe.limits.h_d = 1.3
+    gear_base.shape_recipe.limits.h_o = 2
+    gear_base.shape_recipe.fillet.tip_reduction = 0.0
+    gear_base.shape_recipe.fillet.tip_fillet = 0.1
+    gear_base.shape_recipe.fillet.root_fillet = 0.1
+    gear_base.shape_recipe.transform.angle = lambda z: (z - 2) * beta
+
+    rp = gear_base.shape_recipe.tooth_generator.pitch_radius
+    tooth_generator = CycloidTooth(
+        pitch_radius=rp,
+        pitch_intersect_angle=gear_base.shape_recipe.tooth_generator.pitch_intersect_angle,
+        cone_angle=gamma * 2,
+        rc_in=0.25 * rp,
+        rc_out=0.25 * rp * 2,
+    )
+
+    gear_base.shape_recipe.tooth_generator = tooth_generator
+
+    gear2 = Gear(
+        z_vals=[0, 4],
+        tooth_param=GearToothParam(num_teeth=num_teeth * 2),
+        cone=ConicData(cone_angle=gamma * 2),
+        module=m,
+        enable_undercut=True,
+    )
+    rp2 = gear2.shape_recipe.tooth_generator.pitch_radius
+    tooth_generator2 = CycloidTooth(
+        pitch_radius=rp2,
+        pitch_intersect_angle=gear2.shape_recipe.tooth_generator.pitch_intersect_angle,
+        cone_angle=gamma * 2,
+        rc_in=0.25 * rp2,
+        rc_out=0.25 * rp2 / 2,
+    )
+    gear2.shape_recipe.tooth_generator = tooth_generator2
+    gear2.shape_recipe.limits.h_a = 1.3
+    gear2.shape_recipe.limits.h_d = 1.3
+    gear2.shape_recipe.limits.h_o = 2
+    gear2.shape_recipe.fillet.tip_reduction = 0.0
+    gear2.shape_recipe.fillet.tip_fillet = 0.1
+    gear2.shape_recipe.fillet.root_fillet = 0.1
+
+    gear2.shape_recipe.transform.angle = lambda z: -(z - 2) * beta / 2
+    gear_base.mesh_to(gear2, target_dir=UP)
+
+    gear_part_1 = GearBuilder(
+        gear=gear_base,
+        n_points_vert=3,
+        n_points_hz=4,
+        add_plug=True,
+        method="slow",
+        oversampling_ratio=3,
+    ).solid_transformed
+    gear_part_2 = GearBuilder(
+        gear=gear2,
+        n_points_vert=3,
+        n_points_hz=4,
+        add_plug=True,
+        method="slow",
+        oversampling_ratio=3,
+    ).solid_transformed
+    return (gear_part_1, gear_part_2)
+
+
 if __name__ == "__main__":
     set_port(3939)
 
-    show(fishbone_bevels())
+    show(cycloid_gear())
