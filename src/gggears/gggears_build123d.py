@@ -126,7 +126,9 @@ class GearBuilder(GearToNurbs):
                     .rotate(axis1, angle)
                     # .translate(nppoint2Vector(self.gear.transform.center))
                 )
-                shape_dict.append(shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol))
+                shape_dict.append(
+                    shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol).clean()
+                )
 
             if bin_n_teeth[-(k + 1)] == "1":
 

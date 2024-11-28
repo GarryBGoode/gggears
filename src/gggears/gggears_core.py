@@ -432,7 +432,7 @@ def trim_reference_profile(
     pd2 = tooth_rotate(1)
     center_d = ((pd1 + pd2) / 2 * np.array([0, 0, 1])) * OUT
     rd_curve = crv.ArcCurve.from_2_point_center(p0=pd2, p1=pd1, center=center_d)
-    if rd_curve.length < DELTA**2:
+    if rd_curve.length < 1e-9:
         rd_curve.active = False
 
     profile = crv.CurveChain(rd_curve, tooth_curve, ra_curve, tooth_mirror)
@@ -469,9 +469,7 @@ class GearProfileDataCollector:
     fillet: FilletParam
 
 
-def generate_reference_profile(
-    inputdata: GearProfileDataCollector, enable_undercut=True
-) -> GearRefProfile:
+def generate_reference_profile(inputdata: GearProfileDataCollector) -> GearRefProfile:
     """Perform all steps to generate a single tooth profile for an involute gear."""
     conic_transform = GearPolarTransform(
         cone_angle=inputdata.cone.cone_angle, base_radius=inputdata.cone.base_radius
@@ -607,7 +605,10 @@ class FilletDataRecipe(FilletParam, ZFunctionMixin):
 
 
 def default_gear_recipe(
-    teeth_data: GearToothParam, module: float = 1, cone_angle=0
+    teeth_data: GearToothParam,
+    tooth_generator: GearToothConicGenerator,
+    module: float = 1,
+    cone_angle=0,
 ) -> GearProfileRecipe:
     """This creates the default recipe for a 3D gear tooth profile.
 
@@ -617,12 +618,11 @@ def default_gear_recipe(
     rp_ref = teeth_data.num_teeth / 2
     pitch_angle = 2 * PI / teeth_data.num_teeth
     gamma = cone_angle / 2
+    tooth_generator.pitch_radius = rp_ref
+    tooth_generator.cone_angle = cone_angle
+    tooth_generator.pitch_intersect_angle = pitch_angle / 4
     return GearProfileRecipe(
-        tooth_generator=GearToothConicGenerator(
-            pitch_intersect_angle=pitch_angle / 4,
-            pitch_radius=rp_ref,
-            cone_angle=cone_angle,
-        ),
+        tooth_generator=tooth_generator,
         cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
         limits=ToothLimitParam(),
         pitch_angle=teeth_data.pitch_angle,
@@ -642,14 +642,19 @@ class Gear:
         z_vals: np.ndarray = np.array([0, 1]),
         module: float = 1,
         tooth_param: GearToothParam = None,
+        tooth_generator: GearToothGenerator = None,
         shape_recipe: GearProfileRecipe = None,
         transform: GearTransform = None,
         cone: ConicData = None,
-        enable_undercut: bool = True,
     ):
         self.module = module
         self.z_vals = z_vals
-        self.enable_undercut = enable_undercut
+        # self.enable_undercut = enable_undercut
+        if tooth_generator is None:
+            # it is updated in the default recipe
+            self.tooth_generator = GearToothConicGenerator()
+        else:
+            self.tooth_generator = tooth_generator
         if tooth_param is None:
             self.tooth_param = GearToothParam()
         else:
@@ -661,7 +666,10 @@ class Gear:
         self.cone.base_radius = tooth_param.num_teeth / 2
         if shape_recipe is None:
             self.shape_recipe = default_gear_recipe(
-                teeth_data=tooth_param, module=module, cone_angle=self.cone.cone_angle
+                teeth_data=tooth_param,
+                tooth_generator=self.tooth_generator,
+                module=module,
+                cone_angle=self.cone.cone_angle,
             )
         else:
             self.shape_recipe = shape_recipe
@@ -699,7 +707,7 @@ class Gear:
         )
 
     def curve_gen_at_z(self, z):
-        return generate_reference_profile(self.shape_recipe(z), self.enable_undercut)
+        return generate_reference_profile(self.shape_recipe(z))
 
     def copy(self) -> "Gear":
         return copy.deepcopy(self)

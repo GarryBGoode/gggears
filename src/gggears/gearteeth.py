@@ -265,14 +265,14 @@ class CycloidTooth(GearToothConicGenerator):
         pitch_intersect_angle: float = PI / 16,
         pitch_radius: float = 1.0,
         cone_angle: float = PI / 4,
-        rc_in: float = 0.2,
-        rc_out: float = 0.2,
+        rc_in_coeff: float = 0.5,
+        rc_out_coeff: float = 0.5,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.cone_angle = cone_angle
-        self.rc_in = rc_in
-        self.rc_out = rc_out
+        self.rc_in_coeff = rc_in_coeff
+        self.rc_out_coeff = rc_out_coeff
 
     def generate_tooth_curve(self) -> crv.CurveChain:
         return self.generate_cycloid_curve()
@@ -281,37 +281,38 @@ class CycloidTooth(GearToothConicGenerator):
         if self.cone_angle == 0:
             lower_curve = crv.CycloidCurve(
                 rb=self.pitch_radius,
-                rc=-self.rc_in,
+                rc=-self.rc_in_coeff * self.pitch_radius,
                 angle=-self.pitch_intersect_angle,
-                t0=-self.rc_in / self.pitch_radius * PI / 2,
+                t0=-self.rc_in_coeff * PI / 2,
                 t1=0,
             )
             upper_curve = crv.CycloidCurve(
                 rb=self.pitch_radius,
-                rc=self.rc_out,
+                rc=self.rc_out_coeff * self.pitch_radius,
                 angle=-self.pitch_intersect_angle,
-                t1=self.rc_out / self.pitch_radius * PI / 2,
+                t1=self.rc_out_coeff * PI / 2,
                 t0=0,
             )
 
-            return crv.CurveChain(lower_curve, upper_curve)
         else:
             R = self.pitch_radius / np.sin(self.cone_angle / 2)
             lower_curve = crv.CycloidConicCurve(
                 rb=self.pitch_radius,
-                rc=-self.rc_in,
+                rc=-self.rc_in_coeff * self.pitch_radius,
                 C=1 / R,
                 angle=-self.pitch_intersect_angle,
-                t0=-self.rc_in / self.pitch_radius * PI / 2,
+                t0=-self.rc_in_coeff * PI / 2,
                 t1=0,
             )
             upper_curve = crv.CycloidConicCurve(
                 rb=self.pitch_radius,
-                rc=self.rc_out,
+                rc=self.rc_out_coeff * self.pitch_radius,
                 C=1 / R,
                 angle=-self.pitch_intersect_angle,
-                t1=self.rc_out / self.pitch_radius * PI / 2,
+                t1=self.rc_out_coeff * PI / 2,
                 t0=0,
             )
+        sol = crv.find_curve_plane_intersect(upper_curve, plane_normal=UP, guess=1)
+        upper_curve.set_end_on(sol.x[0])
 
-            return crv.CurveChain(lower_curve, upper_curve)
+        return crv.CurveChain(lower_curve, upper_curve)
