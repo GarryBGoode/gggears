@@ -576,7 +576,13 @@ def generate_boundary(profile: GearRefProfile, toothdata: GearToothParam) -> crv
             @ scp_Rotation.from_euler("z", i * toothdata.pitch_angle).as_matrix().T
         )
 
-    return crv.Curve(loc_func, t0=0, t1=1, params={"curve": profile.profile})
+    return crv.Curve(
+        loc_func,
+        t0=0,
+        t1=1,
+        params={"curve": profile.profile},
+        lenght_approx_ndiv=toothdata.num_teeth * 20,
+    )
 
 
 # "Recipe" names should refer to parameter sets that define certain kinds of gears in
@@ -711,6 +717,16 @@ class Gear:
 
     def copy(self) -> "Gear":
         return copy.deepcopy(self)
+
+    def swap_tooth_generator(self, tooth_generator: GearToothGenerator):
+        tg = copy.deepcopy(tooth_generator)
+        tg.pitch_radius = self.shape_recipe.tooth_generator.pitch_radius
+        tg.cone_angle = self.shape_recipe.tooth_generator.cone_angle
+        tg.pitch_intersect_angle = (
+            self.shape_recipe.tooth_generator.pitch_intersect_angle
+        )
+        self.tooth_generator = tg
+        self.shape_recipe.tooth_generator = tg
 
     def mesh_to(self, other: "Gear", target_dir=RIGHT, distance_offset=0):
         """

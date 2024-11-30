@@ -319,7 +319,7 @@ class GearToothConicGenerator(GearToothGenerator):
     def generate_tooth_curve(self) -> crv.Curve:
 
         if self.cone_angle == 0:
-            return super().generate_involute_curve()
+            return super().generate_tooth_curve()
         else:
             axis = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(out)
 

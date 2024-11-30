@@ -9,7 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gggears.gggears_core as gg
+import gggears.gggears_wrapper as gg
+import gggears.gearteeth as gt
 import gggears.curve as crv
 import matplotlib.pyplot as plt
 import numpy as np
@@ -70,46 +71,59 @@ def test_gear_intersect(
 
     num_teeth_2 = 52
 
-    n_poly = 600
+    n_poly = 300
 
     gear1 = gg.InvoluteGear(
-        z_vals=[0, 1],
+        number_of_teeth=num_teeth,
         module=m,
-        tooth_param=gg.GearToothParam(num_teeth),
-        cone=gg.ConicData(cone_angle=gamma * 2),
+        angle=angle_ref * 2 * PI / num_teeth,
+        tip_fillet=tip_fillet,
+        root_fillet=0,
+        helix_angle=0.3,
+        cone_angle=gamma * 2,
+        profile_shift=0,
         enable_undercut=True,
     )
-    gear1.shape_recipe.limits.h_d = 1 + 1e-4
-    gear1.shape_recipe.limits.h_a = 1.0
-    gear1.shape_recipe.fillet.tip_fillet = tip_fillet
-    gear1.transform.angle = angle_ref * gear1.tooth_param.pitch_angle
 
-    gear2 = gg.InvoluteGear(
+    gear2 = gg.Gear(
         z_vals=[0, 1],
         module=m,
         tooth_param=gg.GearToothParam(num_teeth_2),
         cone=gg.ConicData(cone_angle=gamma * 2),
+        tooth_generator=gt.InvoluteUndercutTooth(),
+    )
+    gear2 = gg.InvoluteGear(
+        number_of_teeth=num_teeth_2,
+        module=m,
+        dedendum_coefficient=1 + f0,
+        tip_fillet=tip_fillet,
+        root_fillet=f0,
+        helix_angle=-0.3,
+        cone_angle=gamma * 2,
+        profile_shift=0,
         enable_undercut=undercut,
     )
-    gear2.shape_recipe.limits.h_d = 1 + f0
-    gear2.shape_recipe.limits.h_a = 1.0
-    gear2.shape_recipe.fillet.root_fillet = f0
-    # gear2.transform.angle = 0.1
+
     gear2.mesh_to(gear1)
 
-    gear_gen1 = gear1.curve_gen_at_z(0)
-    gear_gen2 = gear2.curve_gen_at_z(0)
+    gear_gen1 = gear1.gearcore.curve_gen_at_z(0)
+    gear_gen2 = gear2.gearcore.curve_gen_at_z(0)
     outer_curve = crv.TransformedCurve(
-        gear1.transform, gg.generate_boundary(gear_gen1, gear1.tooth_param)
+        gear1.gearcore.transform,
+        gg.generate_boundary(gear_gen1, gear1.gearcore.tooth_param),
     )
-    points = outer_curve(np.linspace(-2 / num_teeth, 2 / num_teeth, n_poly))
-    points = np.append(points, gear1.transform.center[np.newaxis, :], axis=0)
+
+    t1 = np.linspace(-2 / num_teeth, 2 / num_teeth, n_poly)
+    points = outer_curve(t1)
+    points = np.append(points, gear1.gearcore.transform.center[np.newaxis, :], axis=0)
 
     outer_curve2 = crv.TransformedCurve(
-        gear2.transform, gg.generate_boundary(gear_gen2, gear2.tooth_param)
+        gear2.gearcore.transform,
+        gg.generate_boundary(gear_gen2, gear2.gearcore.tooth_param),
     )
-    points2 = outer_curve2(np.linspace(-2 / num_teeth_2, 2 / num_teeth_2, n_poly))
-    points2 = np.append(points2, gear2.transform.center[np.newaxis, :], axis=0)
+    t2 = np.linspace(-2 / num_teeth_2, 2 / num_teeth_2, n_poly)
+    points2 = outer_curve2(t2)
+    points2 = np.append(points2, gear2.gearcore.transform.center[np.newaxis, :], axis=0)
 
     poly1 = shp.geometry.Polygon(points)
     poly2 = shp.geometry.Polygon(points2)
@@ -122,8 +136,8 @@ def test_gear_intersect(
         ax = plt.axes()
         # ax.plot(points[:, 0], points[:, 1])
         # ax.plot(points2[:, 0], points2[:, 1])
-        ax.plot(poly1.exterior.xy[0], poly1.exterior.xy[1])
-        ax.plot(poly2.exterior.xy[0], poly2.exterior.xy[1])
+        ax.plot(poly1.exterior.xy[0], poly1.exterior.xy[1], marker=".")
+        ax.plot(poly2.exterior.xy[0], poly2.exterior.xy[1], marker=".")
         ax.axis("equal")
         plt.show()
 
@@ -138,10 +152,10 @@ def test_gear_intersect(
 if __name__ == "__main__":
 
     test_gear_intersect(
-        num_teeth=121,
+        num_teeth=8,
         module=2,
-        angle_ref=1.0,
-        root_fillet=-1,
-        tip_fillet=0,
+        angle_ref=np.float64(0.8333333333333333),
+        root_fillet=0.4,
+        tip_fillet=0.4,
         enable_plotting=True,
     )
