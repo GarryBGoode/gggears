@@ -231,18 +231,27 @@ class InvoluteGear:
         Returns
         -------
         Part"""
+        max_angle = np.max(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+        min_angle = np.min(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+
+        twist_angle = np.abs(max_angle - min_angle)
         if self.crowning == 0 and self.beta == 0:
             n_vert = 2
-        elif (
-            np.abs(
-                self.gearcore.shape_recipe.transform.angle(self.gearcore.z_vals[0])
-                - self.gearcore.shape_recipe.transform.angle(self.gearcore.z_vals[1])
-            )
-            > PI / 2
-        ):
-            n_vert = 4
+        elif twist_angle > PI / 4:
+            n_vert = 3 + int(twist_angle / (PI / 4))
         else:
-            n_vert = 3
+            if self.cone_angle == 0:
+                n_vert = 3
+            else:
+                n_vert = 4
 
         self.builder = GearBuilder(
             self.gearcore,
@@ -296,7 +305,7 @@ class InvoluteGear:
         return copy.deepcopy(self)
 
 
-class SpurGear:
+class SpurGear(InvoluteGear):
     """Class for a basic spur gear.
 
     Parameters
@@ -385,162 +394,29 @@ class SpurGear:
         backlash: float = 0,
         crowning: float = 0,
     ):
-        self.number_of_teeth = number_of_teeth
-        self.height = height
-        self.center = center
-        self.angle = angle
-        self.module = module
-        self.enable_undercut = enable_undercut
-        self.root_fillet = root_fillet
-        self.tip_fillet = tip_fillet
-        self.tip_truncation = tip_truncation
-        self.profile_shift = profile_shift
-        self.addendum_coefficient = addendum_coefficient
-        self.dedendum_coefficient = dedendum_coefficient
-        self.pressure_angle = pressure_angle
-        self.backlash = backlash
-        self.crowning = crowning
-        self.builder: GearBuilder = None
-        self.gearcore: Gear = None
-        self.calc_params()
-
-    @property
-    def rp(self):
-        """Pitch radius of the gear at z=0."""
-        return self.module * self.number_of_teeth / 2
-
-    @property
-    def pitch_angle(self):
-        """Pitch angle of the gear."""
-        return 2 * PI / self.number_of_teeth
-
-    def update_tooth_param(self):
-        """Updates the tooth parameters for the gear. (pitch angle calculated here)"""
-        return GearToothParam(self.number_of_teeth)
-
-    def calc_params(self):
-        """Sets up the internal construction recipe for the gear based on the
-        parameters."""
-        # reference pitch radius with module 1
-        rp_ref = self.rp / self.module
-
-        def crowning_func(z, offset=0):
-            return (
-                offset - (z * 2 / self.height - 1) ** 2 * self.crowning / rp_ref * 1e-3
-            )
-
-        tooth_angle = (
-            self.pitch_angle / 4
-            + self.profile_shift * np.tan(self.pressure_angle) / rp_ref
-            - self.backlash / rp_ref
+        super().__init__(
+            number_of_teeth=number_of_teeth,
+            height=height,
+            helix_angle=0,
+            cone_angle=0,
+            center=center,
+            angle=angle,
+            module=module,
+            enable_undercut=enable_undercut,
+            root_fillet=root_fillet,
+            tip_fillet=tip_fillet,
+            tip_truncation=tip_truncation,
+            profile_shift=profile_shift,
+            addendum_coefficient=addendum_coefficient,
+            dedendum_coefficient=dedendum_coefficient,
+            pressure_angle=pressure_angle,
+            backlash=backlash,
+            crowning=crowning,
+            inside_teeth=False,
         )
 
-        limits = ToothLimitParamRecipe(
-            h_d=self.dedendum_coefficient - self.profile_shift,
-            h_a=self.addendum_coefficient + self.profile_shift,
-        )
 
-        if self.enable_undercut:
-            tooth_generator = InvoluteUndercutTooth(
-                pressure_angle=self.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                ref_limits=limits,
-                cone_angle=0,
-            )
-        else:
-            tooth_generator = InvoluteTooth(
-                pressure_angle=self.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                cone_angle=0,
-            )
-
-        self.gearcore = Gear(
-            tooth_param=self.update_tooth_param(),
-            z_vals=np.array([0, self.height]),
-            module=self.module,
-            cone=ConicData(cone_angle=0),
-            shape_recipe=GearProfileRecipe(
-                tooth_generator=tooth_generator,
-                limits=limits,
-                fillet=FilletDataRecipe(
-                    root_fillet=self.root_fillet,
-                    tip_fillet=self.tip_fillet,
-                    tip_reduction=self.tip_truncation,
-                ),
-                cone=ConicData(cone_angle=0, base_radius=self.rp),
-                pitch_angle=self.pitch_angle,
-                transform=GearTransformRecipe(
-                    scale=1.0,
-                    center=lambda z: OUT * z,
-                ),
-            ),
-            transform=GearTransform(
-                center=self.center, angle=self.angle, scale=self.module
-            ),
-        )
-
-    def build_part(self) -> Part:
-        """Creates the build123d Part object of the gear. This may take several seconds.
-
-        Returns
-        -------
-        Part"""
-        if self.crowning == 0:
-            n_vert = 2
-        else:
-            n_vert = 3
-        self.builder = GearBuilder(
-            self.gearcore,
-            n_points_hz=4,
-            n_points_vert=n_vert,
-            add_plug=True,
-            method="fast",
-        )
-        return self.builder.solid_transformed
-
-    def update_part(self):
-        """Updates the build123d Part object accordingly if
-        the current gear was moved or rotated"""
-        if self.builder is None:
-            self.build_part()
-        self.builder.solid_transformed = apply_transform_part(
-            self.builder.solid, self.gearcore.transform
-        )
-        return self.builder.solid_transformed
-
-    def mesh_to(self, other: "SpurGear", target_dir: np.ndarray = RIGHT):
-        """Aligns this gear to another gear object.
-
-        Arguments
-        ---------
-        other: SpurGear
-            The other gear object to align to.
-        target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other gear.
-            Should be a unit vector. Default is RIGHT (x).
-        """
-        if (
-            self.gearcore.tooth_param.inside_teeth
-            or other.gearcore.tooth_param.inside_teeth
-        ):
-            ps_mult = -1
-        else:
-            ps_mult = 1
-        self.gearcore.mesh_to(
-            other.gearcore,
-            target_dir=target_dir,
-            distance_offset=ps_mult
-            * (self.profile_shift * self.module + other.profile_shift * other.module),
-        )
-
-    def copy(self):
-        """:no-index:"""
-        return copy.deepcopy(self)
-
-
-class SpurRingGear(SpurGear):
+class SpurRingGear(InvoluteGear):
     """
     A class representing a spur ring gear, which is a type of gear with teeth on the
     inner circumference.
@@ -628,46 +504,28 @@ class SpurRingGear(SpurGear):
         crowning: float = 0,
     ):
         super().__init__(
-            number_of_teeth,
-            height,
-            center,
-            angle,
-            module,
-            enable_undercut,
-            root_fillet,
-            tip_fillet,
-            tip_truncation,
-            profile_shift,
-            addendum_coefficient,
-            dedendum_coefficient,
-            pressure_angle,
-            backlash,
-            crowning,
+            number_of_teeth=number_of_teeth,
+            height=height,
+            helix_angle=0,
+            cone_angle=0,
+            center=center,
+            angle=angle,
+            module=module,
+            enable_undercut=enable_undercut,
+            root_fillet=root_fillet,
+            tip_fillet=tip_fillet,
+            tip_truncation=tip_truncation,
+            profile_shift=profile_shift,
+            addendum_coefficient=addendum_coefficient,
+            dedendum_coefficient=dedendum_coefficient,
+            pressure_angle=pressure_angle,
+            backlash=backlash,
+            crowning=crowning,
+            inside_teeth=True,
         )
-        if self.gearcore.shape_recipe.limits.h_o > 0:
-            self.gearcore.shape_recipe.limits.h_o *= -1
-
-    def update_tooth_param(self):
-        """:no-index:"""
-        return GearToothParam(self.number_of_teeth, inside_teeth=True)
-
-    def build_part(self):
-        """:no-index:"""
-        if self.crowning == 0:
-            n_vert = 2
-        else:
-            n_vert = 3
-        self.builder = GearBuilder(
-            self.gearcore,
-            n_points_hz=4,
-            n_points_vert=n_vert,
-            add_plug=False,
-            method="fast",
-        )
-        return self.builder.solid_transformed
 
 
-class HelicalGear(SpurGear):
+class HelicalGear(InvoluteGear):
     """Class for a helical gear.
 
     Parameters
@@ -763,10 +621,12 @@ class HelicalGear(SpurGear):
         self.herringbone = herringbone
         beta = helix_angle
         super().__init__(
-            number_of_teeth,
-            height,
-            center,
-            angle,
+            number_of_teeth=number_of_teeth,
+            height=height,
+            helix_angle=helix_angle,
+            cone_angle=0,
+            center=center,
+            angle=angle,
             module=module / np.cos(beta),
             enable_undercut=enable_undercut,
             root_fillet=root_fillet,
@@ -779,54 +639,24 @@ class HelicalGear(SpurGear):
             backlash=backlash,
             crowning=crowning,
         )
-        angle_coeff = np.sin(self.beta) / self.gearcore.rp
+        # correct for herringbone design
         if herringbone:
-            self.gearcore.shape_recipe.transform.angle = (
-                lambda z, coeff=angle_coeff: (
-                    -np.abs(self.height / 2 - z) + self.height / 2
-                )
-                * coeff
-            )
             self.gearcore.z_vals = np.array([0, self.height / 2, self.height])
-        else:
-            self.gearcore.shape_recipe.transform.angle = (
-                lambda z, coeff=angle_coeff: z * coeff
-            )
-        cosbeta = np.cos(beta)
-        self.gearcore.shape_recipe.transform.center = (
-            lambda z, coeff=cosbeta: OUT * z * coeff
-        )
+
+            def herringbone_mod(
+                z, original: Callable = self.gearcore.shape_recipe.transform.angle
+            ):
+                return original(self.height / 2 - np.abs(self.height / 2 - z))
+
+            self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
     @property
     def beta(self):
         """Beta = helix angle of the gear."""
         return self.helix_angle
 
-    def build_part(self):
-        """:no-index:"""
-        max_zval = np.max(self.gearcore.z_vals[1:] - self.gearcore.z_vals[:-1])
-        twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
-        if twist_angle < PI / 16:
-            n_vert = 3
-            method = "fast"
-        elif twist_angle < PI / 2:
-            n_vert = 4
-            method = "slow"
-        else:
-            # 5 points tend to crash the OCT fuse with the slow option
-            n_vert = 5
-            method = "fast"
-        self.builder = GearBuilder(
-            self.gearcore,
-            n_points_hz=4,
-            n_points_vert=n_vert,
-            add_plug=True,
-            method=method,
-        )
-        return self.builder.solid_transformed
 
-
-class HelicalRingGear(HelicalGear):
+class HelicalRingGear(InvoluteGear):
     """A class representing a helical ring gear, which is a type of gear with teeth on
     the inner circumference and a helical angle.
 
@@ -920,26 +750,34 @@ class HelicalRingGear(HelicalGear):
         crowning: float = 0,
     ):
         super().__init__(
-            number_of_teeth,
-            helix_angle,
-            herringbone,
-            height,
-            center,
-            angle,
-            module,
-            enable_undercut,
-            root_fillet,
-            tip_fillet,
-            tip_truncation,
-            profile_shift,
-            addendum_coefficient,
-            dedendum_coefficient,
-            pressure_angle,
-            backlash,
-            crowning,
+            number_of_teeth=number_of_teeth,
+            helix_angle=helix_angle,
+            height=height,
+            center=center,
+            angle=angle,
+            module=module / np.cos(helix_angle),
+            enable_undercut=enable_undercut,
+            root_fillet=root_fillet,
+            tip_fillet=tip_fillet,
+            tip_truncation=tip_truncation,
+            profile_shift=profile_shift,
+            addendum_coefficient=addendum_coefficient,
+            dedendum_coefficient=dedendum_coefficient,
+            pressure_angle=pressure_angle,
+            backlash=backlash,
+            crowning=crowning,
+            inside_teeth=True,
         )
-        if self.gearcore.shape_recipe.limits.h_o > 0:
-            self.gearcore.shape_recipe.limits.h_o *= -1
+        # correct for herringbone design
+        if herringbone:
+            self.gearcore.z_vals = np.array([0, self.height / 2, self.height])
+
+            def herringbone_mod(
+                z, original: Callable = self.gearcore.shape_recipe.transform.angle
+            ):
+                return original(self.height / 2 - np.abs(self.height / 2 - z))
+
+            self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
     def update_tooth_param(self):
         """:no-index:"""
@@ -969,7 +807,7 @@ class HelicalRingGear(HelicalGear):
         return self.builder.solid_transformed
 
 
-class BevelGear(SpurGear):
+class BevelGear(InvoluteGear):
     """
     A class representing a bevel gear, which is a type of gear with teeth on a conical
     surface.
@@ -980,8 +818,8 @@ class BevelGear(SpurGear):
         Number of teeth of the gear.
     cone_angle: float
         Cone angle of the gear in radians. Default is PI / 2.
-    spiral_coefficient: float
-        Spiral coefficient for the gear. Default is 0.
+    helix_angle: float
+        Spiral coefficient or angle for the gear. Default is 0.
         This parameter can be used to create a spiral bevel gears, but it is not
         dimensionally accurate.
         Two meshing spiral bevel gears should have opposite spiral coefficients.
@@ -1034,10 +872,9 @@ class BevelGear(SpurGear):
     By default the gear is positioned such that the pitch circle is in the XY plane.
     This forces some protion of the gear under the XY plane.
 
-    Profile shift is not implemented for bevel gears. A bevel-gear equivalent of profile
-    shift would cause a change in the axial angle, which is often required to be 90 degrees.
-    Reverse-optimizing around this constraint would be tedious.
-    If undercut is causing issues, changing the pressure angle is recommended instead.
+    Profile shift is not recommended for bevel gears, the meshing function doesn't
+    support it yet. Use complementary values (eg. +0.3 and -0.3) of shift on the pair
+    of bevels if you really need it.
 
     Methods
     -------
@@ -1060,8 +897,8 @@ class BevelGear(SpurGear):
     >>> gamma2 = np.pi / 2 - gamma
     >>> height = 5
     >>> m = 2
-    >>> gear1 = BevelGear(number_of_teeth=num_teeth_1,module=m,height=height,cone_angle=gamma * 2, spiral_coefficient=beta)
-    >>> gear2 = BevelGear(number_of_teeth=num_teeth_2,module=m,height=height,cone_angle=gamma2 * 2,spiral_coefficient=-beta)
+    >>> gear1 = BevelGear(number_of_teeth=num_teeth_1,module=m,height=height,cone_angle=gamma * 2, helix_angle=beta)
+    >>> gear2 = BevelGear(number_of_teeth=num_teeth_2,module=m,height=height,cone_angle=gamma2 * 2,helix_angle=-beta)
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
@@ -1075,7 +912,7 @@ class BevelGear(SpurGear):
         self,
         number_of_teeth: int,
         cone_angle: float = PI / 2,
-        spiral_coefficient: float = 0,
+        helix_angle: float = 0,
         height: float = 1.0,
         center: np.ndarray = ORIGIN,
         angle: float = 0,
@@ -1084,17 +921,19 @@ class BevelGear(SpurGear):
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0.1,
+        profile_shift=0,
         addendum_coefficient: float = 1.0,
         dedendum_coefficient: float = 1.2,
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
     ):
-        self.cone_angle = cone_angle
-        self.spiral_coefficient = spiral_coefficient
+        # Note: this bevel is not much different from the generic involute gear
         super().__init__(
             number_of_teeth=number_of_teeth,
             height=height,
+            helix_angle=helix_angle,
+            cone_angle=cone_angle,
             center=center,
             angle=angle,
             module=module,
@@ -1102,94 +941,14 @@ class BevelGear(SpurGear):
             root_fillet=root_fillet,
             tip_fillet=tip_fillet,
             tip_truncation=tip_truncation,
+            profile_shift=profile_shift,
             addendum_coefficient=addendum_coefficient,
             dedendum_coefficient=dedendum_coefficient,
             pressure_angle=pressure_angle,
             backlash=backlash,
             crowning=crowning,
-            profile_shift=0,
+            inside_teeth=False,
         )
-
-    def calc_params(self):
-
-        # reference pitch radius with module 1
-        rp_ref = self.rp / self.module
-        gamma = self.cone_angle / 2
-
-        def crowning_func(z, offset=0):
-            return (
-                offset - (z * 2 / self.height - 1) ** 2 * self.crowning / rp_ref * 1e-3
-            )
-
-        tooth_angle = self.pitch_angle / 4 - self.backlash / rp_ref
-
-        #         tooth_angle = (
-        #     self.pitch_angle / 4
-        #     + self.profile_shift * np.tan(self.pressure_angle) / rp_ref
-        #     - self.backlash / rp_ref
-        # )
-
-        limits = ToothLimitParamRecipe(
-            h_d=self.dedendum_coefficient - self.profile_shift,
-            h_a=self.addendum_coefficient + self.profile_shift,
-        )
-
-        if self.enable_undercut:
-            tooth_generator = InvoluteUndercutTooth(
-                pressure_angle=self.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                ref_limits=limits,
-                cone_angle=self.cone_angle,
-            )
-        else:
-            tooth_generator = InvoluteTooth(
-                pressure_angle=self.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                cone_angle=self.cone_angle,
-            )
-
-        self.gearcore = Gear(
-            tooth_param=self.update_tooth_param(),
-            z_vals=np.array([0, self.height]),
-            module=self.module,
-            cone=ConicData(cone_angle=self.cone_angle),
-            shape_recipe=GearProfileRecipe(
-                tooth_generator=tooth_generator,
-                limits=limits,
-                fillet=FilletDataRecipe(
-                    root_fillet=self.root_fillet,
-                    tip_fillet=self.tip_fillet,
-                    tip_reduction=self.tip_truncation,
-                ),
-                cone=ConicData(cone_angle=self.cone_angle, base_radius=rp_ref),
-                pitch_angle=self.pitch_angle,
-                transform=GearTransformRecipe(
-                    scale=lambda z: 1
-                    * (1 - z * 2 * np.sin(gamma) / self.number_of_teeth),
-                    center=lambda z: 1 * z * OUT * np.cos(gamma),
-                    angle=lambda z: self.spiral_coefficient / rp_ref * z,
-                ),
-            ),
-            transform=GearTransform(
-                center=self.center, angle=self.angle, scale=self.module
-            ),
-        )
-
-    def update_tooth_param(self):
-        return GearToothParam(self.number_of_teeth, inside_teeth=False)
-
-    def build_part(self):
-        n_vert = 3
-        self.builder = GearBuilder(
-            self.gearcore,
-            n_points_hz=4,
-            n_points_vert=n_vert,
-            add_plug=True,
-            method="fast",
-        )
-        return self.builder.solid_transformed
 
 
 class CycloidGear:

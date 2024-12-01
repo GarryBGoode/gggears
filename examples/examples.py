@@ -40,6 +40,7 @@ def planetary_helical_gear():
     n_planet = int(np.floor((n_ring - n_sun) / 2))
 
     beta = 15 * PI / 180
+    herringbone = False
 
     height = 15
     # this hacky correction needs a better treatment later
@@ -51,12 +52,21 @@ def planetary_helical_gear():
         height=height,
         helix_angle=beta,
         angle=angle_correction,
+        herringbone=herringbone,
     )
     gear_sun = HelicalGear(
-        number_of_teeth=n_sun, module=m, height=height, helix_angle=-beta
+        number_of_teeth=n_sun,
+        module=m,
+        height=height,
+        helix_angle=-beta,
+        herringbone=herringbone,
     )
     gear_planet1 = HelicalGear(
-        number_of_teeth=n_planet, module=m, height=height, helix_angle=beta
+        number_of_teeth=n_planet,
+        module=m,
+        height=height,
+        helix_angle=beta,
+        herringbone=herringbone,
     )
 
     gear_planet2 = gear_planet1.copy()
@@ -94,9 +104,9 @@ def planetary_helical_gear():
 
 def bevel_gear():
 
-    num_teeth_1 = 16
+    num_teeth_1 = 8
     num_teeth_2 = 31
-    beta = 0.5
+    beta = PI / 6
     # module
     m = 2
     # half cone angle
@@ -105,20 +115,22 @@ def bevel_gear():
     gamma = np.arctan2(num_teeth_1, num_teeth_2)
     gamma2 = np.pi / 2 - gamma
 
-    height = 5
+    height = 15
     gear1 = BevelGear(
         number_of_teeth=num_teeth_1,
         module=m,
         height=height,
         cone_angle=gamma * 2,
-        spiral_coefficient=beta,
+        helix_angle=beta,
+        profile_shift=0.5,
     )
     gear2 = BevelGear(
         number_of_teeth=num_teeth_2,
         module=m,
         height=height,
         cone_angle=gamma2 * 2,
-        spiral_coefficient=-beta,
+        helix_angle=-beta,
+        profile_shift=-0.5,
     )
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
@@ -265,4 +277,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(fishbone_bevels())
+    show(planetary_helical_gear(), deviation=0.05, angular_tolerance=0.1)
