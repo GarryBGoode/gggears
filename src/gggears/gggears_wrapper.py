@@ -26,10 +26,9 @@ class InvoluteGear:
     height: float, optional
         Height of the gear. Default is 1.0.
     helix_angle: float
-        Helix angle of the gear in radians. Default is 30 degrees (in radians).
-        A helical gear and a helical ring gear should have the same helix angles.
+        Helix angle of the gear in radians. Default is 0.
     cone_angle: float
-        Cone angle of the gear in radians. Default is PI / 2.
+        Cone angle of the gear in radians. Default is 0.
     center: np.ndarray, optional
         Center reference-point of the gear. Default is ORIGIN.
     angle: float, optional
@@ -55,7 +54,7 @@ class InvoluteGear:
     dedendum_coefficient: float, optional
         Dedendum height coefficient. Default is 1.2.
     pressure_angle: float, optional
-        Pressure angle in radians. Default is 20 degrees (converted to radians).
+        Pressure angle in radians. Default is 20 * PI / 180 (20deg in radians).
     backlash: float, optional
         Backlash coefficient. Default is 0.
     crowning: float, optional
@@ -87,7 +86,7 @@ class InvoluteGear:
         self,
         number_of_teeth: int,
         height: float = 1.0,
-        helix_angle: float = 30 * PI / 180,
+        helix_angle: float = 0,
         cone_angle: float = 0,
         center: np.ndarray = ORIGIN,
         angle: float = 0,
@@ -842,6 +841,10 @@ class BevelGear(InvoluteGear):
         Tip fillet radius coefficient. Default is 0.0.
     tip_truncation: float
         Tip truncation coefficient. Default is 0.1.
+    profile_shift: float
+        Profile shift coefficient. Default is 0.0..
+        Underlying method is not exact, but approximates the behavior of spur gears
+        with profile shift.
     addendum_coefficient: float
         Addendum height coefficient. Default is 1.0.
     dedendum_coefficient: float
@@ -921,7 +924,7 @@ class BevelGear(InvoluteGear):
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0.1,
-        profile_shift=0,
+        profile_shift: float = 0,
         addendum_coefficient: float = 1.0,
         dedendum_coefficient: float = 1.2,
         pressure_angle: float = 20 * PI / 180,
@@ -984,6 +987,8 @@ class CycloidGear:
         Ratio of inside rolling circle vs pitch circle radius. Default is 0.5.
     outside_cycloid_coefficient: float, optional
         Ratio of outside rolling circle vs pitch circle radius. Default is 0.5.
+    helix_angle: float
+        Helix angle of the gear in radians. Default is 0.
     backlash: float, optional
         Backlash coefficient. Default is 0.
     crowning: float, optional
@@ -1007,6 +1012,10 @@ class CycloidGear:
         Updates and returns the build123d Part object of the gear based on the current
         gear objects center position and angle.
         This method is useful if mesh_to() was called after build_part().
+    adapt_cycloid_radii(other)
+        Adapts the cycloid generator radii for both this and other gear to ensure
+        proper meshing. It is done by adapting the 'outside' radii while keeping the
+        'inside' radii unchanged.
 
     Examples
     --------
@@ -1036,9 +1045,9 @@ class CycloidGear:
         tip_truncation: float = 0.1,
         addendum_coefficient: float = 1.0,
         dedendum_coefficient: float = 1.2,
-        inside_cycloid_coefficient=0.5,
-        outside_cycloid_coefficient=0.5,
-        spiral_coefficient=0,
+        inside_cycloid_coefficient: float = 0.5,
+        outside_cycloid_coefficient: float = 0.5,
+        helix_angle: float = 0,
         backlash: float = 0,
         crowning: float = 0,
         inside_teeth=False,
@@ -1056,7 +1065,7 @@ class CycloidGear:
         self.dedendum_coefficient = dedendum_coefficient
         self.inside_cycloid_coefficient = inside_cycloid_coefficient
         self.outside_cycloid_coefficient = outside_cycloid_coefficient
-        self.spiral_coefficient = spiral_coefficient
+        self.helix_angle = helix_angle
         self.backlash = backlash
         self.crowning = crowning
         self.builder: GearBuilder = None
@@ -1091,6 +1100,10 @@ class CycloidGear:
             )
 
         tooth_angle = self.pitch_angle / 4 - self.backlash / rp_ref
+        spiral_coeff = np.sin(self.helix_angle) / rp_ref
+
+        def angle_func(z, coeff=spiral_coeff):
+            return z * coeff
 
         if not self.inside_teeth:
             limits = ToothLimitParamRecipe(
@@ -1128,7 +1141,7 @@ class CycloidGear:
                     scale=lambda z: 1
                     * (1 - z * 2 * np.sin(gamma) / self.number_of_teeth),
                     center=lambda z: 1 * z * OUT * np.cos(gamma),
-                    angle=lambda z: self.spiral_coefficient / rp_ref * z,
+                    angle=angle_func,
                 ),
             ),
             transform=GearTransform(
@@ -1142,7 +1155,7 @@ class CycloidGear:
         Returns
         -------
         Part"""
-        if self.spiral_coefficient == 0 and self.cone_angle == 0 and self.crowning == 0:
+        if self.helix_angle == 0 and self.cone_angle == 0 and self.crowning == 0:
             n_vert = 2
         else:
             n_vert = 3
