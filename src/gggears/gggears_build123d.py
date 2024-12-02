@@ -35,7 +35,7 @@ class GearBuilder(GearToNurbs):
 
     def __init__(
         self,
-        gear: gg.InvoluteGear,
+        gear: gg.Gear,
         n_points_hz=4,
         n_points_vert=4,
         oversampling_ratio=2.5,
@@ -126,7 +126,9 @@ class GearBuilder(GearToNurbs):
                     .rotate(axis1, angle)
                     # .translate(nppoint2Vector(self.gear.transform.center))
                 )
-                shape_dict.append(shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol))
+                shape_dict.append(
+                    shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol).clean()
+                )
 
             if bin_n_teeth[-(k + 1)] == "1":
 

@@ -174,6 +174,73 @@ def involute_sphere(t, r=1, C=0.5, angle=0, v_offs=ORIGIN, z_offs=0):
         return v2
 
 
+def cycloid_circle(t, rb=1, rc=1, angle=0, v_offs=ORIGIN, z_offs=0):
+    """
+    Returns the x-y-z values of the cycloid function.
+
+    The cycloid is calculated for a circle of rc rolling on the outside of a circle of
+    rb. If negative radius is supplied for rc, the circle rolls on the inside of the
+    base circle.
+
+    t: input angle
+    rb: base circle radius
+    rc: rolling circle radius
+    a: offset angle, angle of the starting point of the involute on the base circle
+    v_offs: offset vector used for trochoid curve generation. The offset rotates with the rolling circle.
+    z_offs: offset value applied in the z direction
+    """
+
+    rot_z1 = scp_Rotation.from_euler("z", t + angle)
+    beta = t * rb / rc
+    rot_z2 = scp_Rotation.from_euler("z", beta)
+    v0 = (rb + rc) * RIGHT
+    v1 = rc * LEFT + v_offs
+
+    return rot_z1.apply((v0) + rot_z2.apply(v1)) + z_offs * OUT
+
+
+def cycloid_line(t, rc=1, angle=0, v_offs=ORIGIN, z_offs=0):
+    pass
+
+
+def cycloid_cone(t, rb=1, rc=1, C=0.5, angle=0, v_offs=ORIGIN, z_offs=0):
+    """
+    Returns the x-y-z values of the cycloid function.
+    The base circle is positioned in the x-y plane, the spherical center is placed in the positive Z direction for positive C values.
+    t: input angle
+    rb: base circle radius
+    rc: rolling circle radius
+    C: spherical curvature. C=1/R, R is the sphere radius. Curvature is used for supporting C==0 or infinite R, reverting to circle cycloid.
+    Negative values result in a cone with a center in negative Z direction.
+    abs(C)<=1/rb should be kept.
+    a: offset angle, angle of the starting point of the involute on the base circle
+    v_offs: offset vector used for trochoid curve generation. The offset rotates with the tangent line of the involute.
+    z_offs: offset value applied in the z direction
+    """
+    if C == 0:
+        return cycloid_circle(t, r, angle, v_offs)
+    else:
+        rot_z = scp_Rotation.from_euler("z", t + angle)
+
+        R = 1 / np.abs(C)
+        Csig = np.sign(C)
+        gamma1 = np.arcsin(rb / R)
+        gamma2 = np.arcsin(rc / R)
+        z_center = np.sqrt(R**2 - rb**2) * OUT * Csig
+
+        gamma12_rot_y = scp_Rotation.from_euler("y", -Csig * (gamma1 + gamma2))
+        v0 = rb * RIGHT + gamma12_rot_y.apply(RIGHT * rc)
+        beta = t * rb / rc
+        axis = gamma12_rot_y.apply(OUT)
+
+        v1 = scp_Rotation.from_euler("z", beta).apply(LEFT * rc + v_offs)
+        v3 = gamma12_rot_y.apply(v1 - z_center * 0) + z_center * 0
+
+        v2 = rot_z.apply(v0 + v3) + z_offs * OUT
+
+        return v2
+
+
 def vectorize(func: callable):
     def vector_handler(t, **kwargs):
         if hasattr(t, "__iter__"):

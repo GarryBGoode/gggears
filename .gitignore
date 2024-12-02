@@ -6,6 +6,9 @@ __pycache__/
 # manual and local test files
 mytest.py
 
+# local logging and stuff
+output.txt
+
 # VS Code
 .vscode/
 

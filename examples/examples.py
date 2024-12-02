@@ -24,8 +24,8 @@ logging.basicConfig(
 
 def spur_gears():
 
-    gear1 = SpurGear(number_of_teeth=12)
-    gear2 = SpurGear(number_of_teeth=24)
+    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.5)
+    gear2 = SpurGear(number_of_teeth=24, enable_undercut=False, root_fillet=0.2)
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
@@ -40,6 +40,7 @@ def planetary_helical_gear():
     n_planet = int(np.floor((n_ring - n_sun) / 2))
 
     beta = 15 * PI / 180
+    herringbone = False
 
     height = 15
     # this hacky correction needs a better treatment later
@@ -51,12 +52,21 @@ def planetary_helical_gear():
         height=height,
         helix_angle=beta,
         angle=angle_correction,
+        herringbone=herringbone,
     )
     gear_sun = HelicalGear(
-        number_of_teeth=n_sun, module=m, height=height, helix_angle=-beta
+        number_of_teeth=n_sun,
+        module=m,
+        height=height,
+        helix_angle=-beta,
+        herringbone=herringbone,
     )
     gear_planet1 = HelicalGear(
-        number_of_teeth=n_planet, module=m, height=height, helix_angle=beta
+        number_of_teeth=n_planet,
+        module=m,
+        height=height,
+        helix_angle=beta,
+        herringbone=herringbone,
     )
 
     gear_planet2 = gear_planet1.copy()
@@ -94,9 +104,9 @@ def planetary_helical_gear():
 
 def bevel_gear():
 
-    num_teeth_1 = 16
+    num_teeth_1 = 8
     num_teeth_2 = 31
-    beta = 0.5
+    beta = PI / 6
     # module
     m = 2
     # half cone angle
@@ -105,20 +115,22 @@ def bevel_gear():
     gamma = np.arctan2(num_teeth_1, num_teeth_2)
     gamma2 = np.pi / 2 - gamma
 
-    height = 5
+    height = 15
     gear1 = BevelGear(
         number_of_teeth=num_teeth_1,
         module=m,
         height=height,
         cone_angle=gamma * 2,
-        spiral_coefficient=beta,
+        helix_angle=beta,
+        profile_shift=0.5,
     )
     gear2 = BevelGear(
         number_of_teeth=num_teeth_2,
         module=m,
         height=height,
         cone_angle=gamma2 * 2,
-        spiral_coefficient=-beta,
+        helix_angle=-beta,
+        profile_shift=-0.5,
     )
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
@@ -136,25 +148,34 @@ def fishbone_bevels():
 
     num_teeth = 9
     # module
-    m = 4
+    m = 1
     # half cone angle
     gamma = PI / 4
     beta = 0.65
 
-    gear_base = InvoluteGear(
+    gear_base = Gear(
         z_vals=[0, 2, 4],
         tooth_param=GearToothParam(num_teeth=num_teeth),
         cone=ConicData(cone_angle=gamma * 2),
         module=m,
-        enable_undercut=True,
     )
-    gear_base.shape_recipe.involute.pressure_angle = 35 * PI / 180
+
     gear_base.shape_recipe.limits.h_a = 1.0
     gear_base.shape_recipe.limits.h_d = 1.1
     gear_base.shape_recipe.limits.h_o = 1.6
     gear_base.shape_recipe.fillet.tip_reduction = 0.0
     gear_base.shape_recipe.fillet.tip_fillet = 0.1
     gear_base.shape_recipe.transform.angle = lambda z: np.abs(z - 2) * beta
+
+    tooth_generator = InvoluteUndercutTooth(
+        pressure_angle=35 * PI / 180,
+        pitch_radius=gear_base.shape_recipe.tooth_generator.pitch_radius,
+        pitch_intersect_angle=gear_base.shape_recipe.tooth_generator.pitch_intersect_angle,
+        cone_angle=gamma * 2,
+        ref_limits=gear_base.shape_recipe.limits,
+    )
+
+    gear_base.shape_recipe.tooth_generator = tooth_generator
 
     gear_cad = GearBuilder(
         gear=gear_base,
@@ -196,7 +217,64 @@ def fishbone_bevels():
     return (solid1, solid2, solid3, solid4, solid5)
 
 
+def cycloid_gear():
+    # The cycloid coefficients determine the radius of the rolling circle
+    # relative to the pitch circle.
+    # The inside coefficient of 0.5 means the rolling circle is half the pitch circle.
+    # This is special for cycloidal gears, for an insider rolling circle with half the
+    # radius results in a straight line.
+    gear1 = CycloidGear(
+        number_of_teeth=12,
+        inside_cycloid_coefficient=0.5,
+        height=4,
+    )
+    gear2 = CycloidGear(
+        number_of_teeth=22,
+        inside_cycloid_coefficient=0.5,
+        height=4,
+    )
+    # Cycloid gears need to have the same rolling radii to mesh properly.
+    # This function adapts the outside rolling circle of both gears to match.
+    gear1.adapt_cycloid_radii(gear2)
+    gear1.mesh_to(gear2, target_dir=UP)
+    gear_part_1 = gear1.build_part()
+    gear_part_2 = gear2.build_part()
+    return (gear_part_1, gear_part_2)
+
+
+def cycloid_drive():
+    # This is a kind of experimental setup to test cycloids when the
+    # addendum / dedendum limits cannot apply and the teeth are entirely cycloid curves.
+    n = 17
+    diff = 1
+    gear1 = CycloidGear(
+        number_of_teeth=n - diff,
+        inside_cycloid_coefficient=1 / 2 / (n - diff),
+        outside_cycloid_coefficient=1 / 2 / (n - diff),
+        tip_truncation=0.0,
+        addendum_coefficient=1.5,
+        dedendum_coefficient=1.5,
+        cone_angle=0 * PI / 2,
+    )
+    gear2 = CycloidGear(
+        number_of_teeth=n,
+        module=1.001,  # adding a little bit of clearance
+        inside_cycloid_coefficient=1 / 2 / n,
+        outside_cycloid_coefficient=1 / 2 / n,
+        addendum_coefficient=1.5,
+        dedendum_coefficient=1.5,
+        tip_truncation=0.0,
+        cone_angle=0 * PI / 2,
+        inside_teeth=True,
+    )
+    gear2.adapt_cycloid_radii(gear1)
+    gear1.mesh_to(gear2, target_dir=UP)
+    gear_part_1 = gear1.build_part()
+    gear_part_2 = gear2.build_part()
+    return (gear_part_1, gear_part_2)
+
+
 if __name__ == "__main__":
     set_port(3939)
 
-    show(fishbone_bevels())
+    show(planetary_helical_gear(), deviation=0.05, angular_tolerance=0.1)

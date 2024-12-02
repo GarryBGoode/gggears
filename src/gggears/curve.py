@@ -1059,7 +1059,7 @@ class LineCurve(Curve):
             return self.p0 * (1 - t) + self.p1 * t
 
     def update_lengths(self):
-        self.length = np.linalg.norm(self.p1 - self.p0)
+        self.length = np.linalg.norm(self.p1 - self.p0) * (self.t_1 - self.t_0)
         self.t2s_lookup["s"] = np.array([0, 1])
         self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 
@@ -1466,3 +1466,90 @@ class NURBSCurve(CurveChain):
                 )
             )
         return cls(*curves, active=active)
+
+
+class CycloidCurve(Curve):
+    """Class to represent a cycloid curve as a Curve."""
+
+    def __init__(
+        self,
+        rb: float = 1,
+        rc: float = 1,
+        angle: float = 0,
+        v_offs=ORIGIN,
+        z_offs: float = 0,
+        t0=0,
+        t1=1,
+        active=True,
+        enable_vectorize=True,
+    ):
+        self.rb = rb
+        self.rc = rc
+        self.angle = angle
+        self.v_offs = v_offs
+        self.z_offs = z_offs
+
+        super().__init__(
+            self.cycloid_func,
+            active=active,
+            t0=t0,
+            t1=t1,
+            enable_vectorize=enable_vectorize,
+        )
+
+    def cycloid_func(self, t):
+        return cycloid_circle(
+            t,
+            rb=self.rb,
+            rc=self.rc,
+            angle=self.angle,
+            v_offs=self.v_offs,
+            z_offs=self.z_offs,
+        )
+
+
+class CycloidConicCurve(Curve):
+    """Class to represent a cycloid curve as a Curve."""
+
+    def __init__(
+        self,
+        rb: float = 1,
+        rc: float = 1,
+        angle: float = 0,
+        C: float = 0.5,
+        v_offs=ORIGIN,
+        z_offs: float = 0,
+        t0=0,
+        t1=1,
+        active=True,
+        enable_vectorize=True,
+    ):
+        self.rb = rb
+        self.rc = rc
+        self.angle = angle
+        self.v_offs = v_offs
+        self.z_offs = z_offs
+        self.C = C
+
+        super().__init__(
+            self.cycloid_func,
+            active=active,
+            t0=t0,
+            t1=t1,
+            enable_vectorize=enable_vectorize,
+        )
+
+    @property
+    def R(self):
+        return 1 / self.C
+
+    def cycloid_func(self, t):
+        return cycloid_cone(
+            t,
+            rb=self.rb,
+            rc=self.rc,
+            C=self.C,
+            angle=self.angle,
+            v_offs=self.v_offs,
+            z_offs=self.z_offs,
+        )
