@@ -290,7 +290,7 @@ class CycloidTooth(GearToothConicGenerator):
                 rb=self.pitch_radius,
                 rc=self.rc_out_coeff * self.pitch_radius,
                 angle=-self.pitch_intersect_angle,
-                t1=self.rc_out_coeff * PI / 2,
+                t1=self.pitch_intersect_angle * 2,
                 t0=0,
             )
 
@@ -309,7 +309,7 @@ class CycloidTooth(GearToothConicGenerator):
                 rc=self.rc_out_coeff * self.pitch_radius,
                 C=1 / R,
                 angle=-self.pitch_intersect_angle,
-                t1=self.rc_out_coeff * PI / 2,
+                t1=self.pitch_intersect_angle * 2,
                 t0=0,
             )
         sol = crv.find_curve_plane_intersect(upper_curve, plane_normal=UP, guess=1)
