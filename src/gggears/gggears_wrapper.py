@@ -640,12 +640,23 @@ class HelicalGear(InvoluteGear):
         )
         # correct for herringbone design
         if herringbone:
-            self.gearcore.z_vals = np.array([0, self.height / 2, self.height])
+            # assuming z_vals[0] is 0, as it should be
+            self.gearcore.z_vals = np.insert(
+                self.gearcore.z_vals,
+                1,
+                (self.gearcore.z_vals[-1]) / 2,
+            )
+
+            # making sure z_vals remains sorted
+            self.gearcore.z_vals = np.sort(self.gearcore.z_vals)
 
             def herringbone_mod(
                 z, original: Callable = self.gearcore.shape_recipe.transform.angle
             ):
-                return original(self.height / 2 - np.abs(self.height / 2 - z))
+                return original(
+                    self.gearcore.z_vals[-1] / 2
+                    - np.abs(self.gearcore.z_vals[-1] / 2 - z)
+                )
 
             self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
