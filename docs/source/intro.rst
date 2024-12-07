@@ -18,6 +18,10 @@ This project is not yet registered on pypi. You can install it from git via pip:
 
 ```pip install git+https://github.com/GarryBGoode/gggears.git@main```
 
+To include the project in a virtual environment (.venv), you can add this line to requirements.txt:
+
+```gggears @ git+https://github.com/GarryBGoode/gggears.git@main```
+
 Or download repository and install locally. Navigate to the repository folder and:
 
 ```pip install .```
