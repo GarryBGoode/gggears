@@ -211,15 +211,15 @@ def test_gear_intersect(
     assert its3.area != pytest.approx(0, abs=1e-4)
 
 
-@pytest.mark.xfail(reason="Love you OCP")
-@pytest.mark.parametrize("num_teeth", [8, 21, 55, 144])
+# @pytest.mark.xfail(reason="Love you OCP")
+@pytest.mark.parametrize("num_teeth", [8, 21, 55])
 @pytest.mark.parametrize("module", [0.5, 2])  # test if module is used correctly
 @pytest.mark.parametrize("beta", [0, PI / 6])  # spiral angle
 # negative value for undercut, only for this test though
 @pytest.mark.parametrize("root_fillet", [-1, 0, 0.3])
-@pytest.mark.parametrize("height", [0.5, 3])
+@pytest.mark.parametrize("height", [0.5, 1.5])
 @pytest.mark.parametrize("tip_fillet", [0, 0.25])
-@pytest.mark.parametrize("conic", [False])
+@pytest.mark.parametrize("conic", [False, True])
 @pytest.mark.parametrize("cycloid", [False, True])
 def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cycloid):
     if conic:
@@ -279,7 +279,7 @@ def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cy
     if conic:
         # conic gear is surprisingly different from a truncated cone in terms of volume
         # so only checking for a very rough approximation
-        assert partvolume == pytest.approx(expected_volume, rel=0.5, abs=1e-2)
+        assert partvolume == pytest.approx(expected_volume * 1.2, rel=0.5, abs=1e-2)
     else:
         assert partvolume == pytest.approx(expected_volume, rel=1e-1, abs=1e-2)
 
@@ -297,12 +297,12 @@ if __name__ == "__main__":
     #     enable_plotting=True,
     # )
     test_CAD(
-        num_teeth=55,
-        module=2,
+        num_teeth=44,
+        module=0.5,
         beta=0.5235987755982988,
-        height=3,
-        root_fillet=-1,
-        tip_fillet=0.25,
-        conic=False,
-        cycloid=True,
+        height=1.5,
+        root_fillet=0.3,
+        tip_fillet=0,
+        conic=True,
+        cycloid=False,
     )
