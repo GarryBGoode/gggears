@@ -640,12 +640,23 @@ class HelicalGear(InvoluteGear):
         )
         # correct for herringbone design
         if herringbone:
-            self.gearcore.z_vals = np.array([0, self.height / 2, self.height])
+
+            zmax = self.gearcore.z_vals[-1]
+            zmin = self.gearcore.z_vals[0]
+            zmid = (zmax + zmin) / 2
+
+            self.gearcore.z_vals = np.insert(
+                self.gearcore.z_vals,
+                np.searchsorted(self.gearcore.z_vals, zmid),
+                zmid,
+            )
 
             def herringbone_mod(
-                z, original: Callable = self.gearcore.shape_recipe.transform.angle
+                z,
+                original: Callable = self.gearcore.shape_recipe.transform.angle,
+                midpoint=zmid,
             ):
-                return original(self.height / 2 - np.abs(self.height / 2 - z))
+                return original(midpoint - np.abs(midpoint - z))
 
             self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
@@ -1124,7 +1135,7 @@ class CycloidGear:
 
         self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
-            z_vals=np.array([0, self.height]),
+            z_vals=np.array([0, self.height / self.module]),
             module=self.module,
             cone=ConicData(cone_angle=self.cone_angle),
             shape_recipe=GearProfileRecipe(
