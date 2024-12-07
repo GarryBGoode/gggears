@@ -211,15 +211,98 @@ def test_gear_intersect(
     assert its3.area != pytest.approx(0, abs=1e-4)
 
 
+@pytest.mark.xfail(reason="Love you OCP")
+@pytest.mark.parametrize("num_teeth", [8, 21, 55, 144])
+@pytest.mark.parametrize("module", [0.5, 2])  # test if module is used correctly
+@pytest.mark.parametrize("beta", [0, PI / 6])  # spiral angle
+# negative value for undercut, only for this test though
+@pytest.mark.parametrize("root_fillet", [-1, 0, 0.3])
+@pytest.mark.parametrize("height", [0.5, 3])
+@pytest.mark.parametrize("tip_fillet", [0, 0.25])
+@pytest.mark.parametrize("conic", [False])
+@pytest.mark.parametrize("cycloid", [False, True])
+def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cycloid):
+    if conic:
+        gamma = PI / 4
+    else:
+        gamma = 0
+
+    if root_fillet < 0:
+        undercut = True
+        f0 = 0
+    else:
+        undercut = False
+        f0 = root_fillet
+
+    if not cycloid:
+        gear1 = gg.InvoluteGear(
+            number_of_teeth=num_teeth,
+            module=module,
+            cone_angle=gamma * 2,
+            helix_angle=beta,
+            height=height,
+            angle=0,
+            tip_fillet=tip_fillet,
+            root_fillet=f0,
+            profile_shift=0,
+            enable_undercut=undercut,
+        )
+    else:
+        if undercut:
+            rc = 0.25
+        else:
+            rc = 0.5
+        gear1 = gg.CycloidGear(
+            number_of_teeth=num_teeth,
+            module=module,
+            cone_angle=gamma * 2,
+            angle=0,
+            tip_fillet=tip_fillet,
+            root_fillet=f0,
+            helix_angle=beta,
+            height=height,
+            inside_cycloid_coefficient=rc,
+            outside_cycloid_coefficient=rc,
+        )
+
+    gearpart = gear1.build_part()
+    partvolume = gearpart.volume
+
+    # height is actually the width of the gear surface, so not the z-height of bevels
+    r0_add = module * (num_teeth / 2 + gear1.addendum_coefficient)
+    r0_ded = module * (num_teeth / 2 - gear1.dedendum_coefficient)
+    r0 = (r0_add + r0_ded) / 2
+    h = height * np.cos(gamma)
+    r1 = r0 - np.sin(gamma) * height
+    expected_volume = h * np.pi * (r0**2 + r1**2 + r0 * r1) / 3
+
+    if conic:
+        # conic gear is surprisingly different from a truncated cone in terms of volume
+        # so only checking for a very rough approximation
+        assert partvolume == pytest.approx(expected_volume, rel=0.5, abs=1e-2)
+    else:
+        assert partvolume == pytest.approx(expected_volume, rel=1e-1, abs=1e-2)
+
+
 if __name__ == "__main__":
 
-    test_gear_intersect(
-        num_teeth=13,
-        module=0.5,
-        angle_ref=np.float64(0.16666666666666666),
-        root_fillet=0.4,
-        tip_fillet=0.4,
+    # test_gear_intersect(
+    #     num_teeth=13,
+    #     module=0.5,
+    #     angle_ref=np.float64(0.16666666666666666),
+    #     root_fillet=0.4,
+    #     tip_fillet=0.4,
+    #     conic=False,
+    #     cycloid=True,
+    #     enable_plotting=True,
+    # )
+    test_CAD(
+        num_teeth=55,
+        module=2,
+        beta=0.5235987755982988,
+        height=3,
+        root_fillet=-1,
+        tip_fillet=0.25,
         conic=False,
         cycloid=True,
-        enable_plotting=True,
     )
