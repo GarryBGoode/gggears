@@ -93,13 +93,12 @@ class GearBuilder(GearToNurbs):
         surfaces.append(top_surface)
         shell = Shell(surfaces)
         solid1 = Solid(shell)
+        solid1 = fix_attempt(solid1)
 
         logging.log(
             logging.INFO, f"Gear 1-tooth solid build time: {time.time()-start:.5f}"
         )
         start = time.time()
-        if not solid1.is_valid():
-            Warning("Tooth profile solid is not valid")
 
         self.profile_solid = solid1
 
@@ -109,7 +108,7 @@ class GearBuilder(GearToNurbs):
         solid2_to_fuse = []
         angle_construct = 0.0
         angle_idx = 0
-        tol = 1e-6
+        tol = 1e-4
 
         axis1 = Axis.Z
 
@@ -126,9 +125,11 @@ class GearBuilder(GearToNurbs):
                     .rotate(axis1, angle)
                     # .translate(nppoint2Vector(self.gear.transform.center))
                 )
-                shape_dict.append(
+                fuse_shape = (
                     shape_dict[k - 1].fuse(rotshape, glue=False, tol=tol).clean()
                 )
+                fuse_shape = fix_attempt(fuse_shape)
+                shape_dict.append(fuse_shape)
 
             if bin_n_teeth[-(k + 1)] == "1":
 
@@ -149,6 +150,8 @@ class GearBuilder(GearToNurbs):
             self.solid = Solid.fuse(*solid2_to_fuse, glue=False, tol=tol).clean()
         else:
             self.solid = solid2_to_fuse[0].clean()
+
+        self.solid = fix_attempt(self.solid)
 
         plug_surfaces = []
         plug_splines_top = []
@@ -178,7 +181,9 @@ class GearBuilder(GearToNurbs):
             plug_surfaces.insert(0, plug_bot)
             plug_surfaces.append(plug_top)
             plug = Solid(Shell(plug_surfaces))
+            plug = fix_attempt(plug)
             self.solid = self.solid.fuse(plug).clean()
+            self.solid = fix_attempt(self.solid)
 
         logging.log(
             logging.INFO, f"Gear solid fuse time: {time.time()-start:.5f} seconds"
@@ -204,3 +209,10 @@ def apply_transform_part(part: Part, transform: GearTransform):
 
     part = part.translate(transform.center)
     return part
+
+
+def fix_attempt(solid):
+    if not solid.is_valid():
+        Warning("Invalid solid found")
+        solid = solid.fix()
+    return solid
