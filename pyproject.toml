@@ -1,6 +1,6 @@
 [project]
 name = "gggears"
-version = "0.0.4"
+version = "0.0.5"
 description = "A gear geometry generator in Python"
 authors = [
 { name = "Gergely Bencsik", email = "bencsik.gergely.1@gmail.com"},
@@ -20,7 +20,7 @@ Homepage = "https://github.com/GarryBGoode/gggears"
 [dependencies]
 numpy = "^1.24.3"
 scipy = "^1.10.1"
-build123d = "^0.6.0"
+build123d = "^0.8.0"
 
 [project.optional-dependencies]
 dev = [
