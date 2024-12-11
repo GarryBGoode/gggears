@@ -175,6 +175,7 @@ class GearBuilder(GearToNurbs):
                         arc_size2=0,
                         arc_size3=360,
                         align=(Align.CENTER, Align.CENTER, Align.MAX),
+                        rotation=Rotation(0, 0, 90),
                     ).translate(Vector((0, 0, center_sph[2])))
 
                     wire_proj = Wire.project_to_shape(
@@ -197,7 +198,7 @@ class GearBuilder(GearToNurbs):
                     )
                     for j in range(num_teeth - 1)
                 ]
-                cover_face = Face.make_from_wires(Wire(cover_edge))
+                cover_face = Face(Wire(cover_edge))
 
                 out_face = cover_face + [
                     face_tooth.rotate(
@@ -244,9 +245,9 @@ class GearBuilder(GearToNurbs):
                     .translate(Vector(0, 0, nurb_stack.transform.center[2]))
                     .edge()
                 )
-                return Face.make_from_wires(Wire(ring), inner_wires=[Wire(splines)])
+                return Face(Wire(ring), inner_wires=[Wire(splines)])
             else:
-                return Face.make_from_wires(Wire(splines))
+                return Face(Wire(splines))
 
 
 class GearBuilder_old(GearToNurbs):

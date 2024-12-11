@@ -295,12 +295,12 @@ if __name__ == "__main__":
     #     enable_plotting=True,
     # )
     test_CAD(
-        num_teeth=44,
+        num_teeth=21,
         module=0.5,
-        beta=0.5235987755982988,
-        height=1.5,
-        root_fillet=0.3,
+        beta=0,
+        height=0.5,
+        root_fillet=-1,
         tip_fillet=0,
-        conic=True,
+        conic=False,
         cycloid=False,
     )
