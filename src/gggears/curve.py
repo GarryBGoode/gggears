@@ -409,6 +409,10 @@ class CurveChain(Curve):
         except ValueError:
             return -1
 
+    def del_inactive_curves(self):
+        """Remove inactive curves from the chain."""
+        self.curves = [curve for curve in self.curves if curve.active]
+
     def get_s_index(self, s):
         """Find which curve index s belongs to and how far along it is in the curve.
 

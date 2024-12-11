@@ -171,7 +171,6 @@ def test_gear_intersect(
     )
     t2 = np.linspace(-t_const / num_teeth_2, t_const / num_teeth_2, n_poly)
     points2 = outer_curve2(t2)
-    # points2 = np.append(points2, gear2.gearcore.transform.center[np.newaxis, :], axis=0)
     points2 = polar_tf(points2)
     points2 = np.append(
         points2,
@@ -211,8 +210,7 @@ def test_gear_intersect(
     assert its3.area != pytest.approx(0, abs=1e-4)
 
 
-# @pytest.mark.xfail(reason="Love you OCP")
-@pytest.mark.parametrize("num_teeth", [8, 21, 55])
+@pytest.mark.parametrize("num_teeth", [8, 21, 55, 144])
 @pytest.mark.parametrize("module", [0.5, 2])  # test if module is used correctly
 @pytest.mark.parametrize("beta", [0, PI / 6])  # spiral angle
 # negative value for undercut, only for this test though

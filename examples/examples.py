@@ -40,7 +40,7 @@ def planetary_helical_gear():
     n_planet = int(np.floor((n_ring - n_sun) / 2))
 
     beta = 15 * PI / 180
-    herringbone = False
+    herringbone = True
 
     height = 15
     # this hacky correction needs a better treatment later
@@ -247,28 +247,36 @@ def cycloid_drive():
     # addendum / dedendum limits cannot apply and the teeth are entirely cycloid curves.
     n = 17
     diff = 1
+    beta = 3 * PI / 8 * 1
+    h = 10
+    c1 = 1 / 2 / (n - diff)
+    c2 = 1 / 2 / (n)
     gear1 = CycloidGear(
         number_of_teeth=n - diff,
-        inside_cycloid_coefficient=1 / 2 / (n - diff),
-        outside_cycloid_coefficient=1 / 2 / (n - diff),
+        inside_cycloid_coefficient=c1,
+        outside_cycloid_coefficient=c1,
         tip_truncation=0.0,
-        addendum_coefficient=1.5,
-        dedendum_coefficient=1.5,
+        addendum_coefficient=c1 * n * 1.25,
+        dedendum_coefficient=c1 * n * 1.25,
         cone_angle=0 * PI / 2,
+        height=h,
+        helix_angle=beta,
     )
     gear2 = CycloidGear(
         number_of_teeth=n,
-        module=1.001,  # adding a little bit of clearance
-        inside_cycloid_coefficient=1 / 2 / n,
-        outside_cycloid_coefficient=1 / 2 / n,
-        addendum_coefficient=1.5,
-        dedendum_coefficient=1.5,
+        module=1.000,  # adding a little bit of clearance
+        inside_cycloid_coefficient=c2,
+        outside_cycloid_coefficient=c2,
+        addendum_coefficient=c2 * n * 1.25,
+        dedendum_coefficient=c2 * n * 1.25,
         tip_truncation=0.0,
         cone_angle=0 * PI / 2,
         inside_teeth=True,
+        height=h,
+        helix_angle=beta,
     )
     gear2.adapt_cycloid_radii(gear1)
-    gear1.mesh_to(gear2, target_dir=UP)
+    gear2.mesh_to(gear1, target_dir=RIGHT)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
     return (gear_part_1, gear_part_2)
@@ -277,4 +285,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(planetary_helical_gear(), deviation=0.05, angular_tolerance=0.1)
+    show(cycloid_drive(), deviation=0.05, angular_tolerance=0.1)

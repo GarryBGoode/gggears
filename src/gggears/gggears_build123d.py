@@ -62,12 +62,13 @@ class GearBuilder(GearToNurbs):
         self.part_transformed = apply_transform_part(self.solid, self.gear.transform)
 
     def gen_splines(self, curve_bezier: Curve):
-        if hasattr(curve_bezier, "__iter__"):
+        if isinstance(curve_bezier, NURBSCurve) or isinstance(curve_bezier, CurveChain):
             splines = []
             for curve in curve_bezier.get_curves():
-                vectors = nppoint2Vector(curve.points)
-                weights = curve.weights.tolist()
-                splines.append(Edge.make_bezier(*vectors, weights=weights))
+                if curve.active:
+                    vectors = nppoint2Vector(curve.points)
+                    weights = curve.weights.tolist()
+                    splines.append(Edge.make_bezier(*vectors, weights=weights))
             return splines
         else:
             vectors = nppoint2Vector(curve_bezier.points)
@@ -77,50 +78,56 @@ class GearBuilder(GearToNurbs):
     def gen_side_surfaces(self):
         n_teeth = self.gear.tooth_param.num_teeth_act
         surfaces = []
+
+        tooth_surfaces_nz = []
+        for k in range(len(self.gear.z_vals) - 1):
+            surfdata_z = self.side_surf_data[k]
+            patches = [*surfdata_z.get_patches()]
+            surfaces_z = []
+            for patch in patches:
+                # for patch in patches:
+                # shape: vert x horiz x xyz
+                points = patch["points"]
+                weights = patch["weights"]
+                vpoints = [nppoint2Vector(points[k]) for k in range(points.shape[0])]
+                face = Face.make_bezier_surface(vpoints, weights.tolist())
+
+                surfaces_z.append(face)
+            tooth_surfaces_nz.append(surfaces_z)
+
+        tooth_surfaces = []
+        for j in range(len(patches)):
+            loc_face = Face()
+            for k in range(len(self.gear.z_vals) - 1):
+                loc_face = loc_face + tooth_surfaces_nz[k][j]
+            tooth_surfaces.append(loc_face)
+
         if not self.gear.tooth_param.inside_teeth:
+            # fuse tooth surfaces into 1 object
+            # last 3 surface elements are closing the tooth which is not needed here
+            tooth_surface = Face() + tooth_surfaces[:-3]
             for j in range(n_teeth):
-                for k in range(len(self.gear.z_vals) - 1):
-                    surfdata_z = self.side_surf_data[k]
-                    patches = [*surfdata_z.get_patches()]
-
-                    for patch in patches[:-3]:
-                        # for patch in patches:
-                        # shape: vert x horiz x xyz
-                        points = patch["points"]
-                        weights = patch["weights"]
-                        vpoints = [
-                            nppoint2Vector(points[k]) for k in range(points.shape[0])
-                        ]
-                        face = Face.make_bezier_surface(vpoints, weights.tolist())
-                        face = face.rotate(
-                            Axis.Z,
-                            angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
-                        )
-                        surfaces.append(face)
-
+                tooth_surface_rot = tooth_surface.rotate(
+                    Axis.Z,
+                    angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
+                )
+                surfaces.append(tooth_surface_rot)
             return surfaces
-        else:
-            if self.gear.cone.cone_angle == 0:
-                for j in range(n_teeth):
-                    for k in range(len(self.gear.z_vals) - 1):
-                        surfdata_z = self.side_surf_data[k]
-                        patches = [*surfdata_z.get_patches()]
 
-                        for patch in patches[:-3]:
-                            # for patch in patches:
-                            # shape: vert x horiz x xyz
-                            points = patch["points"]
-                            weights = patch["weights"]
-                            vpoints = [
-                                nppoint2Vector(points[k])
-                                for k in range(points.shape[0])
-                            ]
-                            face = Face.make_bezier_surface(vpoints, weights.tolist())
-                            face = face.rotate(
-                                Axis.Z,
-                                angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
-                            )
-                            surfaces.append(face)
+        else:
+            # inside ring gears
+            if self.gear.cone.cone_angle == 0:
+                # spur inside ring gear
+
+                # fuse tooth surfaces into 1 object
+                tooth_surface = Face() + tooth_surfaces[:-3]
+                for j in range(n_teeth):
+                    tooth_surface_rot = tooth_surface.rotate(
+                        Axis.Z,
+                        angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
+                    )
+                    surfaces.append(tooth_surface_rot)
+
                 r_o = (
                     -self.gear.shape_recipe.limits.h_o
                     + self.gear.tooth_param.num_teeth / 2
@@ -135,26 +142,14 @@ class GearBuilder(GearToNurbs):
                 surfaces.append(ring_surf)
                 return surfaces
             else:
+                # conic inside ring gear
+                tooth_surface = Face() + tooth_surfaces[:-1]
                 for j in range(n_teeth):
-                    for k in range(len(self.gear.z_vals) - 1):
-                        surfdata_z = self.side_surf_data[k]
-                        patches = [*surfdata_z.get_patches()]
-
-                        for patch in patches[:-1]:
-                            # for patch in patches:
-                            # shape: vert x horiz x xyz
-                            points = patch["points"]
-                            weights = patch["weights"]
-                            vpoints = [
-                                nppoint2Vector(points[k])
-                                for k in range(points.shape[0])
-                            ]
-                            face = Face.make_bezier_surface(vpoints, weights.tolist())
-                            face = face.rotate(
-                                Axis.Z,
-                                angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
-                            )
-                            surfaces.append(face)
+                    tooth_surface_rot = tooth_surface.rotate(
+                        Axis.Z,
+                        angle=self.gear.tooth_param.pitch_angle * j * 180 / PI,
+                    )
+                    surfaces.append(tooth_surface_rot)
                 return surfaces
 
     def generate_cover(self, nurb_stack: GearRefProfileExtended):
@@ -167,8 +162,11 @@ class GearBuilder(GearToNurbs):
                 splines = self.gen_splines(curve)
 
                 if self.projection:
-                    center_sph = self.gear.center_sphere / self.gear.module
-                    R0 = self.gear.cone.R
+                    # center_sph = self.gear.center_sphere / self.gear.module
+                    # R0 = self.gear.cone.R
+                    # R1 = R0 * nurb_stack.transform.scale
+                    center_sph = self.gear.shape_recipe(0).cone.center
+                    R0 = self.gear.shape_recipe(0).cone.R
                     R1 = R0 * nurb_stack.transform.scale
 
                     sphere = Sphere(
@@ -225,6 +223,7 @@ class GearBuilder(GearToNurbs):
 
             num_teeth = self.gear.tooth_param.num_teeth_act
             curve = crv.NURBSCurve.from_curve_chain(nurb_stack.profile)
+            curve.del_inactive_curves()
             curve.points = nurb_stack.transform(curve.points)
             profile_edge = Edge() + self.gen_splines(curve)
             splines = Edge() + [

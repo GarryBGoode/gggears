@@ -1166,8 +1166,24 @@ class CycloidGear:
         Returns
         -------
         Part"""
+
+        max_angle = np.max(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+        min_angle = np.min(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+
+        twist_angle = np.abs(max_angle - min_angle)
+
         if self.helix_angle == 0 and self.cone_angle == 0 and self.crowning == 0:
             n_vert = 2
+        elif twist_angle > PI / 4:
+            n_vert = 3 + int(twist_angle / (PI / 4))
         else:
             n_vert = 3
         if self.inside_teeth:
@@ -1179,7 +1195,7 @@ class CycloidGear:
             n_points_hz=4,
             n_points_vert=n_vert,
             add_plug=plug,
-            method="fast",
+            method="slow",
         )
         return self.builder.part_transformed
 

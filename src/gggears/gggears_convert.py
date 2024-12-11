@@ -145,7 +145,13 @@ class GearToNurbs:
             stack = []
             for k in range(len(nurb_profile_stack)):
                 nurb = crv.NURBSCurve(
-                    *nurb_profile_stack[k].profile_closed.copy().get_curves()
+                    *[
+                        curve
+                        for curve in nurb_profile_stack[k]
+                        .profile_closed.copy()
+                        .get_curves()
+                        if curve.active
+                    ]
                 )
                 nurb.points = nurb_profile_stack[k].transform(nurb.points)
                 stack.append(nurb)
