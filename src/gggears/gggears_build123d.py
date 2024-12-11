@@ -105,7 +105,7 @@ class GearBuilder(GearToNurbs):
         if not self.gear.tooth_param.inside_teeth:
             # fuse tooth surfaces into 1 object
             # last 3 surface elements are closing the tooth which is not needed here
-            tooth_surface = Face() + tooth_surfaces[:-3]
+            tooth_surface = Face.fuse(*tooth_surfaces[:-3])
             for j in range(n_teeth):
                 tooth_surface_rot = tooth_surface.rotate(
                     Axis.Z,
@@ -120,7 +120,7 @@ class GearBuilder(GearToNurbs):
                 # spur inside ring gear
 
                 # fuse tooth surfaces into 1 object
-                tooth_surface = Face() + tooth_surfaces[:-3]
+                tooth_surface = Face.fuse(*tooth_surfaces[:-3])
                 for j in range(n_teeth):
                     tooth_surface_rot = tooth_surface.rotate(
                         Axis.Z,
@@ -143,7 +143,7 @@ class GearBuilder(GearToNurbs):
                 return surfaces
             else:
                 # conic inside ring gear
-                tooth_surface = Face() + tooth_surfaces[:-1]
+                tooth_surface = Face.fuse(*tooth_surfaces[:-1])
                 for j in range(n_teeth):
                     tooth_surface_rot = tooth_surface.rotate(
                         Axis.Z,
@@ -213,12 +213,14 @@ class GearBuilder(GearToNurbs):
                 splines = self.gen_splines(curve)
                 face_tooth = Face.make_surface(Wire(splines))
                 num_teeth = self.gear.tooth_param.num_teeth_act
-                out_face = Face() + [
-                    face_tooth.rotate(
-                        axis=Axis.Z, angle=j * nurb_stack.pitch_angle * 180 / PI
-                    )
-                    for j in range(num_teeth)
-                ]
+                out_face = Face.fuse(
+                    *[
+                        face_tooth.rotate(
+                            axis=Axis.Z, angle=j * nurb_stack.pitch_angle * 180 / PI
+                        )
+                        for j in range(num_teeth)
+                    ]
+                )
                 return out_face
         else:
 
