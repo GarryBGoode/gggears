@@ -259,17 +259,17 @@ class InvoluteGear:
             add_plug=not self.inside_teeth,
             method="slow",
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def update_part(self):
         """Updates the build123d Part object accordingly if
         the current gear was moved or rotated"""
         if self.builder is None:
             self.build_part()
-        self.builder.solid_transformed = apply_transform_part(
+        self.builder.part_transformed = apply_transform_part(
             self.builder.solid, self.gearcore.transform
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def mesh_to(self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT):
         """Aligns this gear to another gear object.
@@ -814,7 +814,7 @@ class HelicalRingGear(InvoluteGear):
             add_plug=False,
             method=method,
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
 
 class BevelGear(InvoluteGear):
@@ -1181,17 +1181,17 @@ class CycloidGear:
             add_plug=plug,
             method="fast",
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def update_part(self):
         """Updates the build123d Part object accordingly if
         the current gear was moved or rotated"""
         if self.builder is None:
             self.build_part()
-        self.builder.solid_transformed = apply_transform_part(
+        self.builder.part_transformed = apply_transform_part(
             self.builder.solid, self.gearcore.transform
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def mesh_to(self, other: "CycloidGear", target_dir: np.ndarray = RIGHT):
         """Aligns this gear to another gear object.

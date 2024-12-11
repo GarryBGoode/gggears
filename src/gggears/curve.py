@@ -1035,6 +1035,32 @@ def fillet_curve(input_curves: CurveChain, radius: float, start_locations=[0.5, 
     return arc, t1, t2
 
 
+def curve_index(curve: Curve, center: np.ndarray = ORIGIN, n_points=1000):
+    """Calculate the index (winding number) of a curve around a point or points."""
+    # assumed curve is closed
+    points = curve(np.linspace(0, 1, n_points + 1))[:-1, :]
+    cpoints = points[:, 0].astype(complex) + points[:, 1].astype(complex) * 1j
+    diffs = (np.roll(cpoints, -1, axis=0) - np.roll(cpoints, 1, axis=0)) / 2
+    if center.ndim == 1:
+        ccenter = center[0] + center[1] * 1j
+        index = np.abs(np.sum(diffs / (cpoints - ccenter))) * 1 / (2 * PI)
+        return index
+    else:
+        ccenter = center[:, 0] + center[:, 1] * 1j
+        index = (
+            np.abs(
+                np.sum(
+                    diffs[np.newaxis, :]
+                    / (cpoints[np.newaxis, :] - ccenter[:, np.newaxis]),
+                    axis=1,
+                )
+            )
+            * 1
+            / (2 * PI)
+        )
+        return index
+
+
 class LineCurve(Curve):
     """Class to represent a line as a Curve."""
 
@@ -1390,6 +1416,7 @@ class NurbCurve(Curve):
     def reverse(self):
         self.points = np.flip(self.points, axis=0)
         self.weights = np.flip(self.weights, axis=0)
+        return self
 
     @property
     def n_points(self):
@@ -1466,6 +1493,16 @@ class NURBSCurve(CurveChain):
                 )
             )
         return cls(*curves, active=active)
+
+    @classmethod
+    def from_curve_chain(cls, curve_chain: CurveChain):
+        check = all(
+            [isinstance(curve, NurbCurve) for curve in curve_chain.get_curves()]
+        )
+        if not check:
+            raise ValueError("All curves of chain must be NurbCurves")
+        else:
+            return cls(*curve_chain.get_curves(), active=curve_chain.active)
 
 
 class CycloidCurve(Curve):
