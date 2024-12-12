@@ -105,7 +105,7 @@ def planetary_helical_gear():
 def bevel_gear():
 
     num_teeth_1 = 8
-    num_teeth_2 = 31
+    num_teeth_2 = 21
     beta = PI / 6
     # module
     m = 2
@@ -115,14 +115,14 @@ def bevel_gear():
     gamma = np.arctan2(num_teeth_1, num_teeth_2)
     gamma2 = np.pi / 2 - gamma
 
-    height = 15
+    height = 10
     gear1 = BevelGear(
         number_of_teeth=num_teeth_1,
         module=m,
         height=height,
         cone_angle=gamma * 2,
         helix_angle=beta,
-        profile_shift=0.5,
+        profile_shift=0.25,
     )
     gear2 = BevelGear(
         number_of_teeth=num_teeth_2,
@@ -130,9 +130,9 @@ def bevel_gear():
         height=height,
         cone_angle=gamma2 * 2,
         helix_angle=-beta,
-        profile_shift=-0.5,
+        profile_shift=-0.25,
     )
-    gear1.mesh_to(gear2, target_dir=UP)
+    gear1.mesh_to(gear2, target_dir=LEFT)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
     return (gear_part_1, gear_part_2)
@@ -285,4 +285,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(cycloid_drive(), deviation=0.05, angular_tolerance=0.1)
+    show(bevel_gear(), deviation=0.05, angular_tolerance=0.1)

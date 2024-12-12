@@ -139,12 +139,8 @@ n2 = 31
 gamma1 = np.arctan2(n1, n2)
 gamma2 = PI / 2 - gamma1
 
-gear1 = BevelGear(
-    number_of_teeth=n1, cone_angle=gamma1 * 2, height=5, spiral_coefficient=0.5
-)
-gear2 = BevelGear(
-    number_of_teeth=n2, cone_angle=gamma2 * 2, height=5, spiral_coefficient=-0.5
-)
+gear1 = BevelGear(number_of_teeth=n1, cone_angle=gamma1 * 2, height=5, helix_angle=0.5)
+gear2 = BevelGear(number_of_teeth=n2, cone_angle=gamma2 * 2, height=5, helix_angle=-0.5)
 gear1.mesh_to(gear2, target_dir=RIGHT + UP)
 gear_part_1 = gear1.build_part()
 gear_part_2 = gear2.build_part()
