@@ -24,8 +24,8 @@ logging.basicConfig(
 
 def spur_gears():
 
-    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.5)
-    gear2 = SpurGear(number_of_teeth=24, enable_undercut=False, root_fillet=0.2)
+    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.0)
+    gear2 = SpurGear(number_of_teeth=24, enable_undercut=True, root_fillet=0.0)
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
@@ -285,4 +285,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(bevel_gear(), deviation=0.05, angular_tolerance=0.1)
+    show(spur_gears(), deviation=0.05, angular_tolerance=0.1)
