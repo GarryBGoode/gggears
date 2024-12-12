@@ -21,6 +21,7 @@ from scipy.spatial.transform import Rotation as scp_Rotation
 import numpy as np
 import time
 import logging
+import warnings
 
 
 def nppoint2Vector(p: np.ndarray):
@@ -178,10 +179,23 @@ class GearBuilder(GearToNurbs):
                         rotation=Rotation(0, 0, 90),
                     ).translate(Vector((0, 0, center_sph[2])))
 
-                    wire_proj = Wire.project_to_shape(
-                        Wire(splines), sphere, center=nppoint2Vector(center_sph)
-                    )
-                    face_tooth = Face.make_surface(wire_proj[0])
+                    # this projetion operation is not robust,
+                    # it failed for some gear shapes on github runner while I was unable
+                    # to reproduce the error locally
+                    try:
+                        wire_proj = Wire.project_to_shape(
+                            Wire(splines), sphere, center=nppoint2Vector(center_sph)
+                        )
+                        face_tooth = Face.make_surface(wire_proj[0])
+                    except RuntimeError:
+                        # if projection fails, use the original face
+                        # sometimes this results in weird wavy shapes
+                        face_tooth = Face.make_surface(Wire(splines))
+                        warnings.warn(
+                            "Spherical projection failed, attempting default surface generation",
+                            RuntimeWarning,
+                            stacklevel=2,
+                        )
                 else:
                     face_tooth = Face.make_surface(Wire(splines))
 
