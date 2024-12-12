@@ -219,7 +219,18 @@ def test_gear_intersect(
 @pytest.mark.parametrize("tip_fillet", [0, 0.25])
 @pytest.mark.parametrize("conic", [False, True])
 @pytest.mark.parametrize("cycloid", [False, True])
-def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cycloid):
+@pytest.mark.parametrize("inside_ring", [False, True])
+def test_CAD(
+    num_teeth,
+    module,
+    beta,
+    height,
+    root_fillet,
+    tip_fillet,
+    conic,
+    cycloid,
+    inside_ring,
+):
     if conic:
         gamma = PI / 4
     else:
@@ -231,6 +242,13 @@ def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cy
     else:
         undercut = False
         f0 = root_fillet
+
+    # ring gear construction can go wrong:
+    # there can be a straight radial section of the tooth curve that
+    # overlaps the return-line to the ring circle on the closed profile
+    # this causes non-planar face construction errors
+    if inside_ring and f0 == 0 and not undercut:
+        f0 = 0.05
 
     if not cycloid:
         gear1 = gg.InvoluteGear(
@@ -244,12 +262,14 @@ def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cy
             root_fillet=f0,
             profile_shift=0,
             enable_undercut=undercut,
+            inside_teeth=inside_ring,
         )
     else:
         if undercut:
             rc = 0.25
         else:
             rc = 0.5
+
         gear1 = gg.CycloidGear(
             number_of_teeth=num_teeth,
             module=module,
@@ -261,6 +281,7 @@ def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cy
             height=height,
             inside_cycloid_coefficient=rc,
             outside_cycloid_coefficient=rc,
+            inside_teeth=inside_ring,
         )
 
     gearpart = gear1.build_part()
@@ -274,12 +295,17 @@ def test_CAD(num_teeth, module, beta, height, root_fillet, tip_fillet, conic, cy
     r1 = r0 - np.sin(gamma) * height
     expected_volume = h * np.pi * (r0**2 + r1**2 + r0 * r1) / 3
 
-    if conic:
-        # conic gear is surprisingly different from a truncated cone in terms of volume
-        # so only checking for a very rough approximation
-        assert partvolume == pytest.approx(expected_volume * 1.2, rel=0.5, abs=1e-2)
+    if not inside_ring:
+        if conic:
+            # conic gear is surprisingly different from a truncated cone in terms of volume
+            # so only checking for a very rough approximation
+            assert partvolume == pytest.approx(expected_volume * 1.2, rel=0.5, abs=1e-2)
+        else:
+            assert partvolume == pytest.approx(expected_volume, rel=1e-1, abs=1e-2)
     else:
-        assert partvolume == pytest.approx(expected_volume, rel=1e-1, abs=1e-2)
+        # volume approximation doesn't quite work for rings, just check that the volume
+        # is not zero or NaN
+        assert partvolume > expected_volume * 2 / num_teeth
 
 
 if __name__ == "__main__":
@@ -295,12 +321,13 @@ if __name__ == "__main__":
     #     enable_plotting=True,
     # )
     test_CAD(
-        num_teeth=21,
-        module=0.5,
+        num_teeth=55,
+        module=2,
         beta=0,
-        height=0.5,
+        height=1.5,
         root_fillet=-1,
-        tip_fillet=0,
-        conic=False,
+        tip_fillet=0.25,
+        conic=True,
         cycloid=False,
+        inside_ring=True,
     )
