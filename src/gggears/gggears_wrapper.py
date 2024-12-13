@@ -256,7 +256,6 @@ class InvoluteGear:
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=not self.inside_teeth,
             method="slow",
         )
         return self.builder.part_transformed
@@ -368,9 +367,9 @@ class SpurGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -478,9 +477,9 @@ class SpurRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -589,9 +588,9 @@ class HelicalGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -733,9 +732,9 @@ class HelicalRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -811,7 +810,6 @@ class HelicalRingGear(InvoluteGear):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=False,
             method=method,
         )
         return self.builder.part_transformed
@@ -916,9 +914,9 @@ class BevelGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -1036,9 +1034,9 @@ class CycloidGear:
     >>> gear1.adapt_cycloid_radii(gear2)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -1186,15 +1184,10 @@ class CycloidGear:
             n_vert = 3 + int(twist_angle / (PI / 4))
         else:
             n_vert = 3
-        if self.inside_teeth:
-            plug = False
-        else:
-            plug = True
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=plug,
             method="slow",
         )
         return self.builder.part_transformed

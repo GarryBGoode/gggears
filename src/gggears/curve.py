@@ -1339,7 +1339,8 @@ class SphericalInvoluteCurve(Curve):
 
 
 class TransformedCurve(Curve):
-    """Class for applying simple transformations to a Curve and using the result as a Curve."""
+    """Class for applying simple transformations to a Curve and using the result as a
+    Curve."""
 
     def __init__(
         self,
@@ -1405,7 +1406,8 @@ class RotatedCurve(TransformedCurve):
 
 
 class NurbCurve(Curve):
-    """Class to represent a NURB (a single piece of non-universial rational bezier) curve as a Curve."""
+    """Class to represent a NURB (a single piece of non-universial rational bezier)
+    curve as a Curve."""
 
     def __init__(self, points, weights, active=True):
         self.points = points
@@ -1426,12 +1428,16 @@ class NurbCurve(Curve):
     def n_points(self):
         return self.points.shape[0]
 
+    def apply_transform(self, transform):
+        self.points = transform(self.points)
+        return self
+
 
 class NURBSCurve(CurveChain):
     """Class to represent a NURBS curve chain as a CurveChain of NURB curves."""
 
     def __init__(self, *curves: "NurbCurve", active=True, **kwargs):
-        self.curves = [*curves]
+        self.curves: NurbCurve = [*curves]
         self._active = active
         self.update_lengths()
 
@@ -1497,6 +1503,11 @@ class NURBSCurve(CurveChain):
                 )
             )
         return cls(*curves, active=active)
+
+    def apply_transform(self, transform):
+        for curve in self.curves:
+            curve.apply_transform(transform)
+        return self
 
     @classmethod
     def from_curve_chain(cls, curve_chain: CurveChain):

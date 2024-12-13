@@ -181,7 +181,6 @@ def fishbone_bevels():
         gear=gear_base,
         n_points_vert=4,
         n_points_hz=4,
-        add_plug=False,
         method="slow",
         oversampling_ratio=2.5,
     )
@@ -206,7 +205,7 @@ def fishbone_bevels():
         ),
     )
 
-    solid1 = gear_cad.solid_transformed
+    solid1 = gear_cad.part_transformed
     solid2 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear2.transform)
     solid3 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear3.transform)
     solid4 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear4.transform)

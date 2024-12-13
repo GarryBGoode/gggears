@@ -24,23 +24,56 @@ import logging
 import warnings
 
 
-def nppoint2Vector(p: np.ndarray):
-    if p.size == 3:
-        return Vector((p[0], p[1], p[2]))
-    else:
-        return [Vector((p[k, 0], p[k, 1], p[k, 2])) for k in range(p.shape[0])]
-
-
 class GearBuilder(GearToNurbs):
+    """A class for building build123d Part objects from gear profiles.
+
+    The class inherits from GearToNurbs, which is responsible for generating the NURBS
+    surface points and weights, this class is responsible for converting to build123d.
+    Conversion happens in a reference space, with scaling of 1 (module of 1) and on the
+    XY plane, default orientation. A transformation is applied after conversion to
+    represent the final part.
+
+    Parameters
+    ----------
+    gear : gg.Gear
+        The gear object to build.
+    n_points_hz : int, optional
+        Number of points used for spline approximation for each segment of the 2D gear
+        profile that is not a line or an arc. Lines and arcs use exact NURB
+        representation with 2 and 3 points, respectively. The default is 4.
+    n_points_vert : int, optional
+        Number of 2D profile slices used for generating 3D surfaces. The default is 4.
+    oversampling_ratio : float, optional
+        Ratio of the number of evaluations of analytical functions to the number of
+        unknown points in spline approximation. Affects both horizontal points and
+        vertical slices. For spline approximation, the endpoints are fixed, so the
+        unkown points are the mid-points. Minimum value is 2, the default is 3. When
+        fractional, the number of evaluations is rounded up.
+        Example: for a 3-point spline and oversampling of 3, the unkown point is the
+        middle one, the number of evaluations are the 2 end points + 3 in the middle,
+        so 5 in total.
+    method : str, optional
+        Selector between "fast" and "slow" conversion method for NURBS surfaces. The
+        fast method uses evenly distributed t-values in the vertical direction, while
+        the slow method considers t values unknowns and solves for them.
+        The default is slow.
+    projection : bool, optional
+        Used in the construction of top and bottom face of bevel (conic) gears. These
+        faces are in theory spherical. If True, the faces are projected onto a sphere
+        during construction. If False, the faces are constructed via build123d default
+        surface generator from boundary splines. Projection can sometimes fail, while
+        the default constructor can sometimes result in wavy surface artifacts.
+        The default is True.
+    """
+
     def __init__(
         self,
         gear: gg.Gear,
-        n_points_hz=4,
-        n_points_vert=4,
-        oversampling_ratio=2.5,
-        method="fast",
-        projection=True,
-        add_plug=False,
+        n_points_hz: int = 4,
+        n_points_vert: int = 4,
+        oversampling_ratio: float = 3,
+        method: str = "slow",
+        projection: bool = True,
     ):
         super().__init__(
             gear=gear,
@@ -61,20 +94,6 @@ class GearBuilder(GearToNurbs):
         self.solid = Solid(Shell(full_surfaces))
         self.part = Part() + self.solid
         self.part_transformed = apply_transform_part(self.solid, self.gear.transform)
-
-    def gen_splines(self, curve_bezier: Curve):
-        if isinstance(curve_bezier, NURBSCurve) or isinstance(curve_bezier, CurveChain):
-            splines = []
-            for curve in curve_bezier.get_curves():
-                if curve.active:
-                    vectors = nppoint2Vector(curve.points)
-                    weights = curve.weights.tolist()
-                    splines.append(Edge.make_bezier(*vectors, weights=weights))
-            return splines
-        else:
-            vectors = nppoint2Vector(curve_bezier.points)
-            weights = curve_bezier.weights.tolist()
-            return Edge.make_bezier(*vectors, weights=weights)
 
     def gen_side_surfaces(self):
         n_teeth = self.gear.tooth_param.num_teeth_act
@@ -159,8 +178,7 @@ class GearBuilder(GearToNurbs):
 
             if not self.gear.tooth_param.inside_teeth:
                 curve = crv.NURBSCurve.from_curve_chain(nurb_stack.tooth_profile_closed)
-                curve.points = nurb_stack.transform(curve.points)
-                splines = self.gen_splines(curve)
+                splines = gen_splines(curve)
 
                 if self.projection:
                     # center_sph = self.gear.center_sphere / self.gear.module
@@ -192,7 +210,8 @@ class GearBuilder(GearToNurbs):
                         # sometimes this results in weird wavy shapes
                         face_tooth = Face.make_surface(Wire(splines))
                         warnings.warn(
-                            "Spherical projection failed, attempting default surface generation",
+                            "Spherical projection failed, attempting default surface "
+                            "generation",
                             RuntimeWarning,
                             stacklevel=2,
                         )
@@ -202,8 +221,7 @@ class GearBuilder(GearToNurbs):
                 cover_edge_curve = crv.NURBSCurve(
                     nurb_stack.rd_curve, nurb_stack.rd_connector
                 )
-                cover_edge_curve.points = nurb_stack.transform(cover_edge_curve.points)
-                cover_edge = Edge() + self.gen_splines(cover_edge_curve)
+                cover_edge = Edge() + gen_splines(cover_edge_curve)
 
                 num_teeth = self.gear.tooth_param.num_teeth_act
                 cover_edge = cover_edge + [
@@ -223,8 +241,7 @@ class GearBuilder(GearToNurbs):
                 return out_face
             else:
                 curve = crv.NURBSCurve.from_curve_chain(nurb_stack.profile_closed)
-                curve.points = nurb_stack.transform(curve.points)
-                splines = self.gen_splines(curve)
+                splines = gen_splines(curve)
                 face_tooth = Face.make_surface(Wire(splines))
                 num_teeth = self.gear.tooth_param.num_teeth_act
                 out_face = Face.fuse(
@@ -241,8 +258,7 @@ class GearBuilder(GearToNurbs):
             num_teeth = self.gear.tooth_param.num_teeth_act
             curve = crv.NURBSCurve.from_curve_chain(nurb_stack.profile)
             curve.del_inactive_curves()
-            curve.points = nurb_stack.transform(curve.points)
-            profile_edge = Edge() + self.gen_splines(curve)
+            profile_edge = Edge() + gen_splines(curve)
             splines = Edge() + [
                 profile_edge.rotate(
                     axis=Axis.Z,
@@ -450,6 +466,28 @@ def apply_transform_part(part: Part, transform: GearTransform):
 
 def fix_attempt(solid):
     if not solid.is_valid():
-        Warning("Invalid solid found")
+        warnings.warn("Invalid solid found", RuntimeWarning, stacklevel=2)
         solid = solid.fix()
     return solid
+
+
+def nppoint2Vector(p: np.ndarray):
+    if p.size == 3:
+        return Vector((p[0], p[1], p[2]))
+    else:
+        return [Vector((p[k, 0], p[k, 1], p[k, 2])) for k in range(p.shape[0])]
+
+
+def gen_splines(curve_bezier: Curve):
+    if isinstance(curve_bezier, NURBSCurve) or isinstance(curve_bezier, CurveChain):
+        splines = []
+        for curve in curve_bezier.get_curves():
+            if curve.active:
+                vectors = nppoint2Vector(curve.points)
+                weights = curve.weights.tolist()
+                splines.append(Edge.make_bezier(*vectors, weights=weights))
+        return splines
+    else:
+        vectors = nppoint2Vector(curve_bezier.points)
+        weights = curve_bezier.weights.tolist()
+        return Edge.make_bezier(*vectors, weights=weights)
