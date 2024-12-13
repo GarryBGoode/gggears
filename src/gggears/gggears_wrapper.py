@@ -256,20 +256,19 @@ class InvoluteGear:
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=not self.inside_teeth,
             method="slow",
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def update_part(self):
         """Updates the build123d Part object accordingly if
         the current gear was moved or rotated"""
         if self.builder is None:
             self.build_part()
-        self.builder.solid_transformed = apply_transform_part(
+        self.builder.part_transformed = apply_transform_part(
             self.builder.solid, self.gearcore.transform
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def mesh_to(self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT):
         """Aligns this gear to another gear object.
@@ -368,9 +367,9 @@ class SpurGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -478,9 +477,9 @@ class SpurRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -589,9 +588,9 @@ class HelicalGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -733,9 +732,9 @@ class HelicalRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -811,10 +810,9 @@ class HelicalRingGear(InvoluteGear):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=False,
             method=method,
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
 
 class BevelGear(InvoluteGear):
@@ -916,9 +914,9 @@ class BevelGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
     """
 
@@ -1036,9 +1034,9 @@ class CycloidGear:
     >>> gear1.adapt_cycloid_radii(gear2)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part)
+    >>> isinstance(gear_part_1, Solid)
     True
-    >>> isinstance(gear_part_2, Part)
+    >>> isinstance(gear_part_2, Solid)
     True
 
     """
@@ -1166,32 +1164,43 @@ class CycloidGear:
         Returns
         -------
         Part"""
+
+        max_angle = np.max(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+        min_angle = np.min(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+
+        twist_angle = np.abs(max_angle - min_angle)
+
         if self.helix_angle == 0 and self.cone_angle == 0 and self.crowning == 0:
             n_vert = 2
+        elif twist_angle > PI / 4:
+            n_vert = 3 + int(twist_angle / (PI / 4))
         else:
             n_vert = 3
-        if self.inside_teeth:
-            plug = False
-        else:
-            plug = True
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            add_plug=plug,
-            method="fast",
+            method="slow",
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def update_part(self):
         """Updates the build123d Part object accordingly if
         the current gear was moved or rotated"""
         if self.builder is None:
             self.build_part()
-        self.builder.solid_transformed = apply_transform_part(
+        self.builder.part_transformed = apply_transform_part(
             self.builder.solid, self.gearcore.transform
         )
-        return self.builder.solid_transformed
+        return self.builder.part_transformed
 
     def mesh_to(self, other: "CycloidGear", target_dir: np.ndarray = RIGHT):
         """Aligns this gear to another gear object.

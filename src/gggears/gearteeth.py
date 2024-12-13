@@ -312,7 +312,12 @@ class CycloidTooth(GearToothConicGenerator):
                 t1=self.pitch_intersect_angle * 2,
                 t0=0,
             )
-        sol = crv.find_curve_plane_intersect(upper_curve, plane_normal=UP, guess=1)
+        sol0 = crv.find_curve_nearest_point(
+            upper_curve,
+            (upper_curve.rb + upper_curve.rc) * RIGHT,
+            guesses=[0.1, 0.5, 0.9],
+        )
+        sol = crv.find_curve_plane_intersect(upper_curve, plane_normal=UP, guess=sol0)
         upper_curve.set_end_on(sol.x[0])
 
         return crv.CurveChain(lower_curve, upper_curve)

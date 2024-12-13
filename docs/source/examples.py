@@ -139,17 +139,35 @@ n2 = 31
 gamma1 = np.arctan2(n1, n2)
 gamma2 = PI / 2 - gamma1
 
-gear1 = BevelGear(
-    number_of_teeth=n1, cone_angle=gamma1 * 2, height=5, spiral_coefficient=0.5
-)
-gear2 = BevelGear(
-    number_of_teeth=n2, cone_angle=gamma2 * 2, height=5, spiral_coefficient=-0.5
-)
+gear1 = BevelGear(number_of_teeth=n1, cone_angle=gamma1 * 2, height=5, helix_angle=0.5)
+gear2 = BevelGear(number_of_teeth=n2, cone_angle=gamma2 * 2, height=5, helix_angle=-0.5)
 gear1.mesh_to(gear2, target_dir=RIGHT + UP)
 gear_part_1 = gear1.build_part()
 gear_part_2 = gear2.build_part()
 
 # [Ex. 7]
 write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, -100, 70))
+
+
+##########################################
+# 8. Cycloid Gears
+# [Ex. 8]
+
+n1 = 12
+n2 = 31
+
+# Cycloid coefficient refers the radius of the cycloid generator rolling circle
+# as a fraction of the pitch circle radius.
+gear1 = CycloidGear(number_of_teeth=n1, height=5, inside_cycloid_coefficient=0.25)
+gear2 = CycloidGear(number_of_teeth=n2, height=5, inside_cycloid_coefficient=0.5)
+# Cycloid gears need to have the same rolling radii to mesh properly.
+# This function adapts the outside rolling circle of both gears to match.
+gear1.adapt_cycloid_radii(gear2)
+gear1.mesh_to(gear2, target_dir=RIGHT)
+gear_part_1 = gear1.build_part()
+gear_part_2 = gear2.build_part()
+
+# [Ex. 8]
+write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, -20, 70))
 
 # show(gear_part_1, gear_part_2)

@@ -102,29 +102,6 @@ class GearPolarTransform(ConicData):
                 return spherical_to_xyz(point2, center=self.center)
 
 
-# @dataclasses.dataclass
-# class InvoluteConstructData:
-#     """Data class for involute curve construction.
-
-#     Attributes
-#     ----------
-#     pressure_angle : float
-#         Pressure angle in radians. Angle between radial direction and tooth flank
-#         tangent at the ponit where the involute intersects the pitch circle.
-#     angle_pitch_ref : float
-#         Reference angle for the pitch circle in radians.
-#         Normally a quarter of the pitch angle.
-#         Angle-coordinate of the point where the involute intersects the pitch circle.
-#     pitch_radius : float
-#         Radius of the pitch circle.
-#     """
-
-#     pressure_angle: float = 20 * PI / 180
-#     angle_pitch_ref: float = PI / 32  # normally a quarter of the pitch angle
-#     pitch_radius: float = 8.0
-#     # cone_angle: float = 0  # cone angle should be kept in the cone data
-
-
 @dataclasses.dataclass
 class FilletParam:
     """Data class for tooth tip and root modification parameters.
@@ -336,11 +313,85 @@ class GearRefProfile:
     ro_curve: crv.ArcCurve
     tooth_curve: crv.Curve
     tooth_curve_mirror: crv.MirroredCurve
-    profile: crv.CurveChain
     pitch_angle: float
-    transform: GearTransform = dataclasses.field(
-        default_factory=lambda: GearTransform()
-    )
+    transform: GearTransform
+
+    @property
+    def profile(self):
+        return crv.CurveChain(
+            self.rd_curve, self.tooth_curve, self.ra_curve, self.tooth_curve_mirror
+        )
+
+
+@dataclasses.dataclass
+class GearRefProfileExtended(GearRefProfile):
+    """Data class with additional curve segments around the tooth profile, such as
+    connectors to the outside ring."""
+
+    ro_connector_0: crv.Curve
+    ro_connector_1: crv.Curve
+    ro_connector_2: crv.Curve
+    rd_connector: crv.Curve
+    ra_connector: crv.Curve
+    ro_curve_tooth: crv.Curve
+    ro_curve_dedendum: crv.Curve
+    tooth_centerline: crv.Curve
+
+    @property
+    def profile_closed(self):
+        """Closed curve chain that includes the tooth and the dedendum arc, returns via
+        the outside (or inside) ring."""
+        return crv.CurveChain(
+            self.rd_curve,
+            self.tooth_curve,
+            self.ra_curve,
+            self.tooth_curve_mirror,
+            self.ro_connector_2.copy().reverse(),
+            self.ro_curve.copy().reverse(),
+            self.ro_connector_0,
+        )
+
+    @property
+    def tooth_profile_closed(self):
+        """Closed curve chain that includes just the tooth, closes at the root of the
+        tooth with an arc."""
+        return crv.CurveChain(
+            self.tooth_curve,
+            self.ra_curve,
+            self.tooth_curve_mirror,
+            self.rd_connector.copy().reverse(),
+        )
+
+    @property
+    def tooth_profile_closed_outer(self):
+        """Closed curve chain that includes just the tooth as it were part of an
+        outside-ring gear, closing at the addendum arc."""
+
+        return crv.CurveChain(
+            crv.RotatedCurve(
+                self.tooth_curve_mirror, angle=-self.pitch_angle, axis=OUT
+            ),
+            self.rd_curve,
+            self.tooth_curve,
+            self.ra_connector,
+        )
+
+    @property
+    def tooth_profile_closed_ring(self):
+        """Closed curve chain that includes just the tooth, closes at the outside (or
+        inside) ring."""
+        return crv.CurveChain(
+            self.tooth_curve,
+            self.ra_connector,
+            self.tooth_curve_mirror,
+            self.ro_connector_2,
+            self.ro_curve_tooth.copy().reverse(),
+            self.ro_connector_1.copy().reverse(),
+        )
+
+    @classmethod
+    def from_refprofile(cls, profile: GearRefProfile, cone: ConicData):
+        return generate_profile_extensions(profile, cone)
 
 
 def trim_reference_profile(
@@ -446,7 +497,13 @@ def trim_reference_profile(
         yaw=angle_0,
     )
     return GearRefProfile(
-        ra_curve, rd_curve, ro_curve, tooth_curve, tooth_mirror, profile, pitch_angle
+        ra_curve,
+        rd_curve,
+        ro_curve,
+        tooth_curve,
+        tooth_mirror,
+        pitch_angle,
+        GearTransform(),
     )
 
 
@@ -514,6 +571,79 @@ def generate_reference_profile(inputdata: GearProfileDataCollector) -> GearRefPr
     )
     profile.transform = GearTransform(**(inputdata.transform.__dict__))
     return profile
+
+
+def generate_profile_extensions(
+    profile: GearRefProfile, cone_data: ConicData
+) -> GearRefProfileExtended:
+    """Generate additional curve segments around the tooth profile, such as connectors"""
+    tooth_start_point = profile.tooth_curve(0)
+    tooth_start_plane_normal = np.cross(OUT, normalize_vector(tooth_start_point))
+    sol_ro_midpoint = crv.find_curve_plane_intersect(
+        profile.ro_curve, plane_normal=tooth_start_plane_normal, guess=0.5
+    )
+    ro_midpoint = profile.ro_curve(sol_ro_midpoint.x[0])
+    ro_curve_tooth = profile.ro_curve.copy()
+    ro_curve_tooth.set_start_on(sol_ro_midpoint.x[0])
+    ro_curve_dedendum = profile.ro_curve.copy()
+    ro_curve_dedendum.set_end_on(sol_ro_midpoint.x[0])
+
+    rd_connector = crv.ArcCurve.from_2_point_center(
+        p0=profile.tooth_curve(0),
+        p1=profile.tooth_curve_mirror(1),
+        center=profile.rd_curve.center,
+    )
+
+    ra_connector = crv.ArcCurve.from_2_point_center(
+        p0=rotate_vector(profile.ra_curve(1), -profile.pitch_angle),
+        p1=profile.ra_curve(0),
+        center=profile.ra_curve.center,
+    )
+
+    if cone_data.cone_angle == 0:
+        ro_connector_0 = crv.LineCurve(p0=profile.ro_curve(0), p1=profile.profile(0))
+        ro_connector_1 = crv.LineCurve(p0=ro_midpoint, p1=profile.tooth_curve(0))
+        ro_connector_2 = crv.LineCurve(
+            p0=profile.ro_curve(1), p1=profile.tooth_curve_mirror(1)
+        )
+        tooth_centerline = crv.LineCurve(p0=rd_connector(0.5), p1=profile.ra_curve(0.5))
+    else:
+        ro_connector_0 = crv.ArcCurve.from_2_point_center(
+            p0=profile.ro_curve(0),
+            p1=profile.profile(0),
+            center=cone_data.center,
+        )
+        ro_connector_1 = crv.ArcCurve.from_2_point_center(
+            p0=ro_midpoint,
+            p1=profile.tooth_curve(0),
+            center=cone_data.center,
+        )
+        ro_connector_2 = crv.ArcCurve.from_2_point_center(
+            p0=profile.ro_curve(1),
+            p1=profile.tooth_curve_mirror(1),
+            center=cone_data.center,
+        )
+        tooth_centerline = crv.ArcCurve.from_2_point_center(
+            p0=rd_connector(0.5), p1=profile.ra_curve(0.5), center=cone_data.center
+        )
+
+    return GearRefProfileExtended(
+        ra_curve=profile.ra_curve,
+        rd_curve=profile.rd_curve,
+        ro_curve=profile.ro_curve,
+        tooth_curve=profile.tooth_curve,
+        tooth_curve_mirror=profile.tooth_curve_mirror,
+        pitch_angle=profile.pitch_angle,
+        transform=profile.transform,
+        ro_connector_0=ro_connector_0,
+        ro_connector_1=ro_connector_1,
+        ro_connector_2=ro_connector_2,
+        rd_connector=rd_connector,
+        ra_connector=ra_connector,
+        ro_curve_tooth=ro_curve_tooth,
+        ro_curve_dedendum=ro_curve_dedendum,
+        tooth_centerline=tooth_centerline,
+    )
 
 
 def generate_profile_closed(profile: GearRefProfile, cone_data: ConicData):

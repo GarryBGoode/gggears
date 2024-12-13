@@ -1,7 +1,8 @@
 Introduction
 ============
-``gggears`` is a python module for accurate and feature-rich gear geometry generation.
+`gggears <https://github.com/GarryBGoode/gggears>`_ is a python module for accurate and feature-rich gear geometry generation.
 It is designed to be used with build123d python package, but can be used with any CAD workflow via STEP export.
+
 
 Motivation
 ==========

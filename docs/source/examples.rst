@@ -118,3 +118,18 @@ Spiral bevel gears are under development, but you can already create them with t
 .. literalinclude:: examples.py
     :start-after: [Ex. 7]
     :end-before: [Ex. 7]
+
+8. Cycloid Gears
+---------------------
+
+Create gears wit cycloid geometry. Cycloids have no pressure angle, but are defined by the radii of the generator rolling circles.
+These generator circles are controlled by the `inside_cycloid_coefficient` and `outside_cycloid_coefficient` parameters.
+The rolling circles need to match for meshing gears.
+The `adapt_cycloid_radii` function can be used to adjust the outside rolling circles of gears for appropriate meshing.
+
+.. image:: assets/general_ex8.svg
+    :align: center
+
+.. literalinclude:: examples.py
+    :start-after: [Ex. 8]
+    :end-before: [Ex. 8]

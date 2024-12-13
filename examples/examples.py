@@ -24,8 +24,8 @@ logging.basicConfig(
 
 def spur_gears():
 
-    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.5)
-    gear2 = SpurGear(number_of_teeth=24, enable_undercut=False, root_fillet=0.2)
+    gear1 = SpurGear(number_of_teeth=12, profile_shift=0.0)
+    gear2 = SpurGear(number_of_teeth=24, enable_undercut=True, root_fillet=0.0)
     gear1.mesh_to(gear2, target_dir=UP)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
@@ -40,7 +40,7 @@ def planetary_helical_gear():
     n_planet = int(np.floor((n_ring - n_sun) / 2))
 
     beta = 15 * PI / 180
-    herringbone = False
+    herringbone = True
 
     height = 15
     # this hacky correction needs a better treatment later
@@ -105,7 +105,7 @@ def planetary_helical_gear():
 def bevel_gear():
 
     num_teeth_1 = 8
-    num_teeth_2 = 31
+    num_teeth_2 = 21
     beta = PI / 6
     # module
     m = 2
@@ -115,14 +115,14 @@ def bevel_gear():
     gamma = np.arctan2(num_teeth_1, num_teeth_2)
     gamma2 = np.pi / 2 - gamma
 
-    height = 15
+    height = 10
     gear1 = BevelGear(
         number_of_teeth=num_teeth_1,
         module=m,
         height=height,
         cone_angle=gamma * 2,
         helix_angle=beta,
-        profile_shift=0.5,
+        profile_shift=0.25,
     )
     gear2 = BevelGear(
         number_of_teeth=num_teeth_2,
@@ -130,9 +130,9 @@ def bevel_gear():
         height=height,
         cone_angle=gamma2 * 2,
         helix_angle=-beta,
-        profile_shift=-0.5,
+        profile_shift=-0.25,
     )
-    gear1.mesh_to(gear2, target_dir=UP)
+    gear1.mesh_to(gear2, target_dir=LEFT)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
     return (gear_part_1, gear_part_2)
@@ -181,7 +181,6 @@ def fishbone_bevels():
         gear=gear_base,
         n_points_vert=4,
         n_points_hz=4,
-        add_plug=False,
         method="slow",
         oversampling_ratio=2.5,
     )
@@ -206,7 +205,7 @@ def fishbone_bevels():
         ),
     )
 
-    solid1 = gear_cad.solid_transformed
+    solid1 = gear_cad.part_transformed
     solid2 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear2.transform)
     solid3 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear3.transform)
     solid4 = apply_transform_part(gear_cad.solid.mirror(Plane.XZ), gear4.transform)
@@ -247,28 +246,36 @@ def cycloid_drive():
     # addendum / dedendum limits cannot apply and the teeth are entirely cycloid curves.
     n = 17
     diff = 1
+    beta = 3 * PI / 8 * 1
+    h = 10
+    c1 = 1 / 2 / (n - diff)
+    c2 = 1 / 2 / (n)
     gear1 = CycloidGear(
         number_of_teeth=n - diff,
-        inside_cycloid_coefficient=1 / 2 / (n - diff),
-        outside_cycloid_coefficient=1 / 2 / (n - diff),
+        inside_cycloid_coefficient=c1,
+        outside_cycloid_coefficient=c1,
         tip_truncation=0.0,
-        addendum_coefficient=1.5,
-        dedendum_coefficient=1.5,
+        addendum_coefficient=c1 * n * 1.25,
+        dedendum_coefficient=c1 * n * 1.25,
         cone_angle=0 * PI / 2,
+        height=h,
+        helix_angle=beta,
     )
     gear2 = CycloidGear(
         number_of_teeth=n,
-        module=1.001,  # adding a little bit of clearance
-        inside_cycloid_coefficient=1 / 2 / n,
-        outside_cycloid_coefficient=1 / 2 / n,
-        addendum_coefficient=1.5,
-        dedendum_coefficient=1.5,
+        module=1.000,  # adding a little bit of clearance
+        inside_cycloid_coefficient=c2,
+        outside_cycloid_coefficient=c2,
+        addendum_coefficient=c2 * n * 1.25,
+        dedendum_coefficient=c2 * n * 1.25,
         tip_truncation=0.0,
         cone_angle=0 * PI / 2,
         inside_teeth=True,
+        height=h,
+        helix_angle=beta,
     )
     gear2.adapt_cycloid_radii(gear1)
-    gear1.mesh_to(gear2, target_dir=UP)
+    gear2.mesh_to(gear1, target_dir=RIGHT)
     gear_part_1 = gear1.build_part()
     gear_part_2 = gear2.build_part()
     return (gear_part_1, gear_part_2)
@@ -277,4 +284,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(planetary_helical_gear(), deviation=0.05, angular_tolerance=0.1)
+    show(spur_gears(), deviation=0.05, angular_tolerance=0.1)

@@ -31,13 +31,14 @@ Gear generation:
 - Profile shift
 - Undercut
 - Root / tip fillets
+- Cycloid gears
 
 Gear positioning and alignment supported.
 
 ![Bevel Gear Example](misc/media/bevel_gears.png)
 
 Not yet supported:
-- Cycloid gears
+
 - Hypoid gears
 - Worm gears
 - Face / crown gears
