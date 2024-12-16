@@ -463,9 +463,14 @@ def trim_reference_profile(
             tooth_curve.set_start_on(sol_root.x[0])
         else:
             plane_norm = rotate_vector(UP, -pitch_angle / 2)
+            if sol_root.success or solcheck < 1e-5:
+                guess = sol_root.x[0]
+            else:
+                guess = 0.1
             sol_mid2 = crv.find_curve_plane_intersect(
-                tooth_curve, plane_normal=plane_norm, guess=0
+                tooth_curve, plane_normal=plane_norm, guess=guess
             )
+
             tooth_curve.set_start_on(sol_mid2.x[0])
 
     tooth_mirror = crv.MirroredCurve(tooth_curve, plane_normal=UP)
