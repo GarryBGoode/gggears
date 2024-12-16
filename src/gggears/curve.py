@@ -1089,7 +1089,7 @@ class LineCurve(Curve):
             return self.p0 * (1 - t) + self.p1 * t
 
     def update_lengths(self):
-        self.length = np.linalg.norm(self.p1 - self.p0) * (self.t_1 - self.t_0)
+        self.length = np.linalg.norm(self.p1 - self.p0) * np.abs(self.t_1 - self.t_0)
         self.t2s_lookup["s"] = np.array([0, 1])
         self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 

@@ -83,10 +83,9 @@ class GearBuilder(GearToNurbs):
             convertmethod=method,
         )
         self.projection = projection
-
-        side_surfaces = self.gen_side_surfaces()
-        top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
         bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
+        top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
+        side_surfaces = self.gen_side_surfaces()
         full_surfaces = side_surfaces
         full_surfaces.append(top_cover)
         full_surfaces.append(bot_cover)

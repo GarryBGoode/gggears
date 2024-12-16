@@ -169,7 +169,7 @@ class InvoluteGear:
             - self.backlash / rp_ref
         )
 
-        spiral_coeff = np.sin(self.beta) / rp_ref
+        spiral_coeff = np.tan(self.beta) / rp_ref
 
         def angle_func(z, coeff=spiral_coeff):
             return z * coeff
@@ -187,6 +187,7 @@ class InvoluteGear:
                 pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
                 ref_limits=limits,
                 cone_angle=self.cone_angle,
+                pitch_angle=self.pitch_angle,
             )
         else:
             tooth_generator = InvoluteTooth(
@@ -244,8 +245,8 @@ class InvoluteGear:
         twist_angle = np.abs(max_angle - min_angle)
         if self.crowning == 0 and self.beta == 0:
             n_vert = 2
-        elif twist_angle > PI / 4:
-            n_vert = 3 + int(twist_angle / (PI / 4))
+        elif twist_angle > PI / 6:
+            n_vert = 3 + int(twist_angle / (PI / 6))
         else:
             if self.cone_angle == 0:
                 n_vert = 3
@@ -630,9 +631,9 @@ class HelicalGear(InvoluteGear):
             root_fillet=root_fillet,
             tip_fillet=tip_fillet,
             tip_truncation=tip_truncation,
-            profile_shift=profile_shift,
-            addendum_coefficient=addendum_coefficient,
-            dedendum_coefficient=dedendum_coefficient,
+            profile_shift=profile_shift * np.cos(beta),
+            addendum_coefficient=addendum_coefficient * np.cos(beta),
+            dedendum_coefficient=dedendum_coefficient * np.cos(beta),
             pressure_angle=np.arctan(np.tan(pressure_angle) / np.cos(beta)),
             backlash=backlash,
             crowning=crowning,
@@ -758,21 +759,22 @@ class HelicalRingGear(InvoluteGear):
         backlash: float = 0,
         crowning: float = 0,
     ):
+        beta = helix_angle
         super().__init__(
             number_of_teeth=number_of_teeth,
-            helix_angle=helix_angle,
+            helix_angle=beta,
             height=height,
             center=center,
             angle=angle,
-            module=module / np.cos(helix_angle),
+            module=module / np.cos(beta),
             enable_undercut=enable_undercut,
             root_fillet=root_fillet,
             tip_fillet=tip_fillet,
             tip_truncation=tip_truncation,
-            profile_shift=profile_shift,
-            addendum_coefficient=addendum_coefficient,
-            dedendum_coefficient=dedendum_coefficient,
-            pressure_angle=pressure_angle,
+            profile_shift=profile_shift * np.cos(beta),
+            addendum_coefficient=addendum_coefficient * np.cos(beta),
+            dedendum_coefficient=dedendum_coefficient * np.cos(beta),
+            pressure_angle=np.arctan(np.tan(pressure_angle) / np.cos(beta)),
             backlash=backlash,
             crowning=crowning,
             inside_teeth=True,
@@ -1109,7 +1111,7 @@ class CycloidGear:
             )
 
         tooth_angle = self.pitch_angle / 4 - self.backlash / rp_ref
-        spiral_coeff = np.sin(self.helix_angle) / rp_ref
+        spiral_coeff = np.tan(self.helix_angle) / rp_ref
 
         def angle_func(z, coeff=spiral_coeff):
             return z * coeff
