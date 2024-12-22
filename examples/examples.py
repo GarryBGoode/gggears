@@ -32,6 +32,26 @@ def spur_gears():
     return (gear_part_1, gear_part_2)
 
 
+def helical_gears():
+    # a test of helical gears meshing with different helix angles
+    # z_anchor=0.5 places the gear symmetrically on the XY plane, makes meshing easier
+    gear0 = HelicalGear(number_of_teeth=12, helix_angle=0, height=15, z_anchor=0.5)
+    gear1 = HelicalGear(number_of_teeth=12, helix_angle=PI / 4, height=15, z_anchor=0.5)
+    gear2 = HelicalGear(number_of_teeth=24, helix_angle=0, height=15, z_anchor=0.5)
+    gear3 = HelicalGear(number_of_teeth=12, helix_angle=PI / 4, height=15, z_anchor=0.5)
+    gear4 = HelicalGear(number_of_teeth=24, helix_angle=PI / 4, height=15, z_anchor=0.5)
+    gear1.mesh_to(gear2, target_dir=LEFT)
+    gear0.mesh_to(gear1, target_dir=LEFT)
+    gear3.mesh_to(gear2, target_dir=RIGHT)
+    gear4.mesh_to(gear3, target_dir=RIGHT)
+    gear_part_0 = gear0.build_part()
+    gear_part_1 = gear1.build_part()
+    gear_part_2 = gear2.build_part()
+    gear_part_3 = gear3.build_part()
+    gear_part_4 = gear4.build_part()
+    return [gear_part_0, gear_part_1, gear_part_2, gear_part_3, gear_part_4]
+
+
 def planetary_helical_gear():
     m = 1
 
@@ -138,6 +158,24 @@ def bevel_gear():
     return (gear_part_1, gear_part_2)
 
 
+def bevel_chain():
+    # This example is meant to showcase and test the mesh_to function for bevel gears.
+    gear = BevelGear(
+        number_of_teeth=10,
+        cone_angle=PI / 4,
+        profile_shift=0.5,
+        height=5,
+        module=1.5,
+    )
+    n_gears = 6
+    gears = [gear.copy() for i in range(n_gears)]
+    angles = np.linspace(0, PI, n_gears)
+    for i in range(1, n_gears):
+        gears[i].mesh_to(gears[i - 1], target_dir=rotate_vector(RIGHT, angles[i]))
+    gear_parts = [gear.build_part() for gear in gears]
+    return gear_parts
+
+
 def fishbone_bevels():
     # This example was meant to stress the library a bit, and to generate
     # interlocking bevel gears. In theory it should be possible to design them in a way
@@ -173,6 +211,7 @@ def fishbone_bevels():
         pitch_intersect_angle=gear_base.shape_recipe.tooth_generator.pitch_intersect_angle,
         cone_angle=gamma * 2,
         ref_limits=gear_base.shape_recipe.limits,
+        pitch_angle=gear_base.pitch_angle,
     )
 
     gear_base.shape_recipe.tooth_generator = tooth_generator
@@ -284,4 +323,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(spur_gears(), deviation=0.05, angular_tolerance=0.1)
+    show(fishbone_bevels(), deviation=0.15, angular_tolerance=0.2)

@@ -36,6 +36,10 @@ def angle_between_vector_and_plane(v, plane_normal):
         return angle_between_vectors(v_plane, v)
 
 
+def angle_of_vector_in_xy(v):
+    return np.arctan2(v[1], v[0])
+
+
 def involute_func(t, r, a=0, rad_offs=0, tan_offs=0, z_offs=0, csph=0):
     """
     Returns the x-y-z values of the involute function.

@@ -148,16 +148,34 @@ class InvoluteUndercutTooth(InvoluteTooth):
             pressure_angle=self.pressure_angle,
             cone_angle=self.cone_angle,
         )
-        sol = crv.find_curve_plane_intersect(
-            rack_curve,
-            plane_normal=UP,
-            offset=-self.pitch_radius * self.pitch_angle / 2,
-            guess=1,
-        )
-        if sol.x[0] > 0:
-            return rack_curve(sol.x[0])
+        if self.cone_angle == 0:
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=UP,
+                offset=-self.pitch_radius * self.pitch_angle / 2,
+                guess=1,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+            else:
+                return rack_curve(0)
         else:
-            return rack_curve(0)
+            # R = self.pitch_radius / np.sin(self.cone_angle / 2)
+            plane_normal = scp_Rotation.from_euler(
+                "z", -self.pitch_angle / 2 * np.sin(self.cone_angle / 2)
+            ).apply(UP)
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=plane_normal,
+                offset=0,
+                guess=0,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+                # return rack_curve(0)
+            else:
+                return rack_curve(0)
+            # return rack_curve(0)
 
     def set_default_undercut_ref_point(self):
         self.undercut_ref_point = self.get_default_undercut_ref_point(self.ref_limits)
