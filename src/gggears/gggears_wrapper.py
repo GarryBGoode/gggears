@@ -604,6 +604,15 @@ class HelicalGear(InvoluteGear):
         Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
         top of the gear. Default is 0.
 
+    Notes
+    -----
+    Helical gear geometry is generated with normal system, meaning the pressure angle
+    and pitch are calculated in the normal direction to the tooth surface. This allows
+    HelicalGears to mesh with different helix angles, the mesh_to() function will adjust
+    the shaft orientation. Use PI/4 (45 degrees) for both gears to produce a
+    perpendicular axis combination. It is suggested to use z_anchor=0.5 for this kind of
+    drive.
+
     Methods
     -------
     mesh_to(other, target_dir=RIGHT)
@@ -770,6 +779,8 @@ class HelicalRingGear(InvoluteGear):
     The parameters and conventions are not inverted, e.g. increasing addendum
     coefficient will make deeper cuts in the ring. Only default values are updated
     to reflect the inversion.
+    HelicalRingGear does not support orientation adjustment with mesh_to() function if
+    helix angles are different.
 
     Methods
     -------
