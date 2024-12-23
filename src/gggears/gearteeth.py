@@ -160,7 +160,6 @@ class InvoluteUndercutTooth(InvoluteTooth):
             else:
                 return rack_curve(0)
         else:
-            # R = self.pitch_radius / np.sin(self.cone_angle / 2)
             plane_normal = scp_Rotation.from_euler(
                 "z", -self.pitch_angle / 2 * np.sin(self.cone_angle / 2)
             ).apply(UP)
@@ -172,10 +171,9 @@ class InvoluteUndercutTooth(InvoluteTooth):
             )
             if sol.x[0] > 0:
                 return rack_curve(sol.x[0])
-                # return rack_curve(0)
+
             else:
                 return rack_curve(0)
-            # return rack_curve(0)
 
     def set_default_undercut_ref_point(self):
         self.undercut_ref_point = self.get_default_undercut_ref_point(self.ref_limits)
@@ -228,7 +226,6 @@ def generate_involute_rack_curve(
             [0],
         )
 
-        # sol1 = crv.find_curve_plane_intersect(curve1, plane_normal=UP, guess=1)
         sol1 = root(
             lambda t: np.arcsin(curve1(t[0])[2] / conic_transform.R)
             - ref_limits.h_a / conic_transform.R,
@@ -282,7 +279,6 @@ def trim_involute_undercut(
     """Find the intersection and trim the tooth curve (involute curve)
     with undercut curve."""
     sol = crv.find_curve_intersect(tooth_curve, undercut_curve, guess=guess)
-    # solcheck = np.linalg.norm(tooth_curve(sol.x[0]) - undercut_curve(sol.x[1]))
 
     tooth_curve.set_start_on(sol.x[0])
     undercut_curve.set_end_on(sol.x[1])

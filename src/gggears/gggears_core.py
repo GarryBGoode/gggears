@@ -799,7 +799,6 @@ class Gear:
     ):
         self.module = module
         self.z_vals = z_vals
-        # self.enable_undercut = enable_undercut
         if tooth_generator is None:
             # it is updated in the default recipe
             self.tooth_generator = GearToothConicGenerator()
@@ -830,7 +829,6 @@ class Gear:
 
     @property
     def rp(self):
-        # return self.shape_recipe(0).involute.pitch_radius * self.module
         return self.tooth_param.num_teeth / 2 * self.module
 
     @property
