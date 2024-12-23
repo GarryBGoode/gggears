@@ -36,7 +36,7 @@ class InvoluteTooth(GearToothConicGenerator):
         if self.cone_angle == 0:
 
             involute_curve = crv.InvoluteCurve(
-                r=self.pitch_radius * np.cos(alpha), angle=0
+                r=self.pitch_radius * np.cos(alpha), angle=0, t0=0, t1=2
             )
 
             pitch_circle = crv.ArcCurve(radius=rp, angle=2 * PI)
@@ -117,6 +117,7 @@ class InvoluteUndercutTooth(InvoluteTooth):
         cone_angle: float = 0,
         pressure_angle: float = 20 * PI / 180,
         ref_limits: ToothLimitParam = None,
+        pitch_angle: float = PI / 16,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
@@ -125,6 +126,7 @@ class InvoluteUndercutTooth(InvoluteTooth):
         if ref_limits is None:
             self.ref_limits = ToothLimitParam(h_a=1, h_d=1.2)
         self.ref_limits = ref_limits
+        self.pitch_angle = pitch_angle
 
     def generate_tooth_curve(self) -> crv.CurveChain:
         tooth_curve = self.generate_involute_curve()
@@ -139,13 +141,39 @@ class InvoluteUndercutTooth(InvoluteTooth):
     def get_default_undercut_ref_point(
         self,
     ) -> np.ndarray:
-        return generate_involute_rack_curve(
+        rack_curve = generate_involute_rack_curve(
             self.pitch_radius,
             self.pitch_intersect_angle,
             ref_limits=self.ref_limits,
             pressure_angle=self.pressure_angle,
             cone_angle=self.cone_angle,
-        )(0)
+        )
+        if self.cone_angle == 0:
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=UP,
+                offset=-self.pitch_radius * self.pitch_angle / 2,
+                guess=1,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+            else:
+                return rack_curve(0)
+        else:
+            plane_normal = scp_Rotation.from_euler(
+                "z", -self.pitch_angle / 2 * np.sin(self.cone_angle / 2)
+            ).apply(UP)
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=plane_normal,
+                offset=0,
+                guess=0,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+
+            else:
+                return rack_curve(0)
 
     def set_default_undercut_ref_point(self):
         self.undercut_ref_point = self.get_default_undercut_ref_point(self.ref_limits)
@@ -198,7 +226,6 @@ def generate_involute_rack_curve(
             [0],
         )
 
-        # sol1 = crv.find_curve_plane_intersect(curve1, plane_normal=UP, guess=1)
         sol1 = root(
             lambda t: np.arcsin(curve1(t[0])[2] / conic_transform.R)
             - ref_limits.h_a / conic_transform.R,
@@ -252,7 +279,6 @@ def trim_involute_undercut(
     """Find the intersection and trim the tooth curve (involute curve)
     with undercut curve."""
     sol = crv.find_curve_intersect(tooth_curve, undercut_curve, guess=guess)
-    # solcheck = np.linalg.norm(tooth_curve(sol.x[0]) - undercut_curve(sol.x[1]))
 
     tooth_curve.set_start_on(sol.x[0])
     undercut_curve.set_end_on(sol.x[1])

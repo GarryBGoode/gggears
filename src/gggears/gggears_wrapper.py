@@ -64,8 +64,15 @@ class InvoluteGear:
         A value of 100 will result in a tooth flank displacement
         of 0.1 module, or a reduction of tooth width by 0.2 module near the top and
         bottom face, while tooth width remains nominal in the middle of the tooth.
-    inside_teeht: bool, optional
+    inside_teeth: bool, optional
         If True, inside-ring gear is created. Default is False.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
 
     Methods
     -------
@@ -102,6 +109,7 @@ class InvoluteGear:
         backlash: float = 0,
         crowning: float = 0,
         inside_teeth: bool = False,
+        z_anchor: float = 0,
     ):
         self.number_of_teeth = number_of_teeth
         self.height = height
@@ -121,6 +129,7 @@ class InvoluteGear:
         self.backlash = backlash
         self.crowning = crowning
         self.inside_teeth = inside_teeth
+        self.z_anchor = z_anchor
 
         if self.number_of_teeth < 0:
             self.number_of_teeth = -self.number_of_teeth
@@ -169,7 +178,7 @@ class InvoluteGear:
             - self.backlash / rp_ref
         )
 
-        spiral_coeff = np.sin(self.beta) / rp_ref
+        spiral_coeff = np.tan(self.beta) / rp_ref
 
         def angle_func(z, coeff=spiral_coeff):
             return z * coeff
@@ -187,6 +196,7 @@ class InvoluteGear:
                 pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
                 ref_limits=limits,
                 cone_angle=self.cone_angle,
+                pitch_angle=self.pitch_angle,
             )
         else:
             tooth_generator = InvoluteTooth(
@@ -195,10 +205,10 @@ class InvoluteGear:
                 pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
                 cone_angle=self.cone_angle,
             )
-
+        z_h = self.height / self.module
         self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
-            z_vals=np.array([0, self.height / self.module]),
+            z_vals=np.array([-z_h * self.z_anchor, z_h * (1 - self.z_anchor)]),
             module=self.module,
             cone=ConicData(cone_angle=self.cone_angle),
             shape_recipe=GearProfileRecipe(
@@ -244,8 +254,8 @@ class InvoluteGear:
         twist_angle = np.abs(max_angle - min_angle)
         if self.crowning == 0 and self.beta == 0:
             n_vert = 2
-        elif twist_angle > PI / 4:
-            n_vert = 3 + int(twist_angle / (PI / 4))
+        elif twist_angle > PI / 6:
+            n_vert = 3 + int(twist_angle / (PI / 6))
         else:
             if self.cone_angle == 0:
                 n_vert = 3
@@ -347,6 +357,13 @@ class SpurGear(InvoluteGear):
         A value of 100 will result in a tooth flank displacement
         of 0.1 module, or a reduction of tooth width by 0.2 module near the top and
         bottom face, while tooth width remains nominal in the middle of the tooth.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
 
     Methods
     -------
@@ -391,6 +408,7 @@ class SpurGear(InvoluteGear):
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
+        z_anchor: float = 0,
     ):
         super().__init__(
             number_of_teeth=number_of_teeth,
@@ -411,6 +429,7 @@ class SpurGear(InvoluteGear):
             backlash=backlash,
             crowning=crowning,
             inside_teeth=False,
+            z_anchor=z_anchor,
         )
 
 
@@ -452,6 +471,13 @@ class SpurRingGear(InvoluteGear):
         Backlash coefficient. Default is 0.
     crowning: float
         Crowning coefficient. Default is 0.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
 
     Notes
     -----
@@ -500,6 +526,7 @@ class SpurRingGear(InvoluteGear):
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
+        z_anchor: float = 0,
     ):
         super().__init__(
             number_of_teeth=number_of_teeth,
@@ -520,6 +547,7 @@ class SpurRingGear(InvoluteGear):
             backlash=backlash,
             crowning=crowning,
             inside_teeth=True,
+            z_anchor=z_anchor,
         )
 
 
@@ -568,6 +596,22 @@ class HelicalGear(InvoluteGear):
         Backlash coefficient. Default is 0.
     crowning: float, optional
         Crowning coefficient. Default is 0.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
+
+    Notes
+    -----
+    Helical gear geometry is generated with normal system, meaning the pressure angle
+    and pitch are calculated in the normal direction to the tooth surface. This allows
+    HelicalGears to mesh with different helix angles, the mesh_to() function will adjust
+    the shaft orientation. Use PI/4 (45 degrees) for both gears to produce a
+    perpendicular axis combination. It is suggested to use z_anchor=0.5 for this kind of
+    drive.
 
     Methods
     -------
@@ -614,6 +658,7 @@ class HelicalGear(InvoluteGear):
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
+        z_anchor: float = 0,
     ):
         self.helix_angle = helix_angle
         self.herringbone = herringbone
@@ -630,13 +675,15 @@ class HelicalGear(InvoluteGear):
             root_fillet=root_fillet,
             tip_fillet=tip_fillet,
             tip_truncation=tip_truncation,
-            profile_shift=profile_shift,
-            addendum_coefficient=addendum_coefficient,
-            dedendum_coefficient=dedendum_coefficient,
+            profile_shift=profile_shift * np.cos(beta),
+            addendum_coefficient=addendum_coefficient * np.cos(beta),
+            dedendum_coefficient=dedendum_coefficient * np.cos(beta),
             pressure_angle=np.arctan(np.tan(pressure_angle) / np.cos(beta)),
             backlash=backlash,
             crowning=crowning,
+            z_anchor=z_anchor,
         )
+
         # correct for herringbone design
         if herringbone:
 
@@ -663,6 +710,17 @@ class HelicalGear(InvoluteGear):
     def beta(self):
         """Beta = helix angle of the gear."""
         return self.helix_angle
+
+    def mesh_to(self, other, target_dir=RIGHT):
+        # basic meshing
+        super().mesh_to(other, target_dir)
+        # orientation correction
+        rot_axis = normalize_vector(other.gearcore.center - self.gearcore.center)
+        angle_axis = self.beta + other.beta
+        rot = scp_Rotation.from_rotvec(rot_axis * angle_axis)
+        self.gearcore.transform.orientation = (
+            rot.as_matrix() @ self.gearcore.transform.orientation
+        )
 
 
 class HelicalRingGear(InvoluteGear):
@@ -707,6 +765,13 @@ class HelicalRingGear(InvoluteGear):
         Backlash coefficient. Default is 0.
     crowning: float
         Crowning coefficient. Default is 0.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
 
     Notes
     -----
@@ -714,6 +779,8 @@ class HelicalRingGear(InvoluteGear):
     The parameters and conventions are not inverted, e.g. increasing addendum
     coefficient will make deeper cuts in the ring. Only default values are updated
     to reflect the inversion.
+    HelicalRingGear does not support orientation adjustment with mesh_to() function if
+    helix angles are different.
 
     Methods
     -------
@@ -757,25 +824,28 @@ class HelicalRingGear(InvoluteGear):
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
+        z_anchor: float = 0,
     ):
+        beta = helix_angle
         super().__init__(
             number_of_teeth=number_of_teeth,
-            helix_angle=helix_angle,
+            helix_angle=beta,
             height=height,
             center=center,
             angle=angle,
-            module=module / np.cos(helix_angle),
+            module=module / np.cos(beta),
             enable_undercut=enable_undercut,
             root_fillet=root_fillet,
             tip_fillet=tip_fillet,
             tip_truncation=tip_truncation,
-            profile_shift=profile_shift,
-            addendum_coefficient=addendum_coefficient,
-            dedendum_coefficient=dedendum_coefficient,
-            pressure_angle=pressure_angle,
+            profile_shift=profile_shift * np.cos(beta),
+            addendum_coefficient=addendum_coefficient * np.cos(beta),
+            dedendum_coefficient=dedendum_coefficient * np.cos(beta),
+            pressure_angle=np.arctan(np.tan(pressure_angle) / np.cos(beta)),
             backlash=backlash,
             crowning=crowning,
             inside_teeth=True,
+            z_anchor=z_anchor,
         )
         # correct for herringbone design
         if herringbone:
@@ -864,6 +934,13 @@ class BevelGear(InvoluteGear):
         Backlash coefficient. Default is 0.
     crowning: float
         Crowning coefficient. Default is 0.
+    z_anchor: float, optional
+        Determines where the reference zero-level of the gear should be placed relative
+        to its height. The reference level contains the gear center and is related to
+        placement of the gear with the mesh_to() function. Also the reference level is
+        initially in the XY plane.
+        Value 0 places reference at the bottom, value 0.5 in the middle, value 1 at the
+        top of the gear. Default is 0.
 
     Notes
     -----
@@ -939,6 +1016,7 @@ class BevelGear(InvoluteGear):
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
+        z_anchor: float = 0,
     ):
         # Note: this bevel is not much different from the generic involute gear
         super().__init__(
@@ -960,6 +1038,7 @@ class BevelGear(InvoluteGear):
             backlash=backlash,
             crowning=crowning,
             inside_teeth=False,
+            z_anchor=z_anchor,
         )
 
 
@@ -1060,6 +1139,7 @@ class CycloidGear:
         backlash: float = 0,
         crowning: float = 0,
         inside_teeth=False,
+        z_anchor: float = 0,
     ):
         self.number_of_teeth = number_of_teeth
         self.height = height
@@ -1080,6 +1160,7 @@ class CycloidGear:
         self.builder: GearBuilder = None
         self.gearcore: Gear = None
         self.inside_teeth = inside_teeth
+        self.z_anchor = z_anchor
         self.calc_params()
 
     @property
@@ -1109,7 +1190,7 @@ class CycloidGear:
             )
 
         tooth_angle = self.pitch_angle / 4 - self.backlash / rp_ref
-        spiral_coeff = np.sin(self.helix_angle) / rp_ref
+        spiral_coeff = np.tan(self.helix_angle) / rp_ref
 
         def angle_func(z, coeff=spiral_coeff):
             return z * coeff
@@ -1130,10 +1211,10 @@ class CycloidGear:
             rc_in_coeff=self.inside_cycloid_coefficient,
             rc_out_coeff=self.outside_cycloid_coefficient,
         )
-
+        z_h = self.height / self.module
         self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
-            z_vals=np.array([0, self.height / self.module]),
+            z_vals=np.array([-z_h * self.z_anchor, z_h * (1 - self.z_anchor)]),
             module=self.module,
             cone=ConicData(cone_angle=self.cone_angle),
             shape_recipe=GearProfileRecipe(
