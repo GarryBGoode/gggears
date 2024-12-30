@@ -252,6 +252,18 @@ class GearRefCircles:
         """Radius of the outside (or inside) ring circle."""
         return self.r_o_curve.r
 
+    @property
+    def center(self):
+        """Center of the pitch circle."""
+        return self.r_p_curve.center
+
+    @center.setter
+    def center(self, value):
+        self.r_p_curve.center = value
+        self.r_a_curve.center = value
+        self.r_d_curve.center = value
+        self.r_o_curve.center = value
+
 
 @dataclasses.dataclass
 class ConicData:

@@ -288,8 +288,8 @@ def test_CAD(
     partvolume = gearpart.volume
 
     # height is actually the width of the gear surface, so not the z-height of bevels
-    r0_add = module * (num_teeth / 2 + gear1.addendum_coefficient)
-    r0_ded = module * (num_teeth / 2 - gear1.dedendum_coefficient)
+    r0_add = module * (num_teeth / 2 + gear1.inputparam.addendum_coefficient)
+    r0_ded = module * (num_teeth / 2 - gear1.inputparam.dedendum_coefficient)
     r0 = (r0_add + r0_ded) / 2
     h = height * np.cos(gamma)
     r1 = r0 - np.sin(gamma) * height
