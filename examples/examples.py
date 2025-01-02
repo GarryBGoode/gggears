@@ -52,6 +52,21 @@ def helical_gears():
     return [gear_part_0, gear_part_1, gear_part_2, gear_part_3, gear_part_4]
 
 
+def worm_approx():
+    # this example is stressing the helical gear geometry a bit, and approximates
+    # a worm drive
+    gear0 = HelicalGear(
+        number_of_teeth=3, helix_angle=PI / 2 * 0.85, height=20, z_anchor=0.5
+    )
+    gear1 = HelicalGear(
+        number_of_teeth=45, helix_angle=PI / 2 * 0.15, height=10, z_anchor=0.5
+    )
+    gear0.mesh_to(gear1, target_dir=RIGHT)
+    gear_part_0 = gear0.build_part()
+    gear_part_1 = gear1.build_part()
+    return [gear_part_0, gear_part_1]
+
+
 def planetary_helical_gear():
     m = 1
 
@@ -323,4 +338,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(fishbone_bevels(), deviation=0.15, angular_tolerance=0.2)
+    show(cycloid_drive(), deviation=0.15, angular_tolerance=0.2)
