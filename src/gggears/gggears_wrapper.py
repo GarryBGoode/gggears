@@ -132,7 +132,7 @@ class InvoluteInputParam:
     height: float = 1.0
     helix_angle: float = 0
     cone_angle: float = 0
-    center: np.ndarray = ORIGIN
+    center: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
     angle: float = 0
     module: float = 1.0
     enable_undercut: bool = True
