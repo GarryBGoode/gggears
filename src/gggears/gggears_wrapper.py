@@ -265,26 +265,6 @@ class InvoluteGear(GearInfoMixin):
             inside_teeth=inside_teeth,
             z_anchor=z_anchor,
         )
-        # self.inputparam.number_of_teeth = number_of_teeth
-        # self.inputparam.height = height
-        # self.inputparam.helix_angle = helix_angle
-        # self.inputparam.cone_angle = cone_angle
-        # self.inputparam.center = center
-        # self.inputparam.angle = angle
-        # self.inputparam.module = module
-        # self.inputparam.enable_undercut = enable_undercut
-        # self.inputparam.root_fillet = root_fillet
-        # self.inputparam.tip_fillet = tip_fillet
-        # self.inputparam.tip_truncation = tip_truncation
-        # self.inputparam.profile_shift = profile_shift
-        # self.inputparam.addendum_coefficient = addendum_coefficient
-        # self.inputparam.dedendum_coefficient = dedendum_coefficient
-        # self.inputparam.pressure_angle = pressure_angle
-        # self.inputparam.backlash = backlash
-        # self.inputparam.crowning = crowning
-        # self.inputparam.inside_teeth = inside_teeth
-        # self.inputparam.z_anchor = z_anchor
-
         if self.inputparam.number_of_teeth < 0:
             self.inputparam.number_of_teeth = -self.number_of_teeth
             self.inputparam.inside_teeth = not self.inputparam.inside_teeth
@@ -414,6 +394,7 @@ class InvoluteGear(GearInfoMixin):
         )
 
         twist_angle = np.abs(max_angle - min_angle)
+
         if self.inputparam.crowning == 0 and self.beta == 0:
             n_vert = 2
         elif twist_angle > PI / 6:
@@ -868,6 +849,29 @@ class HelicalGear(InvoluteGear):
 
             self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
+        # correct for too much twist
+        max_angle = np.max(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+        min_angle = np.min(
+            self.gearcore.shape_recipe.transform.angle(
+                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            )
+        )
+
+        twist_angle = np.abs(max_angle - min_angle)
+        if twist_angle > 2 * PI:
+            z_add = int(twist_angle // (2 * PI) * (len(self.gearcore.z_vals) - 1))
+            new_z_vals = np.linspace(
+                self.gearcore.z_vals[0],
+                self.gearcore.z_vals[-1],
+                z_add + len(self.gearcore.z_vals),
+            )
+            new_z_vals = np.unique((np.concatenate((new_z_vals, self.gearcore.z_vals))))
+            self.gearcore.z_vals = new_z_vals
+
     @property
     def beta(self):
         """Beta = helix angle of the gear."""
@@ -1009,16 +1013,6 @@ class HelicalRingGear(InvoluteGear):
             inside_teeth=True,
             z_anchor=z_anchor,
         )
-        # # correct for herringbone design
-        # if herringbone:
-        #     self.gearcore.z_vals = np.array([0, self.z_height / 2, self.z_height])
-
-        #     def herringbone_mod(
-        #         z, original: Callable = self.gearcore.shape_recipe.transform.angle
-        #     ):
-        #         return original(self.z_height / 2 - np.abs(self.z_height / 2 - z))
-
-        #     self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
         # correct for herringbone design
         if herringbone:
