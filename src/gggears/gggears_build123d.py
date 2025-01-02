@@ -92,7 +92,9 @@ class GearBuilder(GearToNurbs):
 
         self.solid = Solid(Shell(full_surfaces))
         self.part = Part() + self.solid
-        self.part_transformed = apply_transform_part(self.solid, self.gear.transform)
+        self.part_transformed = BasePartObject(
+            apply_transform_part(self.solid, self.gear.transform)
+        )
 
     def gen_side_surfaces(self):
         n_teeth = self.gear.tooth_param.num_teeth_act
@@ -475,6 +477,11 @@ def nppoint2Vector(p: np.ndarray):
         return Vector((p[0], p[1], p[2]))
     else:
         return [Vector((p[k, 0], p[k, 1], p[k, 2])) for k in range(p.shape[0])]
+
+
+def np2v(p: np.ndarray):
+    # shorthand for npppoint2Vector
+    return nppoint2Vector(p)
 
 
 def gen_splines(curve_bezier: Curve):
