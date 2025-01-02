@@ -188,8 +188,17 @@ class GearToNurbs:
                     points_combined, n_points_vert=self.n_points_vert
                 )
             else:
+                sol2, points_init, weights_init = self.solve_surface_fast(
+                    points_combined, n_points_vert=self.n_points_vert
+                )
+                init_data = np.concatenate(
+                    [points_init, weights_init[:, :, np.newaxis]], axis=2
+                )
                 sol2, points2, weights2, t = self.solve_surface(
-                    points_combined, n_points_vert=self.n_points_vert, t_weight=0.01
+                    points_combined,
+                    n_points_vert=self.n_points_vert,
+                    t_weight=0.01,
+                    init_points=init_data,
                 )
 
             surface_data.append(
@@ -200,7 +209,9 @@ class GearToNurbs:
 
         return surface_data
 
-    def solve_surface(self, target_points, n_points_vert=4, t_weight=0.01):
+    def solve_surface(
+        self, target_points, n_points_vert=4, t_weight=0.01, init_points=None
+    ):
 
         n = target_points.shape[1]
         m = n_points_vert
@@ -230,7 +241,9 @@ class GearToNurbs:
             return np.sum(diff * diff) + np.dot(t_diff, t_diff)
 
         init_t = np.linspace(0, 1, o)[1:-1]
-        init_points = bezierdc(np.linspace(0, 1, m), target_points)
+        if init_points is None:
+            init_points = bezierdc(np.linspace(0, 1, m), target_points)
+
         init_guess_x = inverse_allocator(init_points, init_t)
 
         sol = minimize(cost_fun, init_guess_x)
