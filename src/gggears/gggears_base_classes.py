@@ -73,6 +73,22 @@ class TransformData:
     def z_axis(self):
         return self.orientation[:, 2]
 
+    @property
+    def affine_matrix(self):
+        return np.block(
+            [[self.orientation * self.scale, self.center[:, np.newaxis]], [0, 0, 0, 1]]
+        )
+
+    def __mul__(self, other):
+        if isinstance(other, TransformData):
+            return TransformData(
+                center=self.center + self.orientation @ other.center * self.scale,
+                orientation=self.orientation @ other.orientation,
+                scale=self.scale * other.scale,
+            )
+        else:
+            return NotImplemented
+
 
 def apply_transform(points: np.ndarray, data: TransformData) -> np.ndarray:
     """
@@ -125,6 +141,27 @@ class GearTransformData(TransformData):
 
     angle: float = 0
 
+    @property
+    def affine_matrix(self):
+        # override to include angle as well
+        orient2 = (
+            self.orientation @ scp_Rotation.from_euler("z", self.angle).as_matrix()
+        )
+        return np.block(
+            [[orient2 * self.scale, self.center[:, np.newaxis]], [0, 0, 0, 1]]
+        )
+
+    def __mul__(self, other):
+        if isinstance(other, GearTransformData):
+            return GearTransformData(
+                center=self.center + self.orientation @ other.center * self.scale,
+                orientation=self.orientation @ other.orientation,
+                scale=self.scale * other.scale,
+                angle=self.angle + other.angle,
+            )
+        else:
+            return NotImplemented
+
 
 def apply_gear_transform(points: np.ndarray, data: GearTransformData) -> np.ndarray:
     """Apply GearTransform to a set of points."""
@@ -141,6 +178,17 @@ class GearTransform(GearTransformData):
 
     def __call__(self, points) -> np.ndarray:
         return apply_gear_transform(points, self)
+
+    def __mul__(self, other):
+        if isinstance(other, GearTransformData):
+            return GearTransform(
+                center=self.center + self.orientation @ other.center * self.scale,
+                orientation=self.orientation @ other.orientation,
+                scale=self.scale * other.scale,
+                angle=self.angle + other.angle,
+            )
+        else:
+            return NotImplemented
 
 
 @dataclasses.dataclass

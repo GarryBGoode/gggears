@@ -140,7 +140,7 @@ class GearToNurbs:
             nurb_profile_stacks.append(nurb_stack)
         return nurb_profile_stacks
 
-    def generate_gear_stacks(self):
+    def generate_gear_stacks(self) -> List[List[gg.GearRefProfileExtended]]:
         gear_stacks = []
         for ii in range(len(self.z_vals) - 1):
             # need more gear slices than nurb points to produce 'best' fit without overfitting

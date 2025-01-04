@@ -2,6 +2,7 @@ import gggears as gg
 from build123d import *
 from ocp_vscode import *
 
+set_port(3939)
 
 # this example demonstrates how to create a simple pair of gears and
 # add additional features to them, and then assemble them on a baseplate
@@ -9,11 +10,15 @@ gearmodule = 2
 gearheight = 4
 bore_diameter = 5
 pin_diamaeter = 2
-sleeve_height = 5
+sleeve_height = 7
 sleeve_thickness = 1
 
-gear1 = gg.SpurGear(number_of_teeth=13, module=gearmodule, height=gearheight)
-gear2 = gg.SpurGear(number_of_teeth=31, module=gearmodule, height=gearheight)
+gear1 = gg.HelicalGear(
+    number_of_teeth=13, module=gearmodule, height=gearheight, helix_angle=gg.PI / 12
+)
+gear2 = gg.HelicalGear(
+    number_of_teeth=31, module=gearmodule, height=gearheight, helix_angle=-gg.PI / 12
+)
 gear1.mesh_to(gear2, target_dir=gg.DOWN)
 
 # gggears uses numpy arrays for vectors, build123d uses its own Vector class
@@ -27,14 +32,16 @@ with BuildPart() as gear1_part:
     gear1.build_part()
     # note: gear1 is moved and rotated to be meshed with gear2 by the mesh_to() method
     # the alignment of the sleeve and pinhole may need to be adjusted
-    with Locations((gear1_center_vector)):
+    with Locations((gear1.center_location_top)):
+        # note: location of top-center is aligned with tooth no. 0 of the gear
+        # the angle is changed from the mesh_to() method and the helix angle as well
         sleeve = Cylinder(
             radius=bore_diameter / 2 + sleeve_thickness,
-            height=sleeve_height + gearheight,
+            height=sleeve_height,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
         loc_pin_hole = Location(
-            Vector(0, 0, sleeve_height + gearheight - pin_diamaeter * 3 / 2),
+            Vector(0, 0, sleeve_height - pin_diamaeter * 3 / 2),
             (0, 90, 0),
         )
         # Holes with depth=None mean through all the way
@@ -51,14 +58,16 @@ with BuildPart() as gear1_part:
 
 with BuildPart() as gear2_part:
     gearpart = gear2.build_part()
-    with Locations((gear2_center_vector)):
+    with Locations((gear2.center_location_top)):
+        # note: location of top-center is aligned with tooth no. 0 of the gear
+        # the angle is changed from the helix angle
         Cylinder(
             radius=bore_diameter / 2 + sleeve_thickness,
-            height=sleeve_height + gearheight,
+            height=sleeve_height,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
         loc_pin_hole = Location(
-            Vector(0, 0, sleeve_height + gearheight - pin_diamaeter * 3 / 2),
+            Vector(0, 0, sleeve_height - pin_diamaeter * 3 / 2),
             (0, 90, 0),
         )
         # Holes with depth=None mean through all the way
@@ -78,6 +87,7 @@ with BuildPart() as baseplate:
     face = box.faces().sort_by(Axis.Y)[0]
     # note: the orientation of the face is such that the local Y aligns with global X
     loc = face.center_location
+    # mult operation on locations means locate 2nd location within 1st location
     loc_g1 = loc * Location(axial_distance_vector * 0.5)
     loc_g2 = loc * Location(-axial_distance_vector * 0.5)
     with Locations([loc_g1, loc_g2]):

@@ -497,3 +497,15 @@ def gen_splines(curve_bezier: Curve):
         vectors = nppoint2Vector(curve_bezier.points)
         weights = curve_bezier.weights.tolist()
         return Edge.make_bezier(*vectors, weights=weights)
+
+
+def transform2Location(transform: GearTransform):
+    rot1 = scp_Rotation.from_matrix(transform.orientation)
+    degrees = rot1.as_euler("zyx", degrees=True)
+    loc = Location(
+        transform.center,
+        [degrees[2] + transform.angle * 180 / PI, degrees[1], degrees[0]],
+        Extrinsic.ZYX,
+    )
+
+    return loc

@@ -60,6 +60,59 @@ class GearInfoMixin:
         center_sph = self.cone_data.center / self.module
         return self.gearcore.transform(center_sph)
 
+    def center_transform_at_z(self, z):
+        tf1 = self.gearcore.shape_recipe(z).transform
+        tf2 = self.gearcore.transform
+        return tf2 * tf1
+
+    def center_point_at_z(self, z):
+        return self.center_transform_at_z(z).center
+
+    def center_location_at_z(self, z):
+        return transform2Location(self.center_transform_at_z(z))
+
+    @property
+    def center_location_bottom(self):
+        return self.center_location_at_z(self.gearcore.z_vals[0])
+
+    @property
+    def center_location_middle(self):
+        return self.center_location_at_z(
+            0.5 * (self.gearcore.z_vals[0] + self.gearcore.z_vals[-1])
+        )
+
+    @property
+    def center_location_top(self):
+        return self.center_location_at_z(self.gearcore.z_vals[-1])
+
+    @property
+    def face_location_top(self):
+        point = self.limit_data_gen(self.gearcore.z_vals[-1]).r_d_curve.center
+        loc = self.center_location_top
+        loc.position = np2v(point)
+        return loc
+
+    @property
+    def face_location_bottom(self):
+        point = self.limit_data_gen(self.gearcore.z_vals[0]).r_d_curve.center
+        loc = self.center_location_bottom
+        loc.position = np2v(point)
+        return loc
+
+    @property
+    def center_point_bottom(self):
+        return self.center_point_at_z(self.gearcore.z_vals[0])
+
+    @property
+    def center_point_middle(self):
+        return self.center_point_at_z(
+            0.5 * (self.gearcore.z_vals[0] + self.gearcore.z_vals[-1])
+        )
+
+    @property
+    def center_point_top(self):
+        return self.center_point_at_z(self.gearcore.z_vals[-1])
+
     @property
     def pitch_angle(self):
         return self.gearcore.tooth_param.pitch_angle
@@ -81,11 +134,11 @@ class GearInfoMixin:
 
     @property
     def limit_data_array(self):
-        return [self.limit_data_array_gen(z) for z in self.gearcore.z_vals]
+        return [self.limit_data_gen(z) for z in self.gearcore.z_vals]
 
     def limit_data_gen(self, z):
-        trf = self.gearcore.transform
         profile = self.gearcore.curve_gen_at_z(z)
+        trf = self.gearcore.transform * profile.transform
         r_a = crv.ArcCurve(
             radius=trf.scale * profile.ra_curve.radius,
             center=trf(profile.ra_curve.center),
