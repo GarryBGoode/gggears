@@ -87,14 +87,14 @@ class GearInfoMixin:
 
     @property
     def face_location_top(self):
-        point = self.limit_data_gen(self.gearcore.z_vals[-1]).r_d_curve.center
+        point = self.limit_data_gen(self.gearcore.z_vals[-1]).r_o_curve.center
         loc = self.center_location_top
         loc.position = np2v(point)
         return loc
 
     @property
     def face_location_bottom(self):
-        point = self.limit_data_gen(self.gearcore.z_vals[0]).r_d_curve.center
+        point = self.limit_data_gen(self.gearcore.z_vals[0]).r_o_curve.center
         loc = self.center_location_bottom
         loc.position = np2v(point)
         return loc
@@ -136,7 +136,7 @@ class GearInfoMixin:
     def limit_data_array(self):
         return [self.limit_data_gen(z) for z in self.gearcore.z_vals]
 
-    def limit_data_gen(self, z):
+    def limit_data_gen(self, z) -> GearRefCircles:
         profile = self.gearcore.curve_gen_at_z(z)
         trf = self.gearcore.transform * profile.transform
         r_a = crv.ArcCurve(
@@ -177,6 +177,33 @@ class GearInfoMixin:
         r_os = [elem.r_o_curve.radius for elem in self.limit_data_array]
         r_as = [elem.r_a_curve.radius for elem in self.limit_data_array]
         return np.max(r_os + r_as)
+
+    def cone_angle_limits_z(self, z):
+        # this is convoluted due to preparing for hypoid gears,
+        # where the cone angle is not constant
+        limitdata = self.limit_data_gen(z)
+        R0 = self.gearcore.shape_recipe(z).cone.R
+        tf0 = self.gearcore.shape_recipe(z).transform
+        tf1 = self.gearcore.transform
+        R = R0 * tf0.scale * tf1.scale
+        cone_angles = [
+            np.arcsin(r / R)
+            for r in [
+                limitdata.r_o_curve.radius,
+                limitdata.r_d_curve.radius,
+                limitdata.r_p_curve.radius,
+                limitdata.r_a_curve.radius,
+            ]
+        ]
+        return cone_angles
+
+    @property
+    def cone_angle_limits_bottom(self):
+        return self.cone_angle_limits_z(self.gearcore.z_vals[0])
+
+    @property
+    def cone_angle_limits_top(self):
+        return self.cone_angle_limits_z(self.gearcore.z_vals[-1])
 
 
 @dataclasses.dataclass

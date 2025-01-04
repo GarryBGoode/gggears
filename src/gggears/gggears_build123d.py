@@ -74,7 +74,17 @@ class GearBuilder(GearToNurbs):
         oversampling_ratio: float = 3,
         method: str = "slow",
         projection: bool = True,
+        split: bool = True,
     ):
+        z_vals_save = copy.deepcopy(gear.z_vals)
+        if split:
+            gear.z_vals[0], gear.z_vals[-1] = (
+                gear.z_vals[-1] + gear.z_vals[0]
+            ) / 2 - 1.1 * (gear.z_vals[-1] - gear.z_vals[0]) / 2, (
+                gear.z_vals[-1] + gear.z_vals[0]
+            ) / 2 + 1.2 * (
+                gear.z_vals[-1] - gear.z_vals[0]
+            ) / 2
         super().__init__(
             gear=gear,
             n_points_hz=n_points_hz,
@@ -82,15 +92,55 @@ class GearBuilder(GearToNurbs):
             oversampling_ratio=oversampling_ratio,
             convertmethod=method,
         )
+        self.gear.z_vals = z_vals_save
         self.projection = projection
-        bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
-        top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
-        side_surfaces = self.gen_side_surfaces()
-        full_surfaces = side_surfaces
-        full_surfaces.append(top_cover)
-        full_surfaces.append(bot_cover)
+        if not split or self.gear.cone.cone_angle == 0:
+            bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
+            top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
+            side_surfaces = self.gen_side_surfaces()
+            full_surfaces = side_surfaces
+            full_surfaces.append(top_cover)
+            full_surfaces.append(bot_cover)
 
-        self.solid = Solid(Shell(full_surfaces))
+            self.solid = Solid(Shell(full_surfaces))
+        else:
+
+            side_surfaces = self.gen_side_surfaces()
+            profile0 = self.gear.curve_gen_at_z(self.gear.z_vals[0])
+            profile1 = self.gear.curve_gen_at_z(self.gear.z_vals[-1])
+
+            gamma = self.gear.cone.cone_angle / 2
+            R0 = self.gear.tooth_param.num_teeth / 2 / np.sin(gamma)
+            h0 = R0 * np.cos(gamma)
+            R1 = R0 * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.scale
+            center = Vector(0, 0, h0)
+            ref_solid = Solid.make_sphere(
+                radius=R0, angle1=-90, angle2=90, angle3=180
+            ) - Solid.make_sphere(radius=R1, angle1=-90, angle2=90, angle3=180)
+            ref_solid = ref_solid.rotate(Axis.X, angle=-90)
+            # ref_solid = ref_solid.split(Plane.XZ, keep=Keep.BOTH)
+            ref_solid = ref_solid.translate(center)
+            tool = Face.fuse(*side_surfaces)
+            split_part = ref_solid.split(tool, keep=Keep.BOTH)
+            split_solids = [*split_part.solids()]
+            if self.gear.tooth_param.inside_teeth:
+                self.solid = Solid.fuse(*split_solids[1:-1])
+                self.solid = self.solid.clean()
+
+            else:
+                self.solid = split_solids[1]
+                c_o_0 = profile0.transform(profile0.ro_curve.center)
+                c_o_1 = profile1.transform(profile1.ro_curve.center)
+                h_o = c_o_1[2] - c_o_0[2]
+                r_o_0 = profile0.ro_curve.radius * profile0.transform.scale
+                r_o_1 = profile1.ro_curve.radius * profile1.transform.scale
+                r_o_cone = Solid.make_cone(
+                    r_o_0, r_o_1, h_o, plane=(Plane.XY).offset(c_o_0[2])
+                )
+                self.solid = self.solid.fuse(r_o_cone)
+                self.solid = self.solid.clean()
+                self.solid = self.solid.split(Plane.XY.offset(c_o_0[2]), keep=Keep.TOP)
+
         self.part = Part() + self.solid
         self.part_transformed = BasePartObject(
             apply_transform_part(self.solid, self.gear.transform)

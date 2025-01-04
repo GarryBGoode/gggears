@@ -68,7 +68,7 @@ def worm_approx():
 
 
 def planetary_helical_gear():
-    m = 1
+    m = 2
 
     n_ring = 97
     n_sun = 11
@@ -168,8 +168,47 @@ def bevel_gear():
         profile_shift=-0.25,
     )
     gear1.mesh_to(gear2, target_dir=LEFT)
-    gear_part_1 = gear1.build_part()
-    gear_part_2 = gear2.build_part()
+    with BuildPart() as gear1_builder:
+        gearpart_1 = gear1.build_part()
+        loc1 = gear1.face_location_top
+        loc1_face = (
+            gearpart_1.faces().sort_by_distance(loc1.position)[0].center_location
+        )
+        loc2 = gear1.face_location_bottom
+        loc2_face = (
+            gearpart_1.faces().sort_by_distance(loc2.position)[0].center_location
+        )
+        with Locations([gear1.face_location_top]):
+            Cylinder(2, 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+        with Locations([gear1.face_location_bottom]):
+            cone_angle_bottom = gear1.cone_angle_limits_bottom[0]
+            # it seems to break OCT if this radius exactly coincides with the actual
+            # gear bottom r_o radius
+            r0 = gear1.limit_data_array[0].r_o * 0.99
+            h = 0.2
+            r1 = r0 - h / np.tan(cone_angle_bottom)
+            # bottom location still points up, aligned with the gear,
+            # so the cone1 is positioned under the local XY plane
+            cone1 = Cone(r1, r0, h, align=(Align.CENTER, Align.CENTER, Align.MAX))
+            Hole(1, depth=None)
+
+    with BuildPart() as gear2_builder:
+        gearpart_2 = gear2.build_part()
+        loc3 = gear2.face_location_top
+        loc3_face = (
+            gearpart_2.faces().sort_by_distance(loc3.position)[0].center_location
+        )
+        loc4 = gear2.face_location_bottom
+        loc4_face = (
+            gearpart_2.faces().sort_by_distance(loc4.position)[0].center_location
+        )
+        with Locations([gear2.face_location_top]):
+            Cylinder(4, 4, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            Hole(1, depth=None)
+
+    gear_part_1 = gear1_builder.part
+    gear_part_2 = gear2_builder.part
     return (gear_part_1, gear_part_2)
 
 
@@ -338,4 +377,4 @@ def cycloid_drive():
 if __name__ == "__main__":
     set_port(3939)
 
-    show(cycloid_drive(), deviation=0.15, angular_tolerance=0.2)
+    show(bevel_gear(), deviation=0.15, angular_tolerance=0.2)
