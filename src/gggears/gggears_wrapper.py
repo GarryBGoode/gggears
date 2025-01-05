@@ -87,14 +87,14 @@ class GearInfoMixin:
 
     @property
     def face_location_top(self):
-        point = self.limit_data_gen(self.gearcore.z_vals[-1]).r_o_curve.center
+        point = self.radii_data_gen(self.gearcore.z_vals[-1]).r_o_curve.center
         loc = self.center_location_top
         loc.position = np2v(point)
         return loc
 
     @property
     def face_location_bottom(self):
-        point = self.limit_data_gen(self.gearcore.z_vals[0]).r_o_curve.center
+        point = self.radii_data_gen(self.gearcore.z_vals[0]).r_o_curve.center
         loc = self.center_location_bottom
         loc.position = np2v(point)
         return loc
@@ -133,10 +133,10 @@ class GearInfoMixin:
         return np.linalg.norm((self.gearcore.transform(c0 - c1)))
 
     @property
-    def limit_data_array(self):
-        return [self.limit_data_gen(z) for z in self.gearcore.z_vals]
+    def radii_data_array(self):
+        return [self.radii_data_gen(z) for z in self.gearcore.z_vals]
 
-    def limit_data_gen(self, z) -> GearRefCircles:
+    def radii_data_gen(self, z) -> GearRefCircles:
         profile = self.gearcore.curve_gen_at_z(z)
         trf = self.gearcore.transform * profile.transform
         r_a = crv.ArcCurve(
@@ -166,22 +166,22 @@ class GearInfoMixin:
 
     @property
     def addendum_radius(self):
-        return self.limit_data_gen(self.gearcore.z_vals[0]).r_a_curve.radius
+        return self.radii_data_gen(self.gearcore.z_vals[0]).r_a_curve.radius
 
     @property
     def dedendum_radius(self):
-        return self.limit_data_gen(self.gearcore.z_vals[0]).r_d_curve.radius
+        return self.radii_data_gen(self.gearcore.z_vals[0]).r_d_curve.radius
 
     @property
     def max_outside_radius(self):
-        r_os = [elem.r_o_curve.radius for elem in self.limit_data_array]
-        r_as = [elem.r_a_curve.radius for elem in self.limit_data_array]
+        r_os = [elem.r_o_curve.radius for elem in self.radii_data_array]
+        r_as = [elem.r_a_curve.radius for elem in self.radii_data_array]
         return np.max(r_os + r_as)
 
     def cone_angle_limits_z(self, z):
         # this is convoluted due to preparing for hypoid gears,
         # where the cone angle is not constant
-        limitdata = self.limit_data_gen(z)
+        limitdata = self.radii_data_gen(z)
         R0 = self.gearcore.shape_recipe(z).cone.R
         tf0 = self.gearcore.shape_recipe(z).transform
         tf1 = self.gearcore.transform

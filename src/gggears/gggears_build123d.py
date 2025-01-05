@@ -74,27 +74,18 @@ class GearBuilder(GearToNurbs):
         oversampling_ratio: float = 3,
         method: str = "slow",
         projection: bool = True,
-        split: bool = True,
+        split_construction: bool = True,
     ):
-        z_vals_save = copy.deepcopy(gear.z_vals)
-        if split:
-            gear.z_vals[0], gear.z_vals[-1] = (
-                gear.z_vals[-1] + gear.z_vals[0]
-            ) / 2 - 1.1 * (gear.z_vals[-1] - gear.z_vals[0]) / 2, (
-                gear.z_vals[-1] + gear.z_vals[0]
-            ) / 2 + 1.2 * (
-                gear.z_vals[-1] - gear.z_vals[0]
-            ) / 2
-        super().__init__(
-            gear=gear,
-            n_points_hz=n_points_hz,
-            n_points_vert=n_points_vert,
-            oversampling_ratio=oversampling_ratio,
-            convertmethod=method,
-        )
-        self.gear.z_vals = z_vals_save
         self.projection = projection
-        if not split or self.gear.cone.cone_angle == 0:
+
+        if not split_construction or gear.cone.cone_angle == 0:
+            super().__init__(
+                gear=gear,
+                n_points_hz=n_points_hz,
+                n_points_vert=n_points_vert,
+                oversampling_ratio=oversampling_ratio,
+                convertmethod=method,
+            )
             bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
             top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
             side_surfaces = self.gen_side_surfaces()
@@ -104,8 +95,25 @@ class GearBuilder(GearToNurbs):
 
             self.solid = Solid(Shell(full_surfaces))
         else:
+            z_vals_save = copy.deepcopy(gear.z_vals)
+            zmid = (gear.z_vals[-1] + gear.z_vals[0]) / 2
+            zdiff = gear.z_vals[-1] - gear.z_vals[0]
+            # extend z_vals by 10% to ensure cutting intersection for split operation
+            gear.z_vals[-1], gear.z_vals[0] = (
+                zmid + zdiff * 1.1 / 2,
+                zmid - zdiff * 1.1 / 2,
+            )
+            super().__init__(
+                gear=gear,
+                n_points_hz=n_points_hz,
+                n_points_vert=n_points_vert,
+                oversampling_ratio=oversampling_ratio,
+                convertmethod=method,
+            )
+            # restore original z_vals
+            self.gear.z_vals = z_vals_save
 
-            side_surfaces = self.gen_side_surfaces()
+            side_surfaces = self.gen_side_surfaces(only_outside_surface=True)
             profile0 = self.gear.curve_gen_at_z(self.gear.z_vals[0])
             profile1 = self.gear.curve_gen_at_z(self.gear.z_vals[-1])
 
@@ -114,21 +122,21 @@ class GearBuilder(GearToNurbs):
             h0 = R0 * np.cos(gamma)
             R1 = R0 * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.scale
             center = Vector(0, 0, h0)
+            top_angle = (
+                180 / PI * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.angle
+            )
             ref_solid = Solid.make_sphere(
-                radius=R0, angle1=-90, angle2=90, angle3=180
-            ) - Solid.make_sphere(radius=R1, angle1=-90, angle2=90, angle3=180)
-            ref_solid = ref_solid.rotate(Axis.X, angle=-90)
-            # ref_solid = ref_solid.split(Plane.XZ, keep=Keep.BOTH)
+                radius=R0, angle1=-90, angle2=90, angle3=360
+            ) - Solid.make_sphere(radius=R1, angle1=-90, angle2=90, angle3=360).rotate(
+                Axis.Z, top_angle
+            )
+            # ref_solid = ref_solid.rotate(Axis.X, angle=-90)
             ref_solid = ref_solid.translate(center)
-            tool = Face.fuse(*side_surfaces)
-            split_part = ref_solid.split(tool, keep=Keep.BOTH)
-            split_solids = [*split_part.solids()]
-            if self.gear.tooth_param.inside_teeth:
-                self.solid = Solid.fuse(*split_solids[1:-1])
-                self.solid = self.solid.clean()
 
-            else:
-                self.solid = split_solids[1]
+            tool = Face.fuse(*side_surfaces)
+
+            if self.gear.tooth_param.inside_teeth:
+                # inside ring bevel gear
                 c_o_0 = profile0.transform(profile0.ro_curve.center)
                 c_o_1 = profile1.transform(profile1.ro_curve.center)
                 h_o = c_o_1[2] - c_o_0[2]
@@ -137,16 +145,37 @@ class GearBuilder(GearToNurbs):
                 r_o_cone = Solid.make_cone(
                     r_o_0, r_o_1, h_o, plane=(Plane.XY).offset(c_o_0[2])
                 )
-                self.solid = self.solid.fuse(r_o_cone)
+                r_o_face = r_o_cone.faces().sort_by(Axis.Z)[1]
+                ref_solid = ref_solid.split(r_o_face, keep=Keep.BOTTOM)
+                split_part = ref_solid.split(tool, keep=Keep.BOTH)
+                split_solids = [*split_part.solids()]
+                self.solid = split_solids[0]
                 self.solid = self.solid.clean()
-                self.solid = self.solid.split(Plane.XY.offset(c_o_0[2]), keep=Keep.TOP)
+
+            else:
+
+                c_o_0 = profile0.transform(profile0.ro_curve.center)
+                c_o_1 = profile1.transform(profile1.ro_curve.center)
+                h_o = c_o_1[2] - c_o_0[2]
+                r_o_0 = profile0.ro_curve.radius * profile0.transform.scale
+                r_o_1 = profile1.ro_curve.radius * profile1.transform.scale
+                r_o_cone = Solid.make_cone(
+                    r_o_0, r_o_1, h_o, plane=(Plane.XY).offset(c_o_0[2])
+                )
+                ref_solid = ref_solid.fuse(r_o_cone)
+                ref_solid = ref_solid.clean()
+                ref_solid = ref_solid.split(Plane.XY.offset(c_o_0[2]), keep=Keep.TOP)
+
+                split_part = ref_solid.split(tool, keep=Keep.BOTH)
+                split_solids = [*split_part.solids()]
+                self.solid = split_solids[0]
 
         self.part = Part() + self.solid
         self.part_transformed = BasePartObject(
             apply_transform_part(self.solid, self.gear.transform)
         )
 
-    def gen_side_surfaces(self):
+    def gen_side_surfaces(self, only_outside_surface=False):
         n_teeth = self.gear.tooth_param.num_teeth_act
         surfaces = []
 
@@ -173,7 +202,7 @@ class GearBuilder(GearToNurbs):
                 loc_face = loc_face + tooth_surfaces_nz[k][j]
             tooth_surfaces.append(loc_face)
 
-        if not self.gear.tooth_param.inside_teeth:
+        if not self.gear.tooth_param.inside_teeth or only_outside_surface:
             # fuse tooth surfaces into 1 object
             # last 3 surface elements are closing the tooth which is not needed here
             tooth_surface = Face.fuse(*tooth_surfaces[:-3])
