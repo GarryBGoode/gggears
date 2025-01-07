@@ -461,6 +461,7 @@ def trim_reference_profile(
             if sol_root_2.success or solcheck2 < 1e-5:
                 solcheck = solcheck2
                 sol_root = sol_root_2
+        # angle check: check if the found solution is within the pitch angle range
         angle_check = np.arctan2(
             tooth_curve(sol_root.x[0])[1], tooth_curve(sol_root.x[0])[0]
         )
@@ -476,11 +477,14 @@ def trim_reference_profile(
                 tooth_curve, plane_normal=plane_norm, guess=guess
             )
 
-            sol_bot = crv.find_curve_intersect(
-                tooth_curve,
-                ref_curves.r_d_curve,
-                guess=[sol_mid2.x[0], rd_guess],
-                method=crv.IntersectMethod.MINDISTANCE,
+            # sol_bot = crv.find_curve_intersect(
+            #     tooth_curve,
+            #     ref_curves.r_d_curve,
+            #     guess=[sol_mid2.x[0], rd_guess],
+            #     method=crv.IntersectMethod.MINDISTANCE,
+            # )
+            sol_bot = minimize(
+                lambda t: np.linalg.norm(tooth_curve(t)[:2]), sol_mid2.x[0]
             )
             if sol_bot.x[0] > sol_mid2.x[0]:
                 sol_mid2 = sol_bot

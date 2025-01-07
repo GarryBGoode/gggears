@@ -181,7 +181,7 @@ class GearInfoMixin:
     def cone_angle_limits_z(self, z):
         # this is convoluted due to preparing for hypoid gears,
         # where the cone angle is not constant
-        limitdata = self.radii_data_gen(z)
+        radiidata = self.radii_data_gen(z)
         R0 = self.gearcore.shape_recipe(z).cone.R
         tf0 = self.gearcore.shape_recipe(z).transform
         tf1 = self.gearcore.transform
@@ -189,10 +189,10 @@ class GearInfoMixin:
         cone_angles = [
             np.arcsin(r / R)
             for r in [
-                limitdata.r_o_curve.radius,
-                limitdata.r_d_curve.radius,
-                limitdata.r_p_curve.radius,
-                limitdata.r_a_curve.radius,
+                radiidata.r_o_curve.radius,
+                radiidata.r_d_curve.radius,
+                radiidata.r_p_curve.radius,
+                radiidata.r_a_curve.radius,
             ]
         ]
         return cone_angles

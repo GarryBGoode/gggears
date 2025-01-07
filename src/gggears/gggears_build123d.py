@@ -122,12 +122,17 @@ class GearBuilder(GearToNurbs):
             h0 = R0 * np.cos(gamma)
             R1 = R0 * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.scale
             center = Vector(0, 0, h0)
+            bottom_angle = (
+                180 / PI * self.gear.shape_recipe(self.gear.z_vals[0]).transform.angle
+            )
             top_angle = (
                 180 / PI * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.angle
             )
             ref_solid = Solid.make_sphere(
                 radius=R0, angle1=-90, angle2=90, angle3=360
-            ) - Solid.make_sphere(radius=R1, angle1=-90, angle2=90, angle3=360).rotate(
+            ).rotate(Axis.Z, bottom_angle) - Solid.make_sphere(
+                radius=R1, angle1=-90, angle2=90, angle3=360
+            ).rotate(
                 Axis.Z, top_angle
             )
             # ref_solid = ref_solid.rotate(Axis.X, angle=-90)
