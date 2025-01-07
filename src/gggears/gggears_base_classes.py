@@ -349,16 +349,22 @@ class ConicData:
 
 class GearToothGenerator(ZFunctionMixin):
     def __init__(
-        self, pitch_intersect_angle: float = PI / 16, pitch_radius: float = 1.0
+        self,
+        pitch_intersect_angle: float = PI / 16,
+        pitch_radius: float = 1.0,
+        tooth_angle: float = 0,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
+        self.tooth_angle = tooth_angle
 
     def generate_tooth_curve(self) -> crv.Curve:
         p0 = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(
             (RIGHT * self.pitch_radius)
         )
-        return crv.LineCurve(p0=p0 * 0.8, p1=p0 * 1.2)
+        rot_ta = scp_Rotation.from_euler("z", self.tooth_angle)
+        dp = rot_ta.apply(p0 * 0.2)
+        return crv.LineCurve(p0=p0 - dp, p1=p0 + dp)
 
 
 class GearToothConicGenerator(GearToothGenerator):
@@ -367,10 +373,12 @@ class GearToothConicGenerator(GearToothGenerator):
         pitch_intersect_angle: float = PI / 16,
         pitch_radius: float = 1.0,
         cone_angle: float = PI / 4,
+        tooth_angle: float = 0,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.cone_angle = cone_angle
+        self.tooth_angle = tooth_angle
 
     @property
     def conic_data(self):
@@ -381,15 +389,21 @@ class GearToothConicGenerator(GearToothGenerator):
         if self.cone_angle == 0:
             return super().generate_tooth_curve()
         else:
-            axis = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(out)
+
+            cone = ConicData(cone_angle=self.cone_angle, base_radius=self.pitch_radius)
+            R = cone.R
+            h = cone.height
+            gamma = cone.gamma
 
             p0 = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(
                 (RIGHT * self.pitch_radius)
             )
-            p1 = scp_Rotation.from_rotvec(axis * 0.1).apply(p0)
-
-            center = self.conic_data.center
+            axis = np.cross(p0 / np.linalg.norm(p0), OUT)
+            rot_ta = scp_Rotation.from_rotvec(
+                -p0 / np.linalg.norm(p0) * self.tooth_angle
+            )
+            axis = rot_ta.apply(axis)
 
             return crv.ArcCurve.from_point_center_angle(
-                p0=p1, center=center, angle=0.2, axis=axis
+                p0=p0, center=OUT * h, angle=0.1, axis=axis
             )
