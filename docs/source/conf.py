@@ -27,11 +27,18 @@ version = "0.1.0"
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.imgmath",
     "sphinx.ext.doctest",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
 ]
+
+# Example intersphinx mapping
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    # other mappings
+}
 
 templates_path = ["_templates"]
 exclude_patterns = []

@@ -338,9 +338,6 @@ class Curve:
         """Property to check if the curve starts and ends on the same point."""
         return np.linalg.norm(self(0) - self(1)) < DELTA / 100
 
-    def get_curves(self):
-        return [self]
-
 
 class CurveChain(Curve):
     """A class to represent a kind of polyline made up of Curves. Also can behave like a Curve."""

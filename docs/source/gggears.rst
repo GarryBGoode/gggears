@@ -1,6 +1,15 @@
 gggears package
 ===============
 
+Module contents
+---------------
+
+.. automodule:: gggears
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 Submodules
 ----------
 
@@ -60,10 +69,3 @@ gggears.gggears\_wrapper module
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
-
-.. automodule:: gggears
-   :members:
-   :undoc-members:
-   :show-inheritance:

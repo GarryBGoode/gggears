@@ -17,31 +17,39 @@ from gggears.gearteeth import *
 
 
 class GearInfoMixin:
+    """Mixin class for gear information properties."""
+
     def __init__(self):
         self.gearcore = Gear()
 
     @property
     def number_of_teeth(self):
+        """Number of teeth of the gear."""
         return self.gearcore.tooth_param.num_teeth
 
     @property
     def inside_teeth(self):
+        """Indicator of an inside-ring gear."""
         return self.gearcore.tooth_param.inside_teeth
 
     @property
     def pitch_radius(self):
+        """Nominal pitch radius of the gear."""
         return self.gearcore.tooth_param.num_teeth * self.gearcore.module / 2
 
     @property
     def rp(self):
+        """Shorthand of pitch_radius."""
         return self.pitch_radius
 
     @property
     def module(self):
+        """Module of the gear."""
         return self.gearcore.module
 
     @property
     def cone_data(self):
+        """Info about the cone of the gear in a ConicData object."""
         cone_loc = ConicData(
             cone_angle=self.gearcore.cone.cone_angle, base_radius=self.rp
         )
@@ -49,44 +57,65 @@ class GearInfoMixin:
 
     @property
     def cone_angle(self):
+        """Cone angle of the gear."""
         return self.gearcore.cone.cone_angle
 
     @property
     def center(self):
+        """Nominal center (reference point) of the gear."""
         return self.gearcore.transform.center
 
     @property
     def center_spherical(self):
+        """Center of the gear-cone for bevel gears.
+
+        Spherical refers to the spherical gear-boundary curves."""
         center_sph = self.cone_data.center / self.module
         return self.gearcore.transform(center_sph)
 
-    def center_transform_at_z(self, z):
+    def center_transform_at_z(self, z) -> GearTransform:
+        """Returns the transform-data that represents the center point of a gear-slice
+        at a given z-value."""
         tf1 = self.gearcore.shape_recipe(z).transform
         tf2 = self.gearcore.transform
         return tf2 * tf1
 
     def center_point_at_z(self, z):
+        """Returns the center of a gear-slice at a given z-value."""
         return self.center_transform_at_z(z).center
 
     def center_location_at_z(self, z):
+        """Returns the build123d Location object of the center of a gear-slice at a
+        given z-value."""
         return transform2Location(self.center_transform_at_z(z))
 
     @property
     def center_location_bottom(self):
+        """Build123d Location object of the reference center of the bottom of the gear.
+
+        Note that for bevel gears this aligns with the pitch circle, and is not coplanar
+        with the bottom face."""
         return self.center_location_at_z(self.gearcore.z_vals[0])
 
     @property
     def center_location_middle(self):
+        """Build123d Location object of the reference center of the (axially) middle of
+        the gear."""
         return self.center_location_at_z(
             0.5 * (self.gearcore.z_vals[0] + self.gearcore.z_vals[-1])
         )
 
     @property
     def center_location_top(self):
+        """Build123d Location object of the reference center of the top of the gear.
+
+        Note that for bevel gears this aligns with the pitch circle, and is not coplanar
+        with the top face."""
         return self.center_location_at_z(self.gearcore.z_vals[-1])
 
     @property
     def face_location_top(self):
+        """Build123d Location object of the top face of the gear."""
         point = self.radii_data_gen(self.gearcore.z_vals[-1]).r_o_curve.center
         loc = self.center_location_top
         loc.position = np2v(point)
@@ -94,6 +123,7 @@ class GearInfoMixin:
 
     @property
     def face_location_bottom(self):
+        """Build123d Location object of the bottom face of the gear."""
         point = self.radii_data_gen(self.gearcore.z_vals[0]).r_o_curve.center
         loc = self.center_location_bottom
         loc.position = np2v(point)
@@ -101,28 +131,37 @@ class GearInfoMixin:
 
     @property
     def center_point_bottom(self):
+        """Center point of the gear at the bottom as a numpy array."""
         return self.center_point_at_z(self.gearcore.z_vals[0])
 
     @property
     def center_point_middle(self):
+        """Center point of the gear at the middle as a numpy array."""
         return self.center_point_at_z(
             0.5 * (self.gearcore.z_vals[0] + self.gearcore.z_vals[-1])
         )
 
     @property
     def center_point_top(self):
+        """Center point of the gear at the top as a numpy array."""
         return self.center_point_at_z(self.gearcore.z_vals[-1])
 
     @property
     def pitch_angle(self):
+        """Nominal pitch angle of the gear."""
         return self.gearcore.tooth_param.pitch_angle
 
     @property
     def angle(self):
+        """Rotation progress of the gear."""
         return self.gearcore.transform.angle
 
     @property
     def z_height(self):
+        """Height of the gear along its axis.
+
+        Note that the height input parameter controls rather the width of the gearteeth
+        which is different than the height for bevel gears."""
         # the height parameter is rather the width of the gear teeth,
         # which is the height for cylindrical gears but not for bevel gears
         # that is why it is reverse engineered from the shape recipe
@@ -134,9 +173,11 @@ class GearInfoMixin:
 
     @property
     def radii_data_array(self):
+        """Array of the reference circles of the gear at reference z-values."""
         return [self.radii_data_gen(z) for z in self.gearcore.z_vals]
 
     def radii_data_gen(self, z) -> GearRefCircles:
+        """Generates the reference circles of the gear at a given z-value."""
         profile = self.gearcore.curve_gen_at_z(z)
         trf = self.gearcore.transform * profile.transform
         r_a = crv.ArcCurve(
@@ -166,19 +207,23 @@ class GearInfoMixin:
 
     @property
     def addendum_radius(self):
+        """Nominal addendum radius of the gear, after calculating all modifiers."""
         return self.radii_data_gen(self.gearcore.z_vals[0]).r_a_curve.radius
 
     @property
     def dedendum_radius(self):
+        """Nominal dedendum radius of the gear, after calculating all modifiers."""
         return self.radii_data_gen(self.gearcore.z_vals[0]).r_d_curve.radius
 
     @property
     def max_outside_radius(self):
+        """Maximum outside radius of the gear."""
         r_os = [elem.r_o_curve.radius for elem in self.radii_data_array]
         r_as = [elem.r_a_curve.radius for elem in self.radii_data_array]
         return np.max(r_os + r_as)
 
-    def cone_angle_limits_z(self, z):
+    def cone_angles_at_z(self, z):
+        """Returns relevant cone angles for reference radii at a given z-value."""
         # this is convoluted due to preparing for hypoid gears,
         # where the cone angle is not constant
         radiidata = self.radii_data_gen(z)
@@ -199,11 +244,13 @@ class GearInfoMixin:
 
     @property
     def cone_angle_limits_bottom(self):
-        return self.cone_angle_limits_z(self.gearcore.z_vals[0])
+        """Cone angles of reference radii at the bottom of the gear."""
+        return self.cone_angles_at_z(self.gearcore.z_vals[0])
 
     @property
     def cone_angle_limits_top(self):
-        return self.cone_angle_limits_z(self.gearcore.z_vals[-1])
+        """Cone angles of reference radii at the top of the gear."""
+        return self.cone_angles_at_z(self.gearcore.z_vals[-1])
 
 
 @dataclasses.dataclass
@@ -355,14 +402,17 @@ class InvoluteGear(GearInfoMixin):
 
     @property
     def gamma(self):
+        """Half of the cone angle."""
         return self.cone_angle / 2
 
     @property
     def beta(self):
+        """Helix angle in radians."""
         return self.inputparam.helix_angle
 
     @property
     def helix_angle(self):
+        """Helix angle in radians."""
         return self.inputparam.helix_angle
 
     def update_tooth_param(self):
@@ -504,7 +554,7 @@ class InvoluteGear(GearInfoMixin):
         return self.builder.part_transformed
 
     def mesh_to(self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT):
-        """Aligns this gear to another gear object.
+        """Aligns this gear to the other gear object.
 
         Arguments
         ---------
@@ -532,7 +582,6 @@ class InvoluteGear(GearInfoMixin):
         )
 
     def copy(self):
-        """:no-index:"""
         return copy.deepcopy(self)
 
 

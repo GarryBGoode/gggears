@@ -364,7 +364,7 @@ class GearToothGenerator(ZFunctionMixin):
         )
         rot_ta = scp_Rotation.from_euler("z", self.tooth_angle)
         dp = rot_ta.apply(p0 * 0.2)
-        return crv.LineCurve(p0=p0 - dp, p1=p0 + dp)
+        return crv.CurveChain(crv.LineCurve(p0=p0 - dp, p1=p0 + dp))
 
 
 class GearToothConicGenerator(GearToothGenerator):
@@ -404,6 +404,8 @@ class GearToothConicGenerator(GearToothGenerator):
             )
             axis = rot_ta.apply(axis)
 
-            return crv.ArcCurve.from_point_center_angle(
-                p0=p0, center=OUT * h, angle=0.1, axis=axis
+            return crv.CurveChain(
+                crv.ArcCurve.from_point_center_angle(
+                    p0=p0, center=OUT * h, angle=0.1, axis=axis
+                )
             )
