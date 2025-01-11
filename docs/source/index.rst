@@ -12,6 +12,7 @@ Welcome to gggears's documentation!
 
    intro
    examples
+   build123d_examples
    gggears
    
 

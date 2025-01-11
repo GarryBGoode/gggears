@@ -47,6 +47,10 @@ class GearInfoMixin:
         """Module of the gear."""
         return self.gearcore.module
 
+    @module.setter
+    def module(self, value):
+        self.gearcore.module = value
+
     @property
     def cone_data(self):
         """Info about the cone of the gear in a ConicData object."""
@@ -60,10 +64,18 @@ class GearInfoMixin:
         """Cone angle of the gear."""
         return self.gearcore.cone.cone_angle
 
+    @cone_angle.setter
+    def cone_angle(self, value):
+        self.gearcore.cone.cone_angle = value
+
     @property
     def center(self):
         """Nominal center (reference point) of the gear."""
         return self.gearcore.transform.center
+
+    @center.setter
+    def center(self, value):
+        self.gearcore.transform.center = value
 
     @property
     def center_spherical(self):
@@ -171,39 +183,48 @@ class GearInfoMixin:
         ), self.gearcore.shape_recipe.transform.center(z1)
         return np.linalg.norm((self.gearcore.transform(c0 - c1)))
 
+    def radii_data_gen(self, z) -> GearRefCircles:
+        """Generates the reference circles of the gear at a given z-value."""
+        profile = self.gearcore.curve_gen_at_z(z)
+        trf = self.gearcore.transform * profile.transform
+
+        r_a = crv.ArcCurve(
+            radius=profile.ra_curve.radius, center=profile.ra_curve.center, angle=2 * PI
+        ).transform(trf)
+        r_d = crv.ArcCurve(
+            radius=profile.rd_curve.radius, center=profile.rd_curve.center, angle=2 * PI
+        ).transform(trf)
+        r_o = crv.ArcCurve(
+            radius=profile.ro_curve.radius, center=profile.ro_curve.center, angle=2 * PI
+        ).transform(trf)
+        r_p = crv.ArcCurve(
+            radius=self.gearcore.tooth_param.num_teeth / 2, center=ORIGIN, angle=2 * PI
+        ).transform(trf)
+
+        return GearRefCircles(
+            r_a_curve=r_a, r_d_curve=r_d, r_o_curve=r_o, r_p_curve=r_p
+        )
+
     @property
     def radii_data_array(self):
         """Array of the reference circles of the gear at reference z-values."""
         return [self.radii_data_gen(z) for z in self.gearcore.z_vals]
 
-    def radii_data_gen(self, z) -> GearRefCircles:
-        """Generates the reference circles of the gear at a given z-value."""
-        profile = self.gearcore.curve_gen_at_z(z)
-        trf = self.gearcore.transform * profile.transform
-        r_a = crv.ArcCurve(
-            radius=trf.scale * profile.ra_curve.radius,
-            center=trf(profile.ra_curve.center),
-            angle=2 * PI,
-        )
-        r_d = crv.ArcCurve(
-            radius=trf.scale * profile.rd_curve.radius,
-            center=trf(profile.rd_curve.center),
-            angle=2 * PI,
-        )
-        r_o = crv.ArcCurve(
-            radius=trf.scale * profile.ro_curve.radius,
-            center=trf(profile.ro_curve.center),
-            angle=2 * PI,
-        )
-        r_p_ref = self.gearcore.tooth_param.num_teeth / 2
-        r_p = crv.ArcCurve(
-            radius=trf.scale * self.gearcore.shape_recipe(z).transform.scale * r_p_ref,
-            center=r_a.center,
-            angle=2 * PI,
-        )
-        return GearRefCircles(
-            r_a_curve=r_a, r_d_curve=r_d, r_o_curve=r_o, r_p_curve=r_p
-        )
+    @property
+    def radii_data_bottom(self):
+        """Reference circles of the gear at the bottom."""
+        return self.radii_data_gen(self.gearcore.z_vals[0])
+
+    @property
+    def radii_data_top(self):
+        """Reference circles of the gear at the top."""
+        return self.radii_data_gen(self.gearcore.z_vals[-1])
+
+    def proportion_to_z(self, prop):
+        return prop * self.gearcore.z_vals[1] + (1 - prop) * self.gearcore.z_vals[0]
+
+    def p2z(self, prop):
+        return self.proportion_to_z(prop)
 
     @property
     def addendum_radius(self):
@@ -415,6 +436,27 @@ class InvoluteGear(GearInfoMixin):
         """Helix angle in radians."""
         return self.inputparam.helix_angle
 
+    @property
+    def r_base(self):
+        """Base radius of the gear."""
+        circle_base = self.circle_involute_base(0)
+        return circle_base.radius
+
+    def circle_involute_base(self, z_ratio: float = 0) -> crv.ArcCurve:
+        """Generates the base circle of the involute at a given z-ratio.
+
+        Arguments
+        ---------
+        z_ratio: float, optional
+            Ratio of the height of the gear where the slice should be taken.
+            0 means at the bottom, 1 at the top. Default is 0.
+        """
+        z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
+        r = self.gearcore.shape_recipe(z).tooth_generator.get_base_radius()
+        trf = self.gearcore.transform * self.gearcore.shape_recipe(z).transform
+        circle_ref = crv.ArcCurve(radius=r, center=ORIGIN, angle=2 * PI).transform(trf)
+        return circle_ref
+
     def update_tooth_param(self):
         """Updates the tooth parameters for the gear. (pitch angle calculated here)"""
         return GearToothParam(
@@ -580,6 +622,24 @@ class InvoluteGear(GearInfoMixin):
                 + other.inputparam.profile_shift * other.module * ps_mult_2
             ),
         )
+
+    def build_boundary_wire(self, z_ratio: float = 0):
+        """Generates a build123d Wire object of the gear-tooth slice at a given z-ratio.
+
+        Arguments
+        ----------
+        z_ratio: float, optional
+            Ratio of the height of the gear where the slice should be taken.
+            0 means at the bottom, 1 at the top. Default is 0.
+
+        Returns
+        -------
+        Wire
+        """
+        z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
+        profile = self.gearcore.curve_gen_at_z(z)
+        edges = generate_boundary_edges(profile, self.gearcore.transform)
+        return Wire(edges)
 
     def copy(self):
         return copy.deepcopy(self)
@@ -795,6 +855,7 @@ class SpurRingGear(InvoluteGear):
         profile_shift: float = 0.0,
         addendum_coefficient: float = 1.2,
         dedendum_coefficient: float = 1.0,
+        outside_ring_coefficient: float = 2.5,
         pressure_angle: float = 20 * PI / 180,
         backlash: float = 0,
         crowning: float = 0,
@@ -821,6 +882,7 @@ class SpurRingGear(InvoluteGear):
             inside_teeth=True,
             z_anchor=z_anchor,
         )
+        self.gearcore.shape_recipe.limits.h_o = -outside_ring_coefficient
 
 
 class HelicalGear(InvoluteGear):
@@ -1711,6 +1773,101 @@ class CycloidGear(GearInfoMixin):
         self.calc_params()
         other.calc_params()
 
+    def build_boundary_wire(self, z_ratio: float = 0):
+        """Generates a build123d Wire object of the gear-tooth slice at a given z-ratio.
+
+        Arguments
+        ----------
+        z_ratio: float, optional
+            Ratio of the height of the gear where the slice should be taken.
+            0 means at the bottom, 1 at the top. Default is 0.
+
+        Returns
+        -------
+        Wire
+        """
+        z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
+        profile = self.gearcore.curve_gen_at_z(z)
+        edges = generate_boundary_edges(profile, self.gearcore.transform)
+        return Wire(edges)
+
     def copy(self):
         """:no-index:"""
         return copy.deepcopy(self)
+
+
+class LineOfAction:
+    """Class for generating the line of action of two meshing gears.
+
+    Parameters
+    ----------
+    gear1: InvoluteGear
+        The first gear object.
+    gear2: InvoluteGear
+        The second gear object.
+    z_ratio: float, optional
+        Ratio of the height of the gears where the line of action should be calculated.
+        0 means at the bottom, 1 at the top. Default is 0.
+    """
+
+    def __init__(self, gear1: InvoluteGear, gear2: InvoluteGear, z_ratio=0):
+        self.gear1: InvoluteGear = gear1
+        self.gear2: InvoluteGear = gear2
+        self.z_ratio = z_ratio
+
+    @property
+    def centerdiff(self):
+        return self.gear2.center_point_at_z(
+            self.gear2.p2z(self.z_ratio)
+        ) - self.gear1.center_point_at_z(self.gear1.p2z(self.z_ratio))
+
+    def LOA_gen(self):
+        diff_vector = self.centerdiff
+        distance = np.linalg.norm(diff_vector)
+        diff_vector_unit = diff_vector / distance
+
+        rb1 = self.gear1.circle_involute_base(self.z_ratio).radius
+        rb2 = self.gear2.circle_involute_base(self.z_ratio).radius
+        center1 = self.gear1.center_point_at_z(self.gear1.p2z(self.z_ratio))
+        center2 = self.gear2.center_point_at_z(self.gear2.p2z(self.z_ratio))
+
+        def mirror_diffline(p):
+            p1 = p - center1
+            p_norm = p1 - np.dot(p1, diff_vector_unit) * diff_vector_unit
+            return p - 2 * p_norm
+
+        if self.gear1.inside_teeth:
+            alpha = np.arccos((rb2 - rb1) / distance)
+            len_loa = np.sqrt(self.gear2.addendum_radius**2 - rb2**2)
+            startpoint1 = center2 + rotate_vector(-diff_vector_unit, alpha) * rb2
+            endpoint1 = (
+                startpoint1 + rotate_vector(diff_vector_unit, -PI / 2 + alpha) * len_loa
+            )
+            line1 = crv.LineCurve(p0=startpoint1, p1=endpoint1)
+            startpoint2 = mirror_diffline(startpoint1)
+            endpoint2 = mirror_diffline(endpoint1)
+            line2 = crv.LineCurve(p0=startpoint2, p1=endpoint2)
+            return line1, line2
+        elif self.gear2.inside_teeth:
+            alpha = np.arccos((rb2 - rb1) / distance)
+            len_loa = np.sqrt(self.gear1.addendum_radius**2 - rb1**2)
+            startpoint1 = center1 + rotate_vector(-diff_vector_unit, alpha) * rb1
+            endpoint1 = (
+                startpoint1 - rotate_vector(diff_vector_unit, -PI / 2 + alpha) * len_loa
+            )
+            line1 = crv.LineCurve(p0=startpoint1, p1=endpoint1)
+            startpoint2 = mirror_diffline(startpoint1)
+            endpoint2 = mirror_diffline(endpoint1)
+            line2 = crv.LineCurve(p0=startpoint2, p1=endpoint2)
+            return line1, line2
+        else:
+            alpha = np.arccos((rb1 + rb2) / distance)
+            line1 = crv.LineCurve(
+                p0=center1 + rotate_vector(diff_vector_unit, alpha) * rb1,
+                p1=center2 + rotate_vector(-diff_vector_unit, alpha) * rb2,
+            )
+            line2 = crv.LineCurve(
+                p0=center1 + rotate_vector(diff_vector_unit, -alpha) * rb1,
+                p1=center2 + rotate_vector(-diff_vector_unit, -alpha) * rb2,
+            )
+            return line1, line2

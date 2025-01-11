@@ -17,6 +17,7 @@ from gggears.function_generators import *
 from gggears.curve import *
 from build123d import *
 from gggears.gggears_convert import *
+from gggears.gggears_base_classes import *
 from scipy.spatial.transform import Rotation as scp_Rotation
 import numpy as np
 import time
@@ -86,8 +87,12 @@ class GearBuilder(GearToNurbs):
                 oversampling_ratio=oversampling_ratio,
                 convertmethod=method,
             )
-            bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
-            top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
+            bot_cover = self.generate_cover(
+                self.nurb_profile_stacks[0][0], self.gear_stacks[0][0]
+            )
+            top_cover = self.generate_cover(
+                self.nurb_profile_stacks[-1][-1], self.gear_stacks[-1][-1]
+            )
             side_surfaces = self.gen_side_surfaces()
             full_surfaces = side_surfaces
             full_surfaces.append(top_cover)
@@ -237,10 +242,14 @@ class GearBuilder(GearToNurbs):
                     -self.gear.shape_recipe.limits.h_o
                     + self.gear.tooth_param.num_teeth / 2
                 )
-                ring_base = Circle(radius=r_o).edge()
+                # ring_base = Circle(radius=r_o).edge()
+                ring_base = Edge.make_circle(radius=r_o, plane=Plane.XY)
 
                 edge_ring = Line(
-                    [Vector((r_o, 0, 0)), Vector((r_o, 0, self.gear.z_vals[-1]))]
+                    [
+                        Vector((r_o, 0, self.gear.z_vals[0])),
+                        Vector((r_o, 0, self.gear.z_vals[-1])),
+                    ]
                 )
                 ring_surf = Face.sweep(profile=edge_ring, path=ring_base)
 
@@ -257,7 +266,9 @@ class GearBuilder(GearToNurbs):
                     surfaces.append(tooth_surface_rot)
                 return surfaces
 
-    def generate_cover(self, nurb_stack: GearRefProfileExtended):
+    def generate_cover(
+        self, nurb_stack: GearRefProfileExtended, gear_stack: GearRefProfileExtended
+    ):
 
         if self.gear.cone.cone_angle != 0:
 
@@ -357,11 +368,8 @@ class GearBuilder(GearToNurbs):
                     -self.gear.shape_recipe.limits.h_o
                     + self.gear.tooth_param.num_teeth / 2
                 )
-                ring = (
-                    Circle(radius=r_o)
-                    .translate(Vector(0, 0, nurb_stack.transform.center[2]))
-                    .edge()
-                )
+                z_val = gear_stack.transform.center[2]
+                ring = Edge.make_circle(radius=r_o, plane=Plane.XY.offset(z_val))
                 return Face(Wire(ring), inner_wires=[Wire(splines)])
             else:
                 return Face(Wire(splines))
@@ -593,3 +601,72 @@ def transform2Location(transform: GearTransform):
     )
 
     return loc
+
+
+def generate_boundary_edges(
+    nurbprofile: GearRefProfile,
+    transform: GearTransform = None,
+    angle_range: float = 2 * PI,
+):
+    if transform is None:
+        # identity transform by default
+        transform = GearTransform()
+    nurb_profile = gearprofile_to_nurb(nurbprofile)
+    # don't want to get more inputs about num of teeth, but without rounding this can
+    # lose 1 tooth
+    N = int(np.round(angle_range / nurbprofile.pitch_angle))
+
+    curves = []
+    for i in range(N):
+        # angle = i * profile.pitch_angle
+        curves.extend(
+            [
+                nurb.apply_transform(transform)
+                for nurb in nurb_profile.profile.copy().get_curves()
+            ]
+        )
+        transform.angle += nurbprofile.pitch_angle
+
+    nurbs_curve = crv.NURBSCurve(*curves)
+    nurbs_curve.enforce_continuity()
+
+    return gen_splines(nurbs_curve)
+
+
+def arc_to_b123d(arc: crv.ArcCurve) -> Edge:
+    """Converts a gggears ArcCurve to a build123d Edge object."""
+    loc = Location(
+        arc.center,
+        [arc.roll * 180 / PI, arc.pitch * 180 / PI, arc.yaw * 180 / PI],
+        Intrinsic.XYZ,
+    )
+
+    return Edge.make_circle(
+        radius=arc.radius,
+        plane=Plane(loc),
+        start_angle=0,
+        end_angle=arc.angle * 180 / PI,
+    )
+
+
+def line_to_b123d(line: crv.LineCurve) -> Edge:
+    """Converts a gggears LineCurve to a build123d Edge object."""
+    return Edge.make_line(np2v(line.p0), np2v(line.p1))
+
+
+def curve_to_edges(curve: crv.Curve | crv.CurveChain):
+    if isinstance(curve, crv.CurveChain):
+        return [curve_to_edges(curve) for curve in curve.get_curves()]
+    elif isinstance(curve, crv.NURBSCurve) | isinstance(curve, crv.NurbCurve):
+        return gen_splines(curve)
+    elif isinstance(curve, crv.ArcCurve):
+        return [arc_to_b123d(curve)]
+    elif isinstance(curve, crv.LineCurve):
+        return [line_to_b123d(curve)]
+    elif isinstance(curve, crv.TransformedCurve):
+        nurb = crv.convert_curve_nurbezier(curve.target_curve)
+        nurb.apply_transform(curve.transform_method)
+        return gen_splines(nurb)
+    else:
+        nurb = crv.convert_curve_nurbezier(curve)
+        return gen_splines(nurb)

@@ -709,8 +709,13 @@ def generate_boundary_chain(
     crv_list = []
     for i in range(toothdata.num_teeth_act):
         crv_list.append(
-            crv.RotatedCurve(
-                curve=profile.profile.copy(), angle=i * toothdata.pitch_angle, axis=OUT
+            crv.TransformedCurve(
+                curve=crv.RotatedCurve(
+                    curve=profile.profile.copy(),
+                    angle=i * toothdata.pitch_angle,
+                    axis=OUT,
+                ),
+                transform=profile.transform,
             )
         )
     return crv.CurveChain(*crv_list)
@@ -866,10 +871,17 @@ class Gear:
     def curve_gen_at_z(self, z):
         return generate_reference_profile(self.shape_recipe(z))
 
-    def boundary_at_z(self, z):
-        return crv.TransformedCurve(
-            self.transform, generate_boundary(self.curve_gen_at_z(z), self.tooth_param)
-        )
+    def boundary_at_z(self, z, continuous=True):
+        if continuous:
+            return crv.TransformedCurve(
+                self.transform,
+                generate_boundary(self.curve_gen_at_z(z), self.tooth_param),
+            )
+        else:
+            return crv.TransformedCurve(
+                self.transform,
+                generate_boundary_chain(self.curve_gen_at_z(z), self.tooth_param),
+            )
 
     def copy(self) -> "Gear":
         return copy.deepcopy(self)

@@ -757,7 +757,10 @@ def fit_bezier_hermite_quadratic(target_curve: Curve):
     d1 = np.linalg.norm(target_curve.derivative(0, 1, delta=1e-4) / 3)
     d2 = np.linalg.norm(target_curve.derivative(1, -1, delta=1e-4) / 3)
     # rooting is probably overkill but I don't want to think harder
-    sol = root(lambda x: points[0] + x[0] * d1 - points[2] - x[1] * d2, [0.5, 0.5])
+    sol = root(
+        lambda x: points[0] + x[0] * d1 - points[2] - x[1] * d2,
+        0.5 * np.ones(points[0].shape),
+    )
     points[1] = points[0] + sol.x[0] * d1
     return points
 
@@ -923,7 +926,9 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
         return NURBSCurve(*out_curve_list)
 
     else:
-        if isinstance(input_curve, LineCurve):
+        if isinstance(input_curve, NurbCurve):
+            return input_curve
+        elif isinstance(input_curve, LineCurve):
             bz_points = np.array([input_curve(0), input_curve(1)])
             bz_weights = np.ones((2))
         elif isinstance(input_curve, ArcCurve):
@@ -1164,6 +1169,21 @@ class ArcCurve(Curve):
     def axis(self):
         return self._rotmat @ OUT
 
+    @property
+    def roll(self):
+        return self._roll
+
+    @property
+    def pitch(self):
+        return self._pitch
+
+    @property
+    def yaw(self):
+        return self._yaw
+
+    def gen_rotation_angles(self):
+        return scp_Rotation.from_matrix(self._rotmat).as_euler("zyx")
+
     @classmethod
     def from_2_point_center(
         cls, p0=RIGHT, p1=UP, center=ORIGIN, revolutions=0, active=True
@@ -1258,6 +1278,15 @@ class ArcCurve(Curve):
             active=active,
         )
 
+    def transform(self, transform: callable) -> "ArcCurve":
+        p0 = transform(self(0))
+        center0 = transform(self._center)
+        center2 = transform(self.center + self.axis)
+        axis2 = normalize_vector(center2 - center0)
+        return ArcCurve.from_point_center_angle(
+            p0, center0, self.angle, axis2, active=self.active
+        )
+
 
 class InvoluteCurve(Curve):
     """Class to represent an involute curve as a Curve."""
@@ -1287,6 +1316,10 @@ class InvoluteCurve(Curve):
             params={},
             enable_vectorize=enable_vectorize,
         )
+
+    @property
+    def base_radius(self):
+        return self.r
 
 
 class SphericalInvoluteCurve(Curve):

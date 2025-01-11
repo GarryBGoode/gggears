@@ -57,7 +57,7 @@ with BuildPart() as gear1_part:
     )
 
 with BuildPart() as gear2_part:
-    gearpart = gear2.build_part()
+    gear2.build_part()
     with Locations((gear2.center_location_top)):
         # note: location of top-center is aligned with tooth no. 0 of the gear
         # the angle is changed from the helix angle

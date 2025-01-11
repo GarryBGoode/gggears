@@ -195,7 +195,16 @@ def bevel_gear():
 
     gear_part_1 = gear1_builder.part
     gear_part_2 = gear2_builder.part
-    return (gear_part_1, gear_part_2)
+    return (
+        gear_part_1,
+        gear_part_2,
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_p_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_p_curve),
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_a_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_a_curve),
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_d_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_d_curve),
+    )
 
 
 def bevel_chain():
@@ -364,4 +373,4 @@ if __name__ == "__main__":
     set_port(3939)
     # default deviation is 0.1, default angular tolerance is 0.2.
     # Lower values result in higher resulution.
-    show(cycloid_drive(), deviation=0.05, angular_tolerance=0.1)
+    show(bevel_gear(), deviation=0.05, angular_tolerance=0.1)
