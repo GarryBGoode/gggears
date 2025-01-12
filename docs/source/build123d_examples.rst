@@ -13,7 +13,12 @@ The following example demonstrates the creation of a gear-pair and attaching the
 
 Highlights:
 
-* You can use :py:attr:`center_location_bottom <gggears.gggears_wrapper.GearInfoMixin.center_location_bottom>` and `center_location_top` to align parts with gear centers.
+* You can use \
+  :py:attr:`center_location_bottom <gggears.gggears_wrapper.GearInfoMixin.center_location_bottom>`, \
+  :py:attr:`center_location_top <gggears.gggears_wrapper.GearInfoMixin.center_location_top>`, \
+  :py:attr:`face_location_bottom <gggears.gggears_wrapper.GearInfoMixin.face_location_bottom>`, \
+  :py:attr:`face_location_bottom <gggears.gggears_wrapper.GearInfoMixin.face_location_bottom>` to align parts with gear centers.
+* Note that **center** refers to the pitch circle center and **face** refers to the face (surface) of the gear. These are different for bevel gears.
 * :py:attr:`gear.center <gggears.gggears_wrapper.GearInfoMixin.center>` is a numpy array, often needs to be converted to a `Vector` for build123d via :py:func:`np2v() <gggears.gggears_build123d.np2v>`.
 * Ideal center distance can be retrieved after calling the :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` method, and calculating the difference of :py:attr:`gear.center <gggears.gggears_wrapper.GearInfoMixin.center>` values.
 
@@ -142,7 +147,7 @@ but showcases the gear generator and its helper functions for build-123d workflo
 Highlights:
 
 * You can use `center_location_bottom` and `center_location_top` to align parts with gear centers.
-* The :py:property:`radii_data_top <gggears.gggears_wrapper.GearInfoMixin.radii_data_top>` method generates reference curves for the gear.
+* The :py:attr:`radii_data_top <gggears.gggears_wrapper.GearInfoMixin.radii_data_top>` method generates reference curves for the gear.
 * The :py:class:`LineOfAction <gggears.gggears_wrapper.GearInfoMixin.LineOfAction>` class is available for generating the line of action between gears.
 * Sometimes converter functions are needed such as :py:func:`arc_to_b123d() <gggears.gggears_build123d.arc_to_b123d>` and :py:func:`line_to_b123d() <gggears.gggears_build123d.line_to_b123d>`. These convert between gggears' own geometry classes and build123d geometry.
 
@@ -342,6 +347,7 @@ Highlights:
 
     show_all()
 
+Here you can find the sketches that helped the construction of the crescent and the fluid channels.
 
 .. image:: ./assets/gearpump_2.png
   :align: center
