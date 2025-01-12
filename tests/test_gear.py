@@ -285,6 +285,7 @@ def test_CAD(
         )
 
     gearpart = gear1.build_part()
+    gearsketch = gear1.build_boundary_wire()
     partvolume = gearpart.volume
 
     # height is actually the width of the gear surface, so not the z-height of bevels
@@ -294,6 +295,10 @@ def test_CAD(
     h = height * np.cos(gamma)
     r1 = r0 - np.sin(gamma) * height
     expected_volume = h * np.pi * (r0**2 + r1**2 + r0 * r1) / 3
+
+    assert gearpart.is_valid() and gearsketch.is_valid()
+    assert gearsketch.is_closed
+    assert gearsketch.length > r0_add * 2 * PI
 
     if not inside_ring:
         if conic:
@@ -327,7 +332,7 @@ if __name__ == "__main__":
         height=1.5,
         root_fillet=-1,
         tip_fillet=0.25,
-        conic=True,
+        conic=False,
         cycloid=False,
         inside_ring=True,
     )
