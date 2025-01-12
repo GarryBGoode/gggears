@@ -654,7 +654,7 @@ def line_to_b123d(line: crv.LineCurve) -> Edge:
     return Edge.make_line(np2v(line.p0), np2v(line.p1))
 
 
-def curve_to_edges(curve: crv.Curve | crv.CurveChain):
+def curve_to_edges(curve: crv.Curve):
     if isinstance(curve, crv.CurveChain):
         return [curve_to_edges(curve) for curve in curve.get_curves()]
     elif isinstance(curve, crv.NURBSCurve) | isinstance(curve, crv.NurbCurve):

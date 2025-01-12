@@ -9,27 +9,29 @@ axis_diameter = 6
 port_diameter = 5
 gearmodule = 2
 wall_thickness = 3
+clearence = 0.1
 
 gear1 = gg.SpurGear(
     number_of_teeth=17,
     module=gearmodule,
     height=gearheight,
-    addendum_coefficient=1.0,
+    addendum_coefficient=1.2,
     z_anchor=0.5,
 )
 gear2 = gg.SpurRingGear(
     number_of_teeth=23,
     module=gearmodule,
     height=gearheight,
-    addendum_coefficient=1.2,
+    addendum_coefficient=1.4,
     dedendum_coefficient=0.6,
-    outside_ring_coefficient=2,
+    outside_ring_coefficient=2.2,
     z_anchor=0.5,
     # I used the angle kwarg to iteratively check for interference
     angle=0.135,
 )
 gear1.mesh_to(gear2)
-gear1.center += gg.LEFT * 0.1
+# adjustment for backlash / fitting
+gear1.center += gg.LEFT * clearence
 
 with BuildPart() as gearpart1:
     gear1.build_part()
@@ -59,7 +61,7 @@ gearpart2.part.color = (0.6, 0.6, 0.6)
 
 
 with BuildPart() as housing_base:
-    r_outer_gear2 = gear2.max_outside_radius
+    r_outer_gear2 = gear2.max_outside_radius + clearence
     r_outer_wall = r_outer_gear2 + wall_thickness
     # External housing with even-ish wall thickness
     Cylinder(radius=r_outer_wall, height=gearheight + wall_thickness * 2, mode=Mode.ADD)
@@ -77,9 +79,9 @@ with BuildPart() as crescent:
         # crescent constructed from ring gear inner (dedendum) circle and
         # gear1 outer (addendum) circle.
         with Locations((gear2.center_location_bottom)):
-            Circle(radius=gear2.dedendum_radius, mode=Mode.ADD)
+            Circle(radius=gear2.dedendum_radius - clearence, mode=Mode.ADD)
         with Locations((gear1.center_location_bottom)):
-            Circle(radius=gear1.addendum_radius, mode=Mode.SUBTRACT)
+            Circle(radius=gear1.addendum_radius + clearence, mode=Mode.SUBTRACT)
         # cut off the right side sharp tips of crescent
         Rectangle(
             width=gear2.addendum_radius,
@@ -117,7 +119,10 @@ addendum_circle_1.color = (0, 0, 0)
 channel_thickness = 3
 # blocker width is aligned with the distance between the ends of the 2 lines of action
 # this is not official pump design advice
-blocker_width = (line_of_action_1 @ 1 - line_of_action_2 @ 1).length
+blocker_width = min(
+    (line_of_action_1 @ 1 - line_of_action_2 @ 1).length,
+    (line_of_action_1 @ 0 - line_of_action_2 @ 0).length,
+)
 
 with BuildPart() as housing_top:
     add(housing_base.part.split(tool=Plane.XY, keep=Keep.TOP))

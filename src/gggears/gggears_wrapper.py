@@ -1837,6 +1837,10 @@ class LineOfAction:
             return p - 2 * p_norm
 
         if self.gear1.inside_teeth:
+            if np.abs(rb2 - rb1) / distance > 1:
+                raise ValueError(
+                    "Unable to calculate line of action for this gear pair."
+                )
             alpha = np.arccos((rb2 - rb1) / distance)
             len_loa = np.sqrt(self.gear2.addendum_radius**2 - rb2**2)
             startpoint1 = center2 + rotate_vector(-diff_vector_unit, alpha) * rb2
@@ -1849,6 +1853,10 @@ class LineOfAction:
             line2 = crv.LineCurve(p0=startpoint2, p1=endpoint2)
             return line1, line2
         elif self.gear2.inside_teeth:
+            if np.abs(rb2 - rb1) / distance > 1:
+                raise ValueError(
+                    "Unable to calculate line of action for this gear pair."
+                )
             alpha = np.arccos((rb2 - rb1) / distance)
             len_loa = np.sqrt(self.gear1.addendum_radius**2 - rb1**2)
             startpoint1 = center1 + rotate_vector(-diff_vector_unit, alpha) * rb1
@@ -1861,6 +1869,10 @@ class LineOfAction:
             line2 = crv.LineCurve(p0=startpoint2, p1=endpoint2)
             return line1, line2
         else:
+            if np.abs(rb2 + rb1) / distance > 1:
+                raise ValueError(
+                    "Unable to calculate line of action for this gear pair."
+                )
             alpha = np.arccos((rb1 + rb2) / distance)
             line1 = crv.LineCurve(
                 p0=center1 + rotate_vector(diff_vector_unit, alpha) * rb1,
