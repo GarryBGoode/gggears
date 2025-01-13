@@ -17,6 +17,7 @@ from gggears.function_generators import *
 from gggears.curve import *
 from build123d import *
 from gggears.gggears_convert import *
+from gggears.gggears_base_classes import *
 from scipy.spatial.transform import Rotation as scp_Rotation
 import numpy as np
 import time
@@ -74,27 +75,117 @@ class GearBuilder(GearToNurbs):
         oversampling_ratio: float = 3,
         method: str = "slow",
         projection: bool = True,
+        split_construction: bool = True,
     ):
-        super().__init__(
-            gear=gear,
-            n_points_hz=n_points_hz,
-            n_points_vert=n_points_vert,
-            oversampling_ratio=oversampling_ratio,
-            convertmethod=method,
-        )
         self.projection = projection
-        bot_cover = self.generate_cover(self.nurb_profile_stacks[0][0])
-        top_cover = self.generate_cover(self.nurb_profile_stacks[-1][-1])
-        side_surfaces = self.gen_side_surfaces()
-        full_surfaces = side_surfaces
-        full_surfaces.append(top_cover)
-        full_surfaces.append(bot_cover)
 
-        self.solid = Solid(Shell(full_surfaces))
+        if not split_construction or gear.cone.cone_angle == 0:
+            super().__init__(
+                gear=gear,
+                n_points_hz=n_points_hz,
+                n_points_vert=n_points_vert,
+                oversampling_ratio=oversampling_ratio,
+                convertmethod=method,
+            )
+            bot_cover = self.generate_cover(
+                self.nurb_profile_stacks[0][0], self.gear_stacks[0][0]
+            )
+            top_cover = self.generate_cover(
+                self.nurb_profile_stacks[-1][-1], self.gear_stacks[-1][-1]
+            )
+            side_surfaces = self.gen_side_surfaces()
+            full_surfaces = side_surfaces
+            full_surfaces.append(top_cover)
+            full_surfaces.append(bot_cover)
+
+            self.solid = Solid(Shell(full_surfaces))
+        else:
+            z_vals_save = copy.deepcopy(gear.z_vals)
+            zmid = (gear.z_vals[-1] + gear.z_vals[0]) / 2
+            zdiff = gear.z_vals[-1] - gear.z_vals[0]
+            # extend z_vals by 10% to ensure cutting intersection for split operation
+            gear.z_vals[-1], gear.z_vals[0] = (
+                zmid + zdiff * 1.1 / 2,
+                zmid - zdiff * 1.1 / 2,
+            )
+            super().__init__(
+                gear=gear,
+                n_points_hz=n_points_hz,
+                n_points_vert=n_points_vert,
+                oversampling_ratio=oversampling_ratio,
+                convertmethod=method,
+            )
+            # restore original z_vals
+            self.gear.z_vals = z_vals_save
+
+            side_surfaces = self.gen_side_surfaces(only_outside_surface=True)
+            profile0 = self.gear.curve_gen_at_z(self.gear.z_vals[0])
+            profile1 = self.gear.curve_gen_at_z(self.gear.z_vals[-1])
+
+            gamma = self.gear.cone.cone_angle / 2
+            R0 = self.gear.tooth_param.num_teeth / 2 / np.sin(gamma)
+            h0 = R0 * np.cos(gamma)
+            R1 = R0 * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.scale
+            center = Vector(0, 0, h0)
+            bottom_angle = (
+                180 / PI * self.gear.shape_recipe(self.gear.z_vals[0]).transform.angle
+            )
+            top_angle = (
+                180 / PI * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.angle
+            )
+            ref_solid = Solid.make_sphere(
+                radius=R0, angle1=-90, angle2=90, angle3=360
+            ).rotate(Axis.Z, bottom_angle) - Solid.make_sphere(
+                radius=R1, angle1=-90, angle2=90, angle3=360
+            ).rotate(
+                Axis.Z, top_angle
+            )
+            # ref_solid = ref_solid.rotate(Axis.X, angle=-90)
+            ref_solid = ref_solid.translate(center)
+
+            tool = Face.fuse(*side_surfaces)
+
+            if self.gear.tooth_param.inside_teeth:
+                # inside ring bevel gear
+                c_o_0 = profile0.transform(profile0.ro_curve.center)
+                c_o_1 = profile1.transform(profile1.ro_curve.center)
+                h_o = c_o_1[2] - c_o_0[2]
+                r_o_0 = profile0.ro_curve.radius * profile0.transform.scale
+                r_o_1 = profile1.ro_curve.radius * profile1.transform.scale
+                r_o_cone = Solid.make_cone(
+                    r_o_0, r_o_1, h_o, plane=(Plane.XY).offset(c_o_0[2])
+                )
+                r_o_face = r_o_cone.faces().sort_by(Axis.Z)[1]
+                ref_solid = ref_solid.split(r_o_face, keep=Keep.BOTTOM)
+                split_part = ref_solid.split(tool, keep=Keep.BOTH)
+                split_solids = [*split_part.solids()]
+                self.solid = split_solids[0]
+                self.solid = self.solid.clean()
+
+            else:
+
+                c_o_0 = profile0.transform(profile0.ro_curve.center)
+                c_o_1 = profile1.transform(profile1.ro_curve.center)
+                h_o = c_o_1[2] - c_o_0[2]
+                r_o_0 = profile0.ro_curve.radius * profile0.transform.scale
+                r_o_1 = profile1.ro_curve.radius * profile1.transform.scale
+                r_o_cone = Solid.make_cone(
+                    r_o_0, r_o_1, h_o, plane=(Plane.XY).offset(c_o_0[2])
+                )
+                ref_solid = ref_solid.fuse(r_o_cone)
+                ref_solid = ref_solid.clean()
+                ref_solid = ref_solid.split(Plane.XY.offset(c_o_0[2]), keep=Keep.TOP)
+
+                split_part = ref_solid.split(tool, keep=Keep.BOTH)
+                split_solids = [*split_part.solids()]
+                self.solid = split_solids[0]
+
         self.part = Part() + self.solid
-        self.part_transformed = apply_transform_part(self.solid, self.gear.transform)
+        self.part_transformed = BasePartObject(
+            apply_transform_part(self.solid, self.gear.transform)
+        )
 
-    def gen_side_surfaces(self):
+    def gen_side_surfaces(self, only_outside_surface=False):
         n_teeth = self.gear.tooth_param.num_teeth_act
         surfaces = []
 
@@ -121,7 +212,7 @@ class GearBuilder(GearToNurbs):
                 loc_face = loc_face + tooth_surfaces_nz[k][j]
             tooth_surfaces.append(loc_face)
 
-        if not self.gear.tooth_param.inside_teeth:
+        if not self.gear.tooth_param.inside_teeth or only_outside_surface:
             # fuse tooth surfaces into 1 object
             # last 3 surface elements are closing the tooth which is not needed here
             tooth_surface = Face.fuse(*tooth_surfaces[:-3])
@@ -151,10 +242,14 @@ class GearBuilder(GearToNurbs):
                     -self.gear.shape_recipe.limits.h_o
                     + self.gear.tooth_param.num_teeth / 2
                 )
-                ring_base = Circle(radius=r_o).edge()
+                # ring_base = Circle(radius=r_o).edge()
+                ring_base = Edge.make_circle(radius=r_o, plane=Plane.XY)
 
                 edge_ring = Line(
-                    [Vector((r_o, 0, 0)), Vector((r_o, 0, self.gear.z_vals[-1]))]
+                    [
+                        Vector((r_o, 0, self.gear.z_vals[0])),
+                        Vector((r_o, 0, self.gear.z_vals[-1])),
+                    ]
                 )
                 ring_surf = Face.sweep(profile=edge_ring, path=ring_base)
 
@@ -171,7 +266,9 @@ class GearBuilder(GearToNurbs):
                     surfaces.append(tooth_surface_rot)
                 return surfaces
 
-    def generate_cover(self, nurb_stack: GearRefProfileExtended):
+    def generate_cover(
+        self, nurb_stack: GearRefProfileExtended, gear_stack: GearRefProfileExtended
+    ):
 
         if self.gear.cone.cone_angle != 0:
 
@@ -271,11 +368,8 @@ class GearBuilder(GearToNurbs):
                     -self.gear.shape_recipe.limits.h_o
                     + self.gear.tooth_param.num_teeth / 2
                 )
-                ring = (
-                    Circle(radius=r_o)
-                    .translate(Vector(0, 0, nurb_stack.transform.center[2]))
-                    .edge()
-                )
+                z_val = gear_stack.transform.center[2]
+                ring = Edge.make_circle(radius=r_o, plane=Plane.XY.offset(z_val))
                 return Face(Wire(ring), inner_wires=[Wire(splines)])
             else:
                 return Face(Wire(splines))
@@ -477,6 +571,11 @@ def nppoint2Vector(p: np.ndarray):
         return [Vector((p[k, 0], p[k, 1], p[k, 2])) for k in range(p.shape[0])]
 
 
+def np2v(p: np.ndarray):
+    # shorthand for npppoint2Vector
+    return nppoint2Vector(p)
+
+
 def gen_splines(curve_bezier: Curve):
     if isinstance(curve_bezier, NURBSCurve) or isinstance(curve_bezier, CurveChain):
         splines = []
@@ -490,3 +589,84 @@ def gen_splines(curve_bezier: Curve):
         vectors = nppoint2Vector(curve_bezier.points)
         weights = curve_bezier.weights.tolist()
         return Edge.make_bezier(*vectors, weights=weights)
+
+
+def transform2Location(transform: GearTransform):
+    rot1 = scp_Rotation.from_matrix(transform.orientation)
+    degrees = rot1.as_euler("zyx", degrees=True)
+    loc = Location(
+        transform.center,
+        [degrees[2] + transform.angle * 180 / PI, degrees[1], degrees[0]],
+        Extrinsic.ZYX,
+    )
+
+    return loc
+
+
+def generate_boundary_edges(
+    nurbprofile: GearRefProfile,
+    transform: GearTransform = None,
+    angle_range: float = 2 * PI,
+):
+    if transform is None:
+        # identity transform by default
+        transform = GearTransform()
+    nurb_profile = gearprofile_to_nurb(nurbprofile)
+    # don't want to get more inputs about num of teeth, but without rounding this can
+    # lose 1 tooth
+    N = int(np.round(angle_range / nurbprofile.pitch_angle))
+
+    curves = []
+    for i in range(N):
+        # angle = i * profile.pitch_angle
+        curves.extend(
+            [
+                nurb.apply_transform(transform)
+                for nurb in nurb_profile.profile.copy().get_curves()
+            ]
+        )
+        transform.angle += nurbprofile.pitch_angle
+
+    nurbs_curve = crv.NURBSCurve(*curves)
+    nurbs_curve.enforce_continuity()
+
+    return gen_splines(nurbs_curve)
+
+
+def arc_to_b123d(arc: crv.ArcCurve) -> Edge:
+    """Converts a gggears ArcCurve to a build123d Edge object."""
+    loc = Location(
+        arc.center,
+        [arc.roll * 180 / PI, arc.pitch * 180 / PI, arc.yaw * 180 / PI],
+        Intrinsic.XYZ,
+    )
+
+    return Edge.make_circle(
+        radius=arc.radius,
+        plane=Plane(loc),
+        start_angle=0,
+        end_angle=arc.angle * 180 / PI,
+    )
+
+
+def line_to_b123d(line: crv.LineCurve) -> Edge:
+    """Converts a gggears LineCurve to a build123d Edge object."""
+    return Edge.make_line(np2v(line.p0), np2v(line.p1))
+
+
+def curve_to_edges(curve: crv.Curve):
+    if isinstance(curve, crv.CurveChain):
+        return [curve_to_edges(curve) for curve in curve.get_curves()]
+    elif isinstance(curve, crv.NURBSCurve) | isinstance(curve, crv.NurbCurve):
+        return gen_splines(curve)
+    elif isinstance(curve, crv.ArcCurve):
+        return [arc_to_b123d(curve)]
+    elif isinstance(curve, crv.LineCurve):
+        return [line_to_b123d(curve)]
+    elif isinstance(curve, crv.TransformedCurve):
+        nurb = crv.convert_curve_nurbezier(curve.target_curve)
+        nurb.apply_transform(curve.transform_method)
+        return gen_splines(nurb)
+    else:
+        nurb = crv.convert_curve_nurbezier(curve)
+        return gen_splines(nurb)

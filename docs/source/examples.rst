@@ -19,6 +19,7 @@ The examples on this page showcase the available functionality of gggears packag
 .. contents:: List of Examples
     :backlinks: entry
 
+
 .. _ex 1:
 
 1. Basic Spur Gears
@@ -28,7 +29,7 @@ This example demonstrates the creation of two spur gears with different number o
 
 .. note::
 
-    The default values are ``module=1`` and ``height=1`` .
+    The default (unspecified) values are :py:attr:`module=1` and :py:attr:`height=1` .
 
 .. image:: assets/general_ex1.svg
     :align: center
@@ -55,11 +56,11 @@ Example with a ring-gear for planetary drive construction.
 3. Profile shifts
 --------------------
 
-Create profile shifted gears. Use the ``tip_truncation`` parameter to avoid sharp tips.
+Create profile shifted gears. Use the :py:class:`tip_truncation <gggears.gggears_wrapper.InvoluteGear>` parameter to avoid sharp tips.
 
 .. note::
 
-    The ``mesh_to()`` function does not yet handle fully accurately the ``profile_shift`` parameter, so you get increased backlash with shifted spur gears.
+    The :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` function does not yet handle accurately the ``profile_shift`` parameter, so you get increased backlash with shifted spur gears.
 
 .. image:: assets/general_ex3.svg
     :align: center
@@ -72,7 +73,10 @@ Create profile shifted gears. Use the ``tip_truncation`` parameter to avoid shar
 4. Helical Gears
 --------------------
 
-Create Helical Gears.
+Create Helical Gears. Positive helix angle is right-handed, negative is left-handed.
+Use positive and negative values to create a common helical pair. The gears are calculated with the 'normal' (tool-parameter) system,
+as opposed to the 'transverse' system. The :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` function can account for different helix angles. Use the value ``PI/4`` for 90° crossed helicals.
+The class :py:class:`HelicalRingGear <gggears.gggears_wrapper.HelicalRingGear>` is also available for planetary drives with helical gears.
 
 .. image:: assets/general_ex4.svg
     :align: center
@@ -108,6 +112,9 @@ Create simple bevel gears at 90° angle.
     :start-after: [Ex. 6]
     :end-before: [Ex. 6]
 
+.. note ::
+    Bevel gears are implemented with ideal spherical involute geometry, which does not represent real bevel gears due to manufacturing constraints.
+
 7. Spiral Bevel Gears
 ---------------------
 Spiral bevel gears are under development, but you can already create them with the following code.
@@ -122,10 +129,10 @@ Spiral bevel gears are under development, but you can already create them with t
 8. Cycloid Gears
 ---------------------
 
-Create gears wit cycloid geometry. Cycloids have no pressure angle, but are defined by the radii of the generator rolling circles.
-These generator circles are controlled by the `inside_cycloid_coefficient` and `outside_cycloid_coefficient` parameters.
+Create gears wit cycloid geometry. Cycloids have no pressure angle as a parameter, but are rather defined by the radii of the generator rolling circles.
+These generator circles are controlled by the ``inside_cycloid_coefficient`` and ``outside_cycloid_coefficient`` parameters.
 The rolling circles need to match for meshing gears.
-The `adapt_cycloid_radii` function can be used to adjust the outside rolling circles of gears for appropriate meshing.
+The :py:meth:`adapt_cycloid_radii <gggears.gggears_wrapper.CycloidGear.adapt_cycloid_radii>` function can be used to adjust the outside rolling circles of gears for appropriate meshing.
 
 .. image:: assets/general_ex8.svg
     :align: center
@@ -133,3 +140,4 @@ The `adapt_cycloid_radii` function can be used to adjust the outside rolling cir
 .. literalinclude:: examples.py
     :start-after: [Ex. 8]
     :end-before: [Ex. 8]
+

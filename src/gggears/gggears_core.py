@@ -127,6 +127,11 @@ def generate_reference_circles(
     """Generates reference circles as Curve objects for a gear tooth."""
     # TODO: this could be a classmethod of GearRefCircles?
     p0 = RIGHT * pitch_radius
+    if limitparam.h_o > pitch_radius - DELTA:
+        h_o = pitch_radius - DELTA
+    else:
+        h_o = limitparam.h_o
+
     pa = coneparam.inverse_polar_transform(
         coneparam.polar_transform(p0) + np.array([limitparam.h_a, 0, 0])
     )
@@ -134,7 +139,7 @@ def generate_reference_circles(
         coneparam.polar_transform(p0) + np.array([-limitparam.h_d, 0, 0])
     )
     po = coneparam.inverse_polar_transform(
-        coneparam.polar_transform(p0) + np.array([-limitparam.h_o, 0, 0])
+        coneparam.polar_transform(p0) + np.array([-h_o, 0, 0])
     )
 
     rp_circle = crv.ArcCurve.from_point_center_angle(
@@ -456,6 +461,7 @@ def trim_reference_profile(
             if sol_root_2.success or solcheck2 < 1e-5:
                 solcheck = solcheck2
                 sol_root = sol_root_2
+        # angle check: check if the found solution is within the pitch angle range
         angle_check = np.arctan2(
             tooth_curve(sol_root.x[0])[1], tooth_curve(sol_root.x[0])[0]
         )
@@ -471,11 +477,14 @@ def trim_reference_profile(
                 tooth_curve, plane_normal=plane_norm, guess=guess
             )
 
-            sol_bot = crv.find_curve_intersect(
-                tooth_curve,
-                ref_curves.r_d_curve,
-                guess=[sol_mid2.x[0], rd_guess],
-                method=crv.IntersectMethod.MINDISTANCE,
+            # sol_bot = crv.find_curve_intersect(
+            #     tooth_curve,
+            #     ref_curves.r_d_curve,
+            #     guess=[sol_mid2.x[0], rd_guess],
+            #     method=crv.IntersectMethod.MINDISTANCE,
+            # )
+            sol_bot = minimize(
+                lambda t: np.linalg.norm(tooth_curve(t)[:2]), sol_mid2.x[0]
             )
             if sol_bot.x[0] > sol_mid2.x[0]:
                 sol_mid2 = sol_bot
@@ -700,8 +709,13 @@ def generate_boundary_chain(
     crv_list = []
     for i in range(toothdata.num_teeth_act):
         crv_list.append(
-            crv.RotatedCurve(
-                curve=profile.profile.copy(), angle=i * toothdata.pitch_angle, axis=OUT
+            crv.TransformedCurve(
+                curve=crv.RotatedCurve(
+                    curve=profile.profile.copy(),
+                    angle=i * toothdata.pitch_angle,
+                    axis=OUT,
+                ),
+                transform=profile.transform,
             )
         )
     return crv.CurveChain(*crv_list)
@@ -857,10 +871,17 @@ class Gear:
     def curve_gen_at_z(self, z):
         return generate_reference_profile(self.shape_recipe(z))
 
-    def boundary_at_z(self, z):
-        return crv.TransformedCurve(
-            self.transform, generate_boundary(self.curve_gen_at_z(z), self.tooth_param)
-        )
+    def boundary_at_z(self, z, continuous=True):
+        if continuous:
+            return crv.TransformedCurve(
+                self.transform,
+                generate_boundary(self.curve_gen_at_z(z), self.tooth_param),
+            )
+        else:
+            return crv.TransformedCurve(
+                self.transform,
+                generate_boundary_chain(self.curve_gen_at_z(z), self.tooth_param),
+            )
 
     def copy(self) -> "Gear":
         return copy.deepcopy(self)
@@ -880,116 +901,117 @@ class Gear:
         Move this gear into a meshing position with other gear,
         so that the point of contact of the pitch circles is in target_dir direction.
         """
-        self.transform.center = self.calc_mesh_placement_vector(
-            other, target_dir, distance_offset
+        self.transform.center = calc_mesh_placement_vector(
+            self, other, target_dir, distance_offset
         )
-        self.transform.orientation = self.calc_mesh_orientation(
-            other, target_dir, distance_offset
+        self.transform.orientation = calc_mesh_orientation(
+            self, other, target_dir, distance_offset
         )
-        self.transform.angle = self.calc_mesh_angle(other)
+        self.transform.angle = calc_mesh_angle(self, other)
 
-    def calc_mesh_angle(self, other: "Gear"):
-        """Calculate the rotation angle for this gear to mesh with the other gear. A
-        bias value can be used for positioning within backlash."""
 
-        center_diff_dir = other.transform.center - self.transform.center
-        if np.linalg.norm(center_diff_dir) < 1e-12:
-            # if gears are co-axial, use x axis of other gear as reference
-            center_diff_dir = other.transform.x_axis
+def calc_mesh_angle(gear1: "Gear", gear2: "Gear"):
+    """Calculate the rotation angle for this gear to mesh with the other gear. A
+    bias value can be used for positioning within backlash."""
+
+    center_diff_dir = gear2.transform.center - gear1.transform.center
+    if np.linalg.norm(center_diff_dir) < 1e-12:
+        # if gears are co-axial, use x axis of other gear as reference
+        center_diff_dir = gear2.transform.x_axis
+    else:
+        center_diff_dir = normalize_vector(center_diff_dir)
+
+    if gear1.tooth_param.inside_teeth:
+        contact_dir_gear1 = center_diff_dir
+        contact_dir_other = center_diff_dir
+        phase_offset = 0
+        phase_sign = 1
+    elif gear2.tooth_param.inside_teeth:
+        contact_dir_gear1 = -center_diff_dir
+        contact_dir_other = -center_diff_dir
+        phase_offset = 0
+        phase_sign = 1
+    else:
+        contact_dir_gear1 = center_diff_dir
+        contact_dir_other = -center_diff_dir
+        phase_offset = 0.5
+        phase_sign = -1
+
+    # mult from right: vector in other's coordinate system
+    angle_of_other = angle_of_vector_in_xy(
+        contact_dir_other @ gear2.transform.orientation
+    )
+    target_angle_gear1 = angle_of_vector_in_xy(
+        contact_dir_gear1 @ gear1.transform.orientation
+    )
+
+    phase_of_other = (
+        (gear2.transform.angle - angle_of_other) / gear2.tooth_param.pitch_angle
+    ) % 1
+
+    angle_out = (
+        target_angle_gear1
+        + ((phase_sign * phase_of_other + phase_offset) % 1)
+        * gear1.tooth_param.pitch_angle
+    )
+
+    return angle_out
+
+
+def calc_mesh_placement_vector(
+    gear1: Gear, gear2: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
+):
+    target_dir_norm = (
+        target_dir - np.dot(target_dir, gear2.transform.z_axis) * gear2.transform.z_axis
+    )
+    if np.linalg.norm(target_dir_norm) < 1e-12:
+        # target_dir is parallel to x axis
+        target_dir_norm = gear2.transform.x_axis
+    else:
+        target_dir_norm = normalize_vector(target_dir_norm)
+
+    if gear1.cone.cone_angle == 0 and gear2.cone.cone_angle == 0:
+        if gear2.tooth_param.inside_teeth:
+            distance_ref = gear2.rp - gear1.rp + offset
+        elif gear1.tooth_param.inside_teeth:
+            distance_ref = gear2.rp - gear1.rp - offset
         else:
-            center_diff_dir = normalize_vector(center_diff_dir)
-
-        if self.tooth_param.inside_teeth:
-            contact_dir_self = center_diff_dir
-            contact_dir_other = center_diff_dir
-            phase_offset = 0
-            phase_sign = 1
-        elif other.tooth_param.inside_teeth:
-            contact_dir_self = -center_diff_dir
-            contact_dir_other = -center_diff_dir
-            phase_offset = 0
-            phase_sign = 1
+            distance_ref = gear1.rp + gear2.rp + offset
+        return gear2.center + distance_ref * target_dir_norm
+    else:
+        if gear2.tooth_param.inside_teeth:
+            angle_ref = gear2.cone.gamma - gear1.cone.gamma + offset / gear1.R
+        elif gear1.tooth_param.inside_teeth:
+            angle_ref = gear2.cone.gamma - gear1.cone.gamma - offset / gear1.R
         else:
-            contact_dir_self = center_diff_dir
-            contact_dir_other = -center_diff_dir
-            phase_offset = 0.5
-            phase_sign = -1
+            angle_ref = gear1.cone.gamma + gear2.cone.gamma + offset / gear1.R
+        rot_ax = normalize_vector(np.cross(target_dir_norm, gear2.transform.z_axis))
+        rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
+        center_h = gear1.cone.R * gear1.module * np.cos(gear1.cone.gamma)
+        diff_vector = rot1.apply(-center_h * gear2.transform.z_axis)
+        return gear2.center_sphere + diff_vector
 
-        # mult from right: vector in other's coordinate system
-        angle_of_other = angle_of_vector_in_xy(
-            contact_dir_other @ other.transform.orientation
-        )
-        target_angle_self = angle_of_vector_in_xy(
-            contact_dir_self @ self.transform.orientation
-        )
 
-        phase_of_other = (
-            (other.transform.angle - angle_of_other) / other.tooth_param.pitch_angle
-        ) % 1
-
-        angle_out = (
-            target_angle_self
-            + ((phase_sign * phase_of_other + phase_offset) % 1)
-            * self.tooth_param.pitch_angle
-        )
-
-        return angle_out
-
-    def calc_mesh_placement_vector(
-        self, other: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
-    ):
-        target_dir_norm = (
-            target_dir
-            - np.dot(target_dir, other.transform.z_axis) * other.transform.z_axis
-        )
-        if np.linalg.norm(target_dir_norm) < 1e-12:
-            # target_dir is parallel to x axis
-            target_dir_norm = other.transform.x_axis
+def calc_mesh_orientation(
+    gear1: "Gear", gear2: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
+):
+    target_dir_norm = (
+        target_dir - np.dot(target_dir, gear2.transform.z_axis) * gear2.transform.z_axis
+    )
+    if np.linalg.norm(target_dir_norm) < 1e-12:
+        # target_dir is parallel to x axis
+        target_dir_norm = gear2.transform.x_axis
+    else:
+        target_dir_norm = normalize_vector(target_dir_norm)
+    if gear1.cone.cone_angle == 0 and gear2.cone.cone_angle == 0:
+        return gear2.transform.orientation
+    else:
+        if gear2.tooth_param.inside_teeth:
+            angle_ref = gear2.cone.gamma - gear1.cone.gamma + offset / gear1.R
+        elif gear1.tooth_param.inside_teeth:
+            angle_ref = gear2.cone.gamma - gear1.cone.gamma - offset / gear1.R
         else:
-            target_dir_norm = normalize_vector(target_dir_norm)
-
-        if self.cone.cone_angle == 0 and other.cone.cone_angle == 0:
-            if other.tooth_param.inside_teeth:
-                distance_ref = other.rp - self.rp + offset
-            elif self.tooth_param.inside_teeth:
-                distance_ref = other.rp - self.rp - offset
-            else:
-                distance_ref = self.rp + other.rp + offset
-            return other.center + distance_ref * target_dir_norm
-        else:
-            if other.tooth_param.inside_teeth:
-                angle_ref = other.cone.gamma - self.cone.gamma + offset / self.R
-            elif self.tooth_param.inside_teeth:
-                angle_ref = other.cone.gamma - self.cone.gamma - offset / self.R
-            else:
-                angle_ref = self.cone.gamma + other.cone.gamma + offset / self.R
-            rot_ax = normalize_vector(np.cross(target_dir_norm, other.transform.z_axis))
-            rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
-            center_h = self.cone.R * self.module * np.cos(self.cone.gamma)
-            diff_vector = rot1.apply(-center_h * other.transform.z_axis)
-            return other.center_sphere + diff_vector
-
-    def calc_mesh_orientation(
-        self, other: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
-    ):
-        target_dir_norm = (
-            target_dir
-            - np.dot(target_dir, other.transform.z_axis) * other.transform.z_axis
-        )
-        if np.linalg.norm(target_dir_norm) < 1e-12:
-            # target_dir is parallel to x axis
-            target_dir_norm = other.transform.x_axis
-        else:
-            target_dir_norm = normalize_vector(target_dir_norm)
-        if self.cone.cone_angle == 0 and other.cone.cone_angle == 0:
-            return other.transform.orientation
-        else:
-            if other.tooth_param.inside_teeth:
-                angle_ref = other.cone.gamma - self.cone.gamma + offset / self.R
-            elif self.tooth_param.inside_teeth:
-                angle_ref = other.cone.gamma - self.cone.gamma - offset / self.R
-            else:
-                angle_ref = self.cone.gamma + other.cone.gamma + offset / self.R
-            rot_ax = normalize_vector(np.cross(target_dir_norm, other.transform.z_axis))
-            rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
-            return rot1.as_matrix() @ other.transform.orientation
+            angle_ref = gear1.cone.gamma + gear2.cone.gamma + offset / gear1.R
+        rot_ax = normalize_vector(np.cross(target_dir_norm, gear2.transform.z_axis))
+        rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
+        return rot1.as_matrix() @ gear2.transform.orientation

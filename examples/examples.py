@@ -52,8 +52,23 @@ def helical_gears():
     return [gear_part_0, gear_part_1, gear_part_2, gear_part_3, gear_part_4]
 
 
+def worm_approx():
+    # this example is stressing the helical gear geometry a bit, and approximates
+    # a worm drive
+    gear0 = HelicalGear(
+        number_of_teeth=3, helix_angle=PI / 2 * 0.85, height=20, z_anchor=0.5
+    )
+    gear1 = HelicalGear(
+        number_of_teeth=45, helix_angle=PI / 2 * 0.15, height=10, z_anchor=0.5
+    )
+    gear0.mesh_to(gear1, target_dir=RIGHT)
+    gear_part_0 = gear0.build_part()
+    gear_part_1 = gear1.build_part()
+    return [gear_part_0, gear_part_1]
+
+
 def planetary_helical_gear():
-    m = 1
+    m = 2
 
     n_ring = 97
     n_sun = 11
@@ -152,10 +167,44 @@ def bevel_gear():
         helix_angle=-beta,
         profile_shift=-0.25,
     )
+
     gear1.mesh_to(gear2, target_dir=LEFT)
-    gear_part_1 = gear1.build_part()
-    gear_part_2 = gear2.build_part()
-    return (gear_part_1, gear_part_2)
+    with BuildPart() as gear1_builder:
+        gear1.build_part()
+        with Locations([gear1.face_location_top]):
+            Cylinder(2, 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+        with Locations([gear1.face_location_bottom]):
+            cone_angle_bottom = gear1.cone_angle_limits_bottom[0]
+            # Rhe r_o is the radius where the spherical surface ends and transitions to
+            # a flat circle.
+            # Index [0] in the radii_data_array represents the bottom.
+            r0 = gear1.radii_data_array[0].r_o
+            h = 0.2
+            r1 = r0 - h / np.tan(cone_angle_bottom)
+            # bottom location still points up, aligned with the gear,
+            # so the cone1 is positioned under the local XY plane
+            Cone(r1, r0, h, align=(Align.CENTER, Align.CENTER, Align.MAX))
+            Hole(1, depth=None)
+
+    with BuildPart() as gear2_builder:
+        gear2.build_part()
+        with Locations([gear2.face_location_top]):
+            Cylinder(4, 4, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            Hole(1, depth=None)
+
+    gear_part_1 = gear1_builder.part
+    gear_part_2 = gear2_builder.part
+    return (
+        gear_part_1,
+        gear_part_2,
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_p_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_p_curve),
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_a_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_a_curve),
+        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_d_curve),
+        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_d_curve),
+    )
 
 
 def bevel_chain():
@@ -322,5 +371,6 @@ def cycloid_drive():
 
 if __name__ == "__main__":
     set_port(3939)
-
-    show(fishbone_bevels(), deviation=0.15, angular_tolerance=0.2)
+    # default deviation is 0.1, default angular tolerance is 0.2.
+    # Lower values result in higher resulution.
+    show(bevel_gear(), deviation=0.05, angular_tolerance=0.1)
