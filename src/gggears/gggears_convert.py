@@ -11,6 +11,8 @@
 
 import gggears.gggears_core as gg
 import numpy as np
+from joblib import Parallel, delayed
+import multiprocessing
 import gggears.curve as crv
 from scipy.optimize import minimize
 from gggears.defs import *
@@ -77,89 +79,84 @@ class GearToNurbs:
         self.side_surf_data = self.generate_surface_points_sides(method=convertmethod)
         logging.info(f"Surfaces generated in {time.time()-start:.5f} seconds")
 
+    def generate_nurbs_job(self, gear_stack: gg.GearRefProfile) -> List:
+        nurb_stack = []
+        for k in range(len(gear_stack)):
+            gearprofile = gear_stack[k]
+
+            NURB_profile = gearprofile_to_nurb(
+                gearprofile, n_points=self.n_points_hz
+            )
+            nurb_stack.append(NURB_profile)
+        return nurb_stack
+    
     def generate_nurbs(self):
-        nurb_profile_stacks = []
-        for gear_stack_loc in self.gear_stacks:
-            nurb_stack = []
-            for k in range(len(gear_stack_loc)):
-                gearprofile = gear_stack_loc[k]
+        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_nurbs_job)(gear_stack) for gear_stack in self.gear_stacks))
 
-                NURB_profile = gearprofile_to_nurb(
-                    gearprofile, n_points=self.n_points_hz
-                )
-
-                nurb_stack.append(NURB_profile)
-            nurb_profile_stacks.append(nurb_stack)
-        return nurb_profile_stacks
+    def generate_gear_stacks_job(self, ii) -> List[gg.GearRefProfileExtended]:
+        # need more gear slices than nurb points to produce 'best' fit without overfitting
+        # oversamp ratio controls how many more
+        # the 2 end points will be locked down, the middle points are approximated by fitting
+        z_tweens = np.linspace(
+            self.z_vals[ii], self.z_vals[ii + 1], self.n_z_tweens
+        )
+        return [
+            gg.GearRefProfileExtended.from_refprofile(
+                self.gear.curve_gen_at_z(z), self.gear.cone
+            )
+            for z in z_tweens
+        ]
 
     def generate_gear_stacks(self) -> List[List[gg.GearRefProfileExtended]]:
-        gear_stacks = []
-        for ii in range(len(self.z_vals) - 1):
-            # need more gear slices than nurb points to produce 'best' fit without overfitting
-            # oversamp ratio controls how many more
-            # the 2 end points will be locked down, the middle points are approximated by fitting
-            z_tweens = np.linspace(
-                self.z_vals[ii], self.z_vals[ii + 1], self.n_z_tweens
+        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_gear_stacks_job)(ii) for ii in range(len(self.z_vals) - 1)))
+
+    def generate_surface_points_sides_job(self, method, ii):
+        nurb_profile_stack = self.nurb_profile_stacks[ii]
+        stack = []
+        for k in range(len(nurb_profile_stack)):
+            nurb = crv.NURBSCurve(
+                *[
+                    curve
+                    for curve in nurb_profile_stack[k]
+                    .profile_closed.copy()
+                    .get_curves()
+                    if curve.active
+                ]
             )
-            gear_stack_loc = [
-                gg.GearRefProfileExtended.from_refprofile(
-                    self.gear.curve_gen_at_z(z), self.gear.cone
-                )
-                for z in z_tweens
-            ]
-            gear_stacks.append(gear_stack_loc)
-        return gear_stacks
+            # nurb.points = nurb_profile_stack[k].transform(nurb.points)
+            stack.append(nurb)
+
+        # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
+
+        points_asd = np.stack([nurbs.points for nurbs in stack], axis=0)
+        weights_asd = np.stack([nurbs.weights for nurbs in stack], axis=0)
+        points_combined = np.concatenate(
+            [points_asd, weights_asd[:, :, np.newaxis]], axis=2
+        )
+        if method == "fast":
+            sol2, points2, weights2 = self.solve_surface_fast(
+                points_combined, n_points_vert=self.n_points_vert
+            )
+        else:
+            sol2, points_init, weights_init = self.solve_surface_fast(
+                points_combined, n_points_vert=self.n_points_vert
+            )
+            init_data = np.concatenate(
+                [points_init, weights_init[:, :, np.newaxis]], axis=2
+            )
+            sol2, points2, weights2, t = self.solve_surface(
+                points_combined,
+                n_points_vert=self.n_points_vert,
+                t_weight=0.01,
+                init_points=init_data,
+            )
+
+        return NurbSurfaceData(
+            points=points2, weights=weights2, knots=stack[0].knots[:]
+        )
 
     def generate_surface_points_sides(self, method="fast"):
-        surface_data = []
-        for ii in range(len(self.z_vals) - 1):
-            nurb_profile_stack = self.nurb_profile_stacks[ii]
-            stack = []
-            for k in range(len(nurb_profile_stack)):
-                nurb = crv.NURBSCurve(
-                    *[
-                        curve
-                        for curve in nurb_profile_stack[k]
-                        .profile_closed.copy()
-                        .get_curves()
-                        if curve.active
-                    ]
-                )
-                # nurb.points = nurb_profile_stack[k].transform(nurb.points)
-                stack.append(nurb)
-
-            # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
-
-            points_asd = np.stack([nurbs.points for nurbs in stack], axis=0)
-            weights_asd = np.stack([nurbs.weights for nurbs in stack], axis=0)
-            points_combined = np.concatenate(
-                [points_asd, weights_asd[:, :, np.newaxis]], axis=2
-            )
-            if method == "fast":
-                sol2, points2, weights2 = self.solve_surface_fast(
-                    points_combined, n_points_vert=self.n_points_vert
-                )
-            else:
-                sol2, points_init, weights_init = self.solve_surface_fast(
-                    points_combined, n_points_vert=self.n_points_vert
-                )
-                init_data = np.concatenate(
-                    [points_init, weights_init[:, :, np.newaxis]], axis=2
-                )
-                sol2, points2, weights2, t = self.solve_surface(
-                    points_combined,
-                    n_points_vert=self.n_points_vert,
-                    t_weight=0.01,
-                    init_points=init_data,
-                )
-
-            surface_data.append(
-                NurbSurfaceData(
-                    points=points2, weights=weights2, knots=stack[0].knots[:]
-                )
-            )
-
-        return surface_data
+        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_surface_points_sides_job)(method, ii) for ii in range(len(self.z_vals) - 1)))        
 
     def solve_surface(
         self, target_points, n_points_vert=4, t_weight=0.01, init_points=None
