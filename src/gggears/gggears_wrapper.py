@@ -716,9 +716,9 @@ class SpurGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """
@@ -835,9 +835,9 @@ class SpurRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -966,9 +966,9 @@ class HelicalGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """
@@ -1156,9 +1156,9 @@ class HelicalRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -1360,9 +1360,9 @@ class BevelGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -1506,9 +1506,9 @@ class CycloidGear(GearInfoMixin):
     >>> gear1.adapt_cycloid_radii(gear2)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """

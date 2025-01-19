@@ -58,13 +58,6 @@ class GearBuilder(GearToNurbs):
         fast method uses evenly distributed t-values in the vertical direction, while
         the slow method considers t values unknowns and solves for them.
         The default is slow.
-    projection : bool, optional
-        Used in the construction of top and bottom face of bevel (conic) gears. These
-        faces are in theory spherical. If True, the faces are projected onto a sphere
-        during construction. If False, the faces are constructed via build123d default
-        surface generator from boundary splines. Projection can sometimes fail, while
-        the default constructor can sometimes result in wavy surface artifacts.
-        The default is True.
     """
 
     def __init__(
@@ -89,8 +82,7 @@ class GearBuilder(GearToNurbs):
             top_cover = self.generate_cover(
                 self.nurb_profile_stacks[-1][-1], self.gear_stacks[-1][-1]
             )
-            # surfaces = self.gen_side_surfaces()
-            surfaces = self.gen_side_surfaces_basic()
+            surfaces = self.gen_side_surfaces()
             if gear.tooth_param.inside_teeth:
                 surfaces.append(self.gen_outside_ring())
             surfaces.append(bot_cover)
@@ -99,13 +91,10 @@ class GearBuilder(GearToNurbs):
             self.solid = Solid(Shell(surfaces))
         else:
             z_vals_save = copy.deepcopy(gear.z_vals)
-            zmid = (gear.z_vals[-1] + gear.z_vals[0]) / 2
             zdiff = gear.z_vals[-1] - gear.z_vals[0]
-            # extend z_vals by 10% to ensure cutting intersection for split operation
-            gear.z_vals[-1], gear.z_vals[0] = (
-                zmid + zdiff * 1.1 / 2,
-                zmid - zdiff * 1.1 / 2,
-            )
+            # extend z_vals by 1% to ensure cutting intersection for split operation
+            gear.z_vals[-1] += 0.01 * zdiff
+            gear.z_vals[0] -= 0.01 * zdiff
             super().__init__(
                 gear=gear,
                 n_points_hz=n_points_hz,
@@ -115,12 +104,12 @@ class GearBuilder(GearToNurbs):
             )
             # restore original z_vals
             self.gear.z_vals = z_vals_save
-
-            side_surfaces = self.gen_side_surfaces_basic()
-
+            side_surfaces = self.gen_side_surfaces()
             ref_solid = self.gen_ref_solid()
-            tool = Face.fuse(*side_surfaces)
-            split_result = ref_solid.split(tool=Shell(tool), keep=Keep.ALL).solids()
+            split_result = ref_solid.split(
+                tool=Shell(side_surfaces), keep=Keep.ALL
+            ).solids()
+            # the valid result is the one with the smaller volume out of the 2
             split_result.sort(key=lambda x: x.volume)
             self.solid = split_result[0]
 
@@ -173,7 +162,7 @@ class GearBuilder(GearToNurbs):
 
         return ref_solid
 
-    def gen_side_surfaces_basic(self):
+    def gen_side_surfaces(self):
         n_teeth = self.gear.tooth_param.num_teeth_act
         surfaces = []
 
@@ -182,7 +171,6 @@ class GearBuilder(GearToNurbs):
                 surfdata_z = self.side_surf_data[k]
                 patches = [*surfdata_z.get_patches()]
                 for patch in patches[:-3]:
-                    # for patch in patches:
                     # shape: vert x horiz x xyz
                     points = patch["points"]
                     weights = patch["weights"]
