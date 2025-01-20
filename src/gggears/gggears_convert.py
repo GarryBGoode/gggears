@@ -12,7 +12,6 @@
 import gggears.gggears_core as gg
 import numpy as np
 from joblib import Parallel, delayed
-import multiprocessing
 import gggears.curve as crv
 from scipy.optimize import minimize
 from gggears.defs import *
@@ -91,7 +90,7 @@ class GearToNurbs:
         return nurb_stack
     
     def generate_nurbs(self):
-        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_nurbs_job)(gear_stack) for gear_stack in self.gear_stacks))
+        return list(Parallel(n_jobs=-1, prefer="threads")(delayed(self.generate_nurbs_job)(gear_stack) for gear_stack in self.gear_stacks))
 
     def generate_gear_stacks_job(self, ii) -> List[gg.GearRefProfileExtended]:
         # need more gear slices than nurb points to produce 'best' fit without overfitting
@@ -108,7 +107,7 @@ class GearToNurbs:
         ]
 
     def generate_gear_stacks(self) -> List[List[gg.GearRefProfileExtended]]:
-        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_gear_stacks_job)(ii) for ii in range(len(self.z_vals) - 1)))
+        return list(Parallel(n_jobs=-1, prefer="threads")(delayed(self.generate_gear_stacks_job)(ii) for ii in range(len(self.z_vals) - 1)))
 
     def generate_surface_points_sides_job(self, method, ii):
         nurb_profile_stack = self.nurb_profile_stacks[ii]
@@ -156,7 +155,7 @@ class GearToNurbs:
         )
 
     def generate_surface_points_sides(self, method="fast"):
-        return list(Parallel(n_jobs=multiprocessing.cpu_count())(delayed(self.generate_surface_points_sides_job)(method, ii) for ii in range(len(self.z_vals) - 1)))        
+        return list(Parallel(n_jobs=-1, prefer="threads")(delayed(self.generate_surface_points_sides_job)(method, ii) for ii in range(len(self.z_vals) - 1)))        
 
     def solve_surface(
         self, target_points, n_points_vert=4, t_weight=0.01, init_points=None
