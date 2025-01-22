@@ -19,8 +19,8 @@ from gggears.gearteeth import *
 class GearInfoMixin:
     """Mixin class for gear information properties."""
 
-    def __init__(self):
-        self.gearcore = Gear()
+    def __init__(self, gear: Gear):
+        self.gearcore = gear
 
     @property
     def number_of_teeth(self):
