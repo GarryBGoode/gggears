@@ -116,6 +116,10 @@ class GearBuilder(GearToNurbs):
             split_result = ref_solid.split(
                 tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
             ).solids()
+            if len(split_result) < 2:
+                raise RuntimeError(
+                    "Split operation of blank solid via gear surfaces failed."
+                )
             # the valid result is the one with the smaller volume out of the 2
             split_result.sort(key=lambda x: x.volume)
             self.solid = split_result[0]

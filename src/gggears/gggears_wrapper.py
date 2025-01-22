@@ -603,7 +603,8 @@ class InvoluteGear(GearInfoMixin):
         other: InvoluteGear
             The other gear object to align to.
         target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other gear.
+            The direction in which the gear should be placed in relation to the other
+            gear.
             Should be a unit vector. Default is RIGHT (x).
         """
         if self.inside_teeth:
@@ -639,7 +640,7 @@ class InvoluteGear(GearInfoMixin):
         z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
         profile = self.gearcore.curve_gen_at_z(z)
         edges = generate_boundary_edges(profile, self.gearcore.transform)
-        return Wire(edges)
+        return bd.Wire(edges)
 
     def copy(self):
         return copy.deepcopy(self)
@@ -1712,7 +1713,8 @@ class CycloidGear(GearInfoMixin):
         other: CycloidGear
             The other gear object to align to.
         target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other gear.
+            The direction in which the gear should be placed in relation to the other
+            gear.
             Should be a unit vector. Default is RIGHT (x).
         """
         self.gearcore.mesh_to(
@@ -1789,7 +1791,7 @@ class CycloidGear(GearInfoMixin):
         z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
         profile = self.gearcore.curve_gen_at_z(z)
         edges = generate_boundary_edges(profile, self.gearcore.transform)
-        return Wire(edges)
+        return bd.Wire(edges)
 
     def copy(self):
         """:no-index:"""
