@@ -1370,6 +1370,10 @@ class SphericalInvoluteCurve(Curve):
     def R(self):
         return 1 / self.c_sphere
 
+    @property
+    def base_radius(self):
+        return self.r
+
 
 class TransformedCurve(Curve):
     """Class for applying simple transformations to a Curve and using the result as a

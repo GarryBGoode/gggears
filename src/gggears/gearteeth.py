@@ -134,6 +134,8 @@ class InvoluteUndercutTooth(InvoluteTooth):
 
     def generate_tooth_curve(self) -> crv.CurveChain:
         tooth_curve = self.generate_involute_curve()
+        if tooth_curve[1].base_radius < self.pitch_radius - self.ref_limits.h_d:
+            return tooth_curve
         undercut_ref_point = self.get_default_undercut_ref_point()
         undercut_curve = generate_undercut_curve(
             pitch_radius=self.pitch_radius,
