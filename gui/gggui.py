@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QSplitter,
     QFrame,
+    QFileDialog,
 )
 from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -96,6 +97,7 @@ class InputArgPanel(QWidget):
                         input_widget.setValue(value)
                     if key == "number_of_teeth":
                         input_widget.setValue(12)
+                        input_widget.setRange(0, 300)
                 elif self.signature.parameters[key].annotation is bool:
                     input_widget = QCheckBox()
                     input_widget.stateChanged.connect(
@@ -104,6 +106,9 @@ class InputArgPanel(QWidget):
                     input_widget.setChecked(value)
                 elif self.signature.parameters[key].annotation is float:
                     input_widget = QDoubleSpinBox()
+                    input_widget.setSingleStep(0.1)
+                    input_widget.setRange(-1000, 1000)
+                    input_widget.setDecimals(3)
                     input_widget.valueChanged.connect(
                         lambda val, k=key: self.update_dict(k, val)
                     )
@@ -163,6 +168,11 @@ class MainWindow(QMainWindow):
         generate_button_right = QPushButton("Generate2!")
         generate_button_right.clicked.connect(self.generate_gear_right)
 
+        save_button_left = QPushButton("Save1!")
+        save_button_left.clicked.connect(self.file_save_1)
+        save_button_right = QPushButton("Save2!")
+        save_button_right.clicked.connect(self.file_save_2)
+
         cls = getattr(gg, geartypes[0])
         sig = inspect.signature(cls)
         sig2 = inspect.signature(cls)
@@ -173,6 +183,7 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(QLabel("Gear Parameters"))
         self.left_layout.addWidget(self.numpanel_left)
         self.left_layout.addWidget(generate_button_left)
+        self.left_layout.addWidget(save_button_left)
 
         self.numpanel_right = InputArgPanel(sig2)
         self.right_layout = QVBoxLayout()
@@ -180,6 +191,10 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(QLabel("Gear Parameters"))
         self.right_layout.addWidget(self.numpanel_right)
         self.right_layout.addWidget(generate_button_right)
+        self.right_layout.addWidget(save_button_right)
+
+        clearbutton = QPushButton("Clear Gears")
+        clearbutton.clicked.connect(self.clear_gears)
 
         panel = QFrame()
         panel.setFrameShape(QFrame.Shape.Box)
@@ -188,8 +203,14 @@ class MainWindow(QMainWindow):
         panel_layout.addLayout(self.left_layout)
         panel_layout.addLayout(self.right_layout)
         panel.setLayout(panel_layout)
+        panel_container = QWidget()
+        panel_container_layout = QVBoxLayout()
+
+        panel_container_layout.addWidget(clearbutton)
+        panel_container_layout.addWidget(panel)
+        panel_container.setLayout(panel_container_layout)
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(panel)
+        splitter.addWidget(panel_container)
         splitter.addWidget(self.viewer)
         layout_base.addWidget(splitter)
 
@@ -201,6 +222,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(widget)
 
         self.gearparts = [gg.Part(), gg.Part()]
+        self.geargen_finished = [False, False]
 
     def generate_gear_left(self):
 
@@ -223,8 +245,13 @@ class MainWindow(QMainWindow):
         gearpart = self.gear1.build_part()
         gearpart.label = "Gear1"
         self.gearparts[0] = gearpart
+        if any(self.geargen_finished):
+            camera_opts = Camera.KEEP
+        else:
+            camera_opts = Camera.RESET
 
-        show(self.gearparts, reset_camera=Camera.KEEP)
+        show(self.gearparts, reset_camera=camera_opts)
+        self.geargen_finished[0] = True
 
     def generate_gear_right(self):
 
@@ -243,12 +270,19 @@ class MainWindow(QMainWindow):
 
         cls = getattr(gg, self.gear_selector_right.currentText())
         self.gear2 = cls(*positional_args, **keyword_args)
-        self.gear2.mesh_to(self.gear1)
+        if self.geargen_finished[0]:
+            self.gear2.mesh_to(self.gear1)
         gearpart2 = self.gear2.build_part()
         gearpart2.label = "Gear2"
         self.gearparts[1] = gearpart2
 
-        show(self.gearparts, reset_camera=Camera.KEEP)
+        if any(self.geargen_finished):
+            camera_opts = Camera.KEEP
+        else:
+            camera_opts = Camera.RESET
+
+        show(self.gearparts, reset_camera=camera_opts)
+        self.geargen_finished[1] = True
 
     def change_gear_type_left(self, s):
         cls = getattr(gg, s)
@@ -267,6 +301,39 @@ class MainWindow(QMainWindow):
         self.numpanel_right.deleteLater()
         self.numpanel_right = InputArgPanel(sig)
         self.right_layout.insertWidget(index, self.numpanel_right)
+
+    def clear_gears(self):
+        self.gearparts = [gg.Part(), gg.Part()]
+        self.geargen_finished = [False, False]
+        show(self.gearparts, reset_camera=Camera.RESET)
+
+    def file_save_1(self):
+        name, chosen_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save Gear 1",
+            filter="STL files (*.stl);;STEP files (*.stp *.step);; GLTF files (*.gltf)",
+        )
+        if self.geargen_finished[0]:
+            if "STEP" in chosen_filter:
+                gg.export_step(self.gearparts[0], name)
+            elif "STL" in chosen_filter:
+                gg.export_stl(self.gearparts[0], name)
+            elif "GLTF" in chosen_filter:
+                gg.export_gltf(self.gearparts[0], name)
+
+    def file_save_2(self):
+        name, chosen_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save Gear 2",
+            filter="STL files (*.stl);;STEP files (*.stp *.step);; GLTF files (*.gltf)",
+        )
+        if self.geargen_finished[1]:
+            if "STEP" in chosen_filter:
+                gg.export_step(self.gearparts[1], name)
+            elif "STL" in chosen_filter:
+                gg.export_stl(self.gearparts[1], name)
+            elif "GLTF" in chosen_filter:
+                gg.export_gltf(self.gearparts[1], name)
 
 
 ocp_view_process = subprocess.Popen(
