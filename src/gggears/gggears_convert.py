@@ -14,7 +14,7 @@ import numpy as np
 import gggears.curve as crv
 from scipy.optimize import minimize
 from gggears.defs import *
-from gggears.function_generators import bezierdc
+from gggears.function_generators import *
 import dataclasses
 from typing import Union, List
 import time
@@ -125,7 +125,6 @@ class GearToNurbs:
                         if curve.active
                     ]
                 )
-                # nurb.points = nurb_profile_stack[k].transform(nurb.points)
                 stack.append(nurb)
 
             # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
@@ -135,29 +134,39 @@ class GearToNurbs:
             points_combined = np.concatenate(
                 [points_asd, weights_asd[:, :, np.newaxis]], axis=2
             )
-            if method == "fast":
-                sol2, points2, weights2 = self.solve_surface_fast(
-                    points_combined, n_points_vert=self.n_points_vert
+            if self.n_z_tweens == 2:
+                # if only 2 layers exist, no need to solve for the side-surface
+                surface_data.append(
+                    NurbSurfaceData(
+                        points=points_asd,
+                        weights=weights_asd,
+                        knots=stack[0].knots[:],
+                    )
                 )
             else:
-                sol2, points_init, weights_init = self.solve_surface_fast(
-                    points_combined, n_points_vert=self.n_points_vert
-                )
-                init_data = np.concatenate(
-                    [points_init, weights_init[:, :, np.newaxis]], axis=2
-                )
-                sol2, points2, weights2, t = self.solve_surface(
-                    points_combined,
-                    n_points_vert=self.n_points_vert,
-                    t_weight=0.01,
-                    init_points=init_data,
-                )
+                if method == "fast":
+                    sol2, points2, weights2 = self.solve_surface_fast(
+                        points_combined, n_points_vert=self.n_points_vert
+                    )
+                else:
+                    sol2, points_init, weights_init = self.solve_surface_fast(
+                        points_combined, n_points_vert=self.n_points_vert
+                    )
+                    init_data = np.concatenate(
+                        [points_init, weights_init[:, :, np.newaxis]], axis=2
+                    )
+                    sol2, points2, weights2, t = self.solve_surface(
+                        points_combined,
+                        n_points_vert=self.n_points_vert,
+                        t_weight=0.01,
+                        init_points=init_data,
+                    )
 
-            surface_data.append(
-                NurbSurfaceData(
-                    points=points2, weights=weights2, knots=stack[0].knots[:]
+                surface_data.append(
+                    NurbSurfaceData(
+                        points=points2, weights=weights2, knots=stack[0].knots[:]
+                    )
                 )
-            )
 
         return surface_data
 
@@ -186,11 +195,16 @@ class GearToNurbs:
 
         def cost_fun(x):
             points, t = point_allocator(x)
-            tref = np.linspace(0, 1, o)[1:-1]
-            diff = bezierdc(t, points) - target_points[1:-1, :, :]
-            t_diff = (t - tref) * diff.size / t.size * t_weight
-
-            return np.sum(diff * diff) + np.dot(t_diff, t_diff)
+            target_mids = target_points[1:-1, :, :]
+            target_mids = target_mids.reshape(target_mids.shape[0], -1)
+            points_flat = points.reshape(points.shape[0], -1)
+            diff = target_mids - bezierdc(t, points_flat)
+            deriv_dpoints = -bezier_diff_p(t, points_flat.shape[0])
+            deriv_dt = -bezier_diff_t(t, points_flat)
+            dp = deriv_dpoints.T @ diff
+            dt = np.diag(diff @ deriv_dt.T)
+            dp = dp.reshape(points.shape)
+            return np.sum(diff * diff), inverse_allocator(dp, dt)
 
         init_t = np.linspace(0, 1, o)[1:-1]
         if init_points is None:
@@ -198,10 +212,15 @@ class GearToNurbs:
 
         init_guess_x = inverse_allocator(init_points, init_t)
 
-        sol = minimize(cost_fun, init_guess_x)
+        sol = minimize(cost_fun, init_guess_x, jac=True)
         points_sol, t = point_allocator(sol.x)
         points_out = points_sol[:, :, :3]
         weights_out = points_sol[:, :, 3]
+        logging.debug(
+            f"Nurbs point fit stats: n_iter: {sol.nit}, nfev: {sol.nfev}, status: {sol.status}"
+        )
+        logging.debug(f"Final cost: {sol.fun}")
+        logging.debug(f"message: {sol.message}")
         return sol, points_out, weights_out, t
 
     def solve_surface_fast(self, target_points, n_points_vert=4):
@@ -217,24 +236,35 @@ class GearToNurbs:
             points[1:-1, :, :] = x[: (m - 2) * n * 4].reshape(((m - 2), n, 4))
             return points
 
-        def inverse_allocator(points, t):
+        def inverse_allocator(points):
             x = np.zeros(((m - 2) * n * 4 + o))
             x[: (m - 2) * n * 4] = points[1:-1, :, :].reshape((m - 2) * n * 4)
             return x
 
         def cost_fun(x):
             points = point_allocator(x)
-            tref = np.linspace(0, 1, o)[1:-1]
-            return np.sum((bezierdc(tref, points) - target_points[1:-1, :, :]) ** 2)
+            t = np.linspace(0, 1, o)[1:-1]
+            target_mids = target_points[1:-1, :, :]
+            target_mids = target_mids.reshape(target_mids.shape[0], -1)
+            points_flat = points.reshape(points.shape[0], -1)
+            diff = target_mids - bezierdc(t, points_flat)
+            deriv_dpoints = -bezier_diff_p(t, points_flat.shape[0])
+            dp = deriv_dpoints.T @ diff
+            dp = dp.reshape(points.shape)
+            return np.sum(diff * diff), inverse_allocator(dp)
 
-        init_t = np.linspace(0, 1, o)[1:-1]
         init_points = bezierdc(np.linspace(0, 1, m), target_points)
-        init_guess_x = inverse_allocator(init_points, init_t)
+        init_guess_x = inverse_allocator(init_points)
 
-        sol = minimize(cost_fun, init_guess_x)
+        sol = minimize(cost_fun, init_guess_x, jac=True)
         points_sol = point_allocator(sol.x)
         points_out = points_sol[:, :, :3]
         weights_out = points_sol[:, :, 3]
+        logging.debug(
+            f"Nurbs point fit stats: n_iter: {sol.nit}, nfev: {sol.nfev}, status: {sol.status}"
+        )
+        logging.debug(f"Final cost: {sol.fun}")
+        logging.debug(f"message: {sol.message}")
         return sol, points_out, weights_out
 
 
