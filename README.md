@@ -41,7 +41,7 @@ Gear generation:
 
 Gear positioning and alignment supported.
 
-![Bevel Gear Example](misc/media/bevel_gears.png)
+![Bevel Gear Example](misc/media/bevelspin3.gif)
 
 Not yet supported:
 
