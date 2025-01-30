@@ -28,7 +28,9 @@ from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6 import QtWebEngineCore
 import gggears as gg
-from ocp_vscode import show, set_port, Camera, set_defaults
+import build123d as bd
+import numpy as np
+from ocp_vscode import show, set_port, Camera, set_defaults, Animation
 
 # Only needed for access to command line arguments
 import sys
@@ -36,7 +38,7 @@ import sys
 import subprocess
 import inspect
 from collections.abc import Iterable
-
+import copy
 
 # subprocess.Popen(["python", "-m", "ocp_vscode"])
 
@@ -192,7 +194,9 @@ class MainWindow(QMainWindow):
         self.numpanel_left = InputArgPanel(sig)
         self.left_layout = QVBoxLayout()
         self.left_layout.addWidget(self.gear_selector_left)
-        self.left_layout.addWidget(QLabel("Gear Parameters"))
+        param_label = QLabel("Gear Parameters")
+        param_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        self.left_layout.addWidget(param_label)
         self.left_layout.addWidget(self.numpanel_left)
         self.left_layout.addWidget(generate_button_left)
         self.left_layout.addWidget(save_button_left)
@@ -200,13 +204,20 @@ class MainWindow(QMainWindow):
         self.numpanel_right = InputArgPanel(sig2)
         self.right_layout = QVBoxLayout()
         self.right_layout.addWidget(self.gear_selector_right)
-        self.right_layout.addWidget(QLabel("Gear Parameters"))
+
+        param_labe2 = QLabel("Gear Parameters")
+        param_labe2.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        self.right_layout.addWidget(param_labe2)
         self.right_layout.addWidget(self.numpanel_right)
         self.right_layout.addWidget(generate_button_right)
         self.right_layout.addWidget(save_button_right)
 
         clearbutton = QPushButton("Clear Gears")
         clearbutton.clicked.connect(self.clear_gears)
+
+        self.animatebutton = QPushButton("Animate Gears")
+        self.animatebutton.setEnabled(False)
+        self.animatebutton.clicked.connect(self.animate_gears)
 
         panel = QFrame()
         panel.setFrameShape(QFrame.Shape.Box)
@@ -219,6 +230,7 @@ class MainWindow(QMainWindow):
         panel_container_layout = QVBoxLayout()
 
         panel_container_layout.addWidget(clearbutton)
+        panel_container_layout.addWidget(self.animatebutton)
         panel_container_layout.addWidget(panel)
         panel_container.setLayout(panel_container_layout)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -232,7 +244,8 @@ class MainWindow(QMainWindow):
         # Set the central widget of the Window. Widget will expand
         # to take up all the space in the window by default.
         self.setCentralWidget(widget)
-
+        self.gear1: gg.GearInfoMixin
+        self.gear2: gg.GearInfoMixin
         self.gearparts = [gg.Part(), gg.Part()]
         self.geargen_finished = [False, False]
 
@@ -264,6 +277,8 @@ class MainWindow(QMainWindow):
 
         show(self.gearparts, reset_camera=camera_opts)
         self.geargen_finished[0] = True
+        if self.geargen_finished[1]:
+            self.animatebutton.setEnabled(True)
 
     def generate_gear_right(self):
 
@@ -295,6 +310,8 @@ class MainWindow(QMainWindow):
 
         show(self.gearparts, reset_camera=camera_opts)
         self.geargen_finished[1] = True
+        if self.geargen_finished[0]:
+            self.animatebutton.setEnabled(True)
 
     def change_gear_type_left(self, s):
         cls = getattr(gg, s)
@@ -318,6 +335,43 @@ class MainWindow(QMainWindow):
         self.gearparts = [gg.Part(), gg.Part()]
         self.geargen_finished = [False, False]
         show(self.gearparts, reset_camera=Camera.RESET)
+        self.animatebutton.setEnabled(False)
+
+    def animate_gears(self):
+        a_gear1 = bd.Compound(
+            children=[
+                self.gear1.center_location_bottom.inverse() * self.gearparts[0].solid()
+            ],
+            label="gear1",
+        )
+        a_gear2 = bd.Compound(
+            children=[
+                self.gear2.center_location_bottom.inverse() * self.gearparts[1].solid()
+            ],
+            label="gear2",
+        )
+        a_gear1.location = self.gear1.center_location_bottom
+        a_gear2.location = self.gear2.center_location_bottom
+        gears = bd.Compound(children=[a_gear1, a_gear2], label="gears")
+
+        n = 30
+        duration = 2
+
+        angle_sign_1 = -1 if self.gear1.gearcore.tooth_param.inside_teeth else 1
+        angle_sign_2 = -1 if self.gear2.gearcore.tooth_param.inside_teeth else 1
+        time_track = np.linspace(0, duration, n + 1)
+        gear1_track = np.linspace(
+            0, -self.gear1.pitch_angle * angle_sign_1 * 180 / np.pi * 2, n + 1
+        )
+        gear2_track = np.linspace(
+            0, self.gear2.pitch_angle * angle_sign_2 * 180 / np.pi * 2, n + 1
+        )
+        # assign the tracks to the gears
+        animation = Animation(gears)
+        animation.add_track("/gears/gear1", "rz", time_track, gear1_track)
+        animation.add_track("/gears/gear2", "rz", time_track, gear2_track)
+        show(gears)
+        animation.animate(speed=1)
 
     def file_save_1(self):
         name, chosen_filter = QFileDialog.getSaveFileName(
