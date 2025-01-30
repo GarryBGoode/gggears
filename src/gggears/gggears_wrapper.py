@@ -379,7 +379,7 @@ class InvoluteGear(GearInfoMixin):
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1.0,
-        enable_undercut=True,
+        enable_undercut: bool = True,
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0.1,
@@ -730,7 +730,7 @@ class SpurGear(InvoluteGear):
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1.0,
-        enable_undercut=True,
+        enable_undercut: bool = True,
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0.1,
@@ -848,7 +848,7 @@ class SpurRingGear(InvoluteGear):
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1.0,
-        enable_undercut=False,
+        enable_undercut: bool = False,
         root_fillet: float = 0.2,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0,
@@ -977,12 +977,12 @@ class HelicalGear(InvoluteGear):
         self,
         number_of_teeth: int,
         helix_angle: float = 30 * PI / 180,
-        herringbone=False,
+        herringbone: bool = False,
         height: float = 1,
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1,
-        enable_undercut=True,
+        enable_undercut: bool = True,
         root_fillet: float = 0,
         tip_fillet: float = 0,
         tip_truncation: float = 0.1,
@@ -1166,12 +1166,12 @@ class HelicalRingGear(InvoluteGear):
         self,
         number_of_teeth: int,
         helix_angle: float = 30 * PI / 180,
-        herringbone=False,
+        herringbone: bool = False,
         height: float = 1,
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1,
-        enable_undercut=False,
+        enable_undercut: bool = False,
         root_fillet: float = 0,
         tip_fillet: float = 0,
         tip_truncation: float = 0.1,
@@ -1370,7 +1370,7 @@ class BevelGear(InvoluteGear):
         center: np.ndarray = ORIGIN,
         angle: float = 0,
         module: float = 1.0,
-        enable_undercut=True,
+        enable_undercut: bool = True,
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
         tip_truncation: float = 0.1,
@@ -1415,7 +1415,7 @@ class CycloidInputParam:
     center: np.ndarray = dataclasses.field(default_factory=lambda: ORIGIN)
     angle: float = 0
     module: float = 1.0
-    enable_undercut = True
+    enable_undercut: bool = True
     root_fillet: float = 0.0
     tip_fillet: float = 0.0
     tip_truncation: float = 0.1
@@ -1526,7 +1526,7 @@ class CycloidGear(GearInfoMixin):
         helix_angle: float = 0,
         backlash: float = 0,
         crowning: float = 0,
-        inside_teeth=False,
+        inside_teeth: bool = False,
         z_anchor: float = 0,
     ):
         self.inputparam = CycloidInputParam(
