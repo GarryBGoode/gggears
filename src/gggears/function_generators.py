@@ -377,7 +377,7 @@ def nurbezier(t, points, weights):
 def bezier_diff_t(t, points, n=1):
     d = points.shape[0]
     diffpoints = points
-    if n > k:
+    if n > d:
         return np.zeros(t.shape + points.shape)
     for k in range(n):
         diffpoints = (d - k - 1) * (diffpoints[1:] - diffpoints[:-1])
@@ -396,20 +396,26 @@ def nurbezier_diff_t(t, points, weights):
     points_bez = bezierdc(t, wpoints)
     weights_bez = bezierdc(t, weights)
 
-    diffpoints_bez = bezierdc(t, diffpoints)
-    diffweight_bez = bezierdc(t, diffweights)
-
     if hasattr(t, "__iter__"):
-        diffpoints_bez = diffweight_bez.reshape(
+        diffpoints_bez = bezierdc(t, diffpoints)
+        diffweight_bez = bezierdc(t, diffweights)
+        diffweight_bez = diffweight_bez.reshape(
             diffweight_bez.shape + (1,) * (diffpoints_bez.ndim - 1)
         )
         weights_bez = weights_bez.reshape(
             weights_bez.shape + (1,) * (points_bez.ndim - 1)
         )
+        out_points = (
+            weights_bez * diffpoints_bez - diffweight_bez * points_bez
+        ) / weights_bez**2
 
-    out_points = (
-        diffpoints_bez * weights_bez - points_bez * diffweight_bez
-    ) / weights_bez**2
+    else:
+        diffpoints_bez = bezierdc(t, diffpoints)
+        diffweight_bez = bezierdc(t, diffweights)
+
+        out_points = (
+            diffpoints_bez * weights_bez - points_bez * diffweight_bez
+        ) / weights_bez**2
     return out_points
 
 

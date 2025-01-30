@@ -19,8 +19,8 @@ from gggears.gearteeth import *
 class GearInfoMixin:
     """Mixin class for gear information properties."""
 
-    def __init__(self):
-        self.gearcore = Gear()
+    def __init__(self, gear: Gear):
+        self.gearcore = gear
 
     @property
     def number_of_teeth(self):
@@ -581,7 +581,6 @@ class InvoluteGear(GearInfoMixin):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method="slow",
         )
         return self.builder.part_transformed
 
@@ -603,7 +602,8 @@ class InvoluteGear(GearInfoMixin):
         other: InvoluteGear
             The other gear object to align to.
         target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other gear.
+            The direction in which the gear should be placed in relation to the other
+            gear.
             Should be a unit vector. Default is RIGHT (x).
         """
         if self.inside_teeth:
@@ -639,7 +639,7 @@ class InvoluteGear(GearInfoMixin):
         z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
         profile = self.gearcore.curve_gen_at_z(z)
         edges = generate_boundary_edges(profile, self.gearcore.transform)
-        return Wire(edges)
+        return bd.Wire(edges)
 
     def copy(self):
         return copy.deepcopy(self)
@@ -716,9 +716,9 @@ class SpurGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """
@@ -835,9 +835,9 @@ class SpurRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -966,9 +966,9 @@ class HelicalGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """
@@ -1156,9 +1156,9 @@ class HelicalRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -1237,19 +1237,14 @@ class HelicalRingGear(InvoluteGear):
         twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
         if twist_angle < PI / 16:
             n_vert = 3
-            method = "fast"
         elif twist_angle < PI / 2:
             n_vert = 4
-            method = "slow"
         else:
-            # 5 points tend to crash the OCT fuse with the slow option
             n_vert = 5
-            method = "fast"
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method=method,
         )
         return self.builder.part_transformed
 
@@ -1360,9 +1355,9 @@ class BevelGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
     """
 
@@ -1506,9 +1501,9 @@ class CycloidGear(GearInfoMixin):
     >>> gear1.adapt_cycloid_radii(gear2)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Solid)
+    >>> isinstance(gear_part_1, Part)
     True
-    >>> isinstance(gear_part_2, Solid)
+    >>> isinstance(gear_part_2, Part)
     True
 
     """
@@ -1690,7 +1685,6 @@ class CycloidGear(GearInfoMixin):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method="slow",
         )
         return self.builder.part_transformed
 
@@ -1712,7 +1706,8 @@ class CycloidGear(GearInfoMixin):
         other: CycloidGear
             The other gear object to align to.
         target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other gear.
+            The direction in which the gear should be placed in relation to the other
+            gear.
             Should be a unit vector. Default is RIGHT (x).
         """
         self.gearcore.mesh_to(
@@ -1789,7 +1784,7 @@ class CycloidGear(GearInfoMixin):
         z = z_ratio * self.gearcore.z_vals[1] + (1 - z_ratio) * self.gearcore.z_vals[0]
         profile = self.gearcore.curve_gen_at_z(z)
         edges = generate_boundary_edges(profile, self.gearcore.transform)
-        return Wire(edges)
+        return bd.Wire(edges)
 
     def copy(self):
         """:no-index:"""
