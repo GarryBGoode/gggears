@@ -13,6 +13,7 @@ from gggears import *
 from ocp_vscode import show, set_port
 import time
 import logging
+from build123d import *
 
 # These examples are meant to showcase the functionality of the library,
 # and serve as manual testing templates for the developer.
@@ -35,6 +36,7 @@ def spur_gears():
 def helical_gears():
     # a test of helical gears meshing with different helix angles
     # z_anchor=0.5 places the gear symmetrically on the XY plane, makes meshing easier
+    start = time.time()
     gear0 = HelicalGear(number_of_teeth=12, helix_angle=0, height=15, z_anchor=0.5)
     gear1 = HelicalGear(number_of_teeth=12, helix_angle=PI / 4, height=15, z_anchor=0.5)
     gear2 = HelicalGear(number_of_teeth=24, helix_angle=0, height=15, z_anchor=0.5)
@@ -49,6 +51,7 @@ def helical_gears():
     gear_part_2 = gear2.build_part()
     gear_part_3 = gear3.build_part()
     gear_part_4 = gear4.build_part()
+    print(f"gear build time: {time.time()-start}")
     return [gear_part_0, gear_part_1, gear_part_2, gear_part_3, gear_part_4]
 
 
@@ -269,7 +272,6 @@ def fishbone_bevels():
         gear=gear_base,
         n_points_vert=4,
         n_points_hz=4,
-        method="slow",
         oversampling_ratio=2.5,
     )
 

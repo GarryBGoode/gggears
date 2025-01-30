@@ -812,46 +812,25 @@ def fit_nurb_points(
         t=np.linspace(0, 1, N_target),
     )
 
-    def cost_fun(x):
-        points, weights, t = point_allocator(x)
-        diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
-        return np.sum(diff**2) / 2
-
-    def deriv_func(x):
+    def cost_fun_combined(x):
         points, weights, t = point_allocator(x)
         diff = (target_points[:, :N_Dim] - nurbezier(t, points, weights)) * scaler
         deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
         deriv_dweights = -nurbezier_diff_weights(t, points, weights)
-        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
+        deriv_dt = -nurbezier_diff_t(t, points, weights)
         dp = deriv_dpoints.T @ diff
         dt = np.diag(diff @ deriv_dt.T)
-        dw = np.sum(
-            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
-        )
-        return inverse_allocator(dp, dw, dt)
-
-    def cost_fun_combined(x):
-        points, weights, t = point_allocator(x)
-        diff = target_points[:, :N_Dim] - nurbezier(t, points, weights)
+        dw = np.einsum("ij,ikj->k", diff, deriv_dweights)
+        jac = inverse_allocator(dp, dw, dt)
         costval = np.sum(diff**2) / 2
-
-        deriv_dpoints = -nurbezier_diff_points(t, points.shape[0], weights)
-        deriv_dweights = -nurbezier_diff_weights(t, points, weights)
-        deriv_dt = np.asarray([-nurbezier_diff_t(ti, points, weights) for ti in t])
-        dp = deriv_dpoints.T @ diff
-        dt = np.diag(diff @ deriv_dt.T)
-        dw = np.sum(
-            np.asarray([diff[k] @ deriv_dweights[k].T for k in range(N_target)]), axis=0
-        )
-        diffval = inverse_allocator(dp, dw, dt)
-        return costval, diffval
+        return costval, jac
 
     sol = minimize(
-        cost_fun,
+        cost_fun_combined,
         initguess_x,
         # method="TNC",
         method="BFGS",
-        jac=deriv_func,
+        jac=True,
         # tol=1e-8,
         # options={"eps": DELTA / 100},
     )
