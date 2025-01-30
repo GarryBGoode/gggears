@@ -43,11 +43,6 @@ class GearToNurbs:
         Example: for a 3-point spline and oversampling of 3, the unkown point is the
         middle one, the number of evaluations are the 2 end points + 3 in the middle,
         so 5 in total.
-    method : str, optional
-        Selector between "fast" and "slow" conversion method for NURBS surfaces. The
-        fast method uses evenly distributed t-values in the vertical direction, while
-        the slow method considers t values unknowns and solves for them.
-        The default is slow.
     """
 
     def __init__(
@@ -56,7 +51,6 @@ class GearToNurbs:
         n_points_hz=4,
         n_points_vert=4,
         oversampling_ratio=3,
-        convertmethod="fast",
     ):
         self.gear = gear
         self.z_vals = gear.z_vals
@@ -74,7 +68,7 @@ class GearToNurbs:
         self.nurb_profile_stacks = self.generate_nurbs()
         logging.info(f"Nurbs generated in {time.time()-start:.5f} seconds")
         start = time.time()
-        self.side_surf_data = self.generate_surface_points_sides(method=convertmethod)
+        self.side_surf_data = self.generate_surface_points_sides()
         logging.info(f"Surfaces generated in {time.time()-start:.5f} seconds")
 
     def generate_nurbs(self):
@@ -110,7 +104,7 @@ class GearToNurbs:
             gear_stacks.append(gear_stack_loc)
         return gear_stacks
 
-    def generate_surface_points_sides(self, method="fast"):
+    def generate_surface_points_sides(self):
         surface_data = []
         for ii in range(len(self.z_vals) - 1):
             nurb_profile_stack = self.nurb_profile_stacks[ii]
@@ -144,23 +138,21 @@ class GearToNurbs:
                     )
                 )
             else:
-                if method == "fast":
-                    sol2, points2, weights2 = self.solve_surface_fast(
-                        points_combined, n_points_vert=self.n_points_vert
-                    )
-                else:
-                    sol2, points_init, weights_init = self.solve_surface_fast(
-                        points_combined, n_points_vert=self.n_points_vert
-                    )
-                    init_data = np.concatenate(
-                        [points_init, weights_init[:, :, np.newaxis]], axis=2
-                    )
-                    sol2, points2, weights2, t = self.solve_surface(
-                        points_combined,
-                        n_points_vert=self.n_points_vert,
-                        t_weight=0.01,
-                        init_points=init_data,
-                    )
+
+                # fast solver assumes t values are evenly distributed
+                sol2, points_init, weights_init = self.solve_surface_fast(
+                    points_combined, n_points_vert=self.n_points_vert
+                )
+                init_data = np.concatenate(
+                    [points_init, weights_init[:, :, np.newaxis]], axis=2
+                )
+                # regular solver treats t values as unknowns
+                sol2, points2, weights2, t = self.solve_surface(
+                    points_combined,
+                    n_points_vert=self.n_points_vert,
+                    t_weight=0.01,
+                    init_points=init_data,
+                )
 
                 surface_data.append(
                     NurbSurfaceData(

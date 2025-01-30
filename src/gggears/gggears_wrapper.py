@@ -581,7 +581,6 @@ class InvoluteGear(GearInfoMixin):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method="slow",
         )
         return self.builder.part_transformed
 
@@ -1238,19 +1237,14 @@ class HelicalRingGear(InvoluteGear):
         twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
         if twist_angle < PI / 16:
             n_vert = 3
-            method = "fast"
         elif twist_angle < PI / 2:
             n_vert = 4
-            method = "slow"
         else:
-            # 5 points tend to crash the OCT fuse with the slow option
             n_vert = 5
-            method = "fast"
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method=method,
         )
         return self.builder.part_transformed
 
@@ -1691,7 +1685,6 @@ class CycloidGear(GearInfoMixin):
             self.gearcore,
             n_points_hz=4,
             n_points_vert=n_vert,
-            method="slow",
         )
         return self.builder.part_transformed
 

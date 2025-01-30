@@ -53,11 +53,6 @@ class GearBuilder(GearToNurbs):
         Example: for a 3-point spline and oversampling of 3, the unkown point is the
         middle one, the number of evaluations are the 2 end points + 3 in the middle,
         so 5 in total.
-    method : str, optional
-        Selector between "fast" and "slow" conversion method for NURBS surfaces. The
-        fast method uses evenly distributed t-values in the vertical direction, while
-        the slow method considers t values unknowns and solves for them.
-        The default is slow.
     """
 
     def __init__(
@@ -66,7 +61,6 @@ class GearBuilder(GearToNurbs):
         n_points_hz: int = 4,
         n_points_vert: int = 4,
         oversampling_ratio: float = 3,
-        method: str = "slow",
         side_surface_extension_ratio: float = 0.01,
     ):
         if gear.cone.cone_angle == 0:
@@ -77,7 +71,6 @@ class GearBuilder(GearToNurbs):
                 n_points_hz=n_points_hz,
                 n_points_vert=n_points_vert,
                 oversampling_ratio=oversampling_ratio,
-                convertmethod=method,
             )
             bot_cover = self.generate_cover(
                 self.nurb_profile_stacks[0][0], self.gear_stacks[0][0]
@@ -105,15 +98,14 @@ class GearBuilder(GearToNurbs):
                 n_points_hz=n_points_hz,
                 n_points_vert=n_points_vert,
                 oversampling_ratio=oversampling_ratio,
-                convertmethod=method,
             )
             side_surfaces = self.gen_side_surfaces()
             # restore original z_vals
             self.gear.z_vals = z_vals_save
             # parameters of ref_solid depend on accurate (original) z_vals
             ref_solid = self.gen_ref_solid()
+            # cut ref solid by side_surfaces
             if bd.__version__ > "0.8.0":
-                # cut ref solid by side_surfaces
                 split_result = ref_solid.split(
                     tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
                 ).solids()
@@ -121,6 +113,7 @@ class GearBuilder(GearToNurbs):
                 split_result = ref_solid.split(
                     tool=bd.Shell(side_surfaces), keep=bd.Keep.BOTH
                 ).solids()
+
             if len(split_result) < 2:
                 raise RuntimeError(
                     "Split operation of blank solid via gear surfaces failed."
@@ -170,6 +163,10 @@ class GearBuilder(GearToNurbs):
 
         if self.gear.tooth_param.inside_teeth:
             r_o_face = r_o_cone.faces().sort_by(bd.Axis.Z)[1]
+            if bd.__version__ > "0.8.0":
+                split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
+            else:
+                split_result = ref_solid.split(r_o_face, keep=bd.Keep.BOTH).solids()
             if bd.__version__ > "0.8.0":
                 split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
             else:

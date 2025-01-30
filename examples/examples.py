@@ -272,7 +272,6 @@ def fishbone_bevels():
         gear=gear_base,
         n_points_vert=4,
         n_points_hz=4,
-        method="slow",
         oversampling_ratio=2.5,
     )
 
