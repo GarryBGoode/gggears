@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6 import QtWebEngineCore
 import gggears as gg
 from ocp_vscode import show, set_port, Camera, set_defaults
 
@@ -58,6 +59,9 @@ class ViewerWindow(QFrame):
         layout = QVBoxLayout()
         layout.addWidget(self.webview)
         self.setLayout(layout)
+        self.webview.page().settings().setAttribute(
+            QtWebEngineCore.QWebEngineSettings.WebAttribute.ShowScrollBars, False
+        )
 
 
 class InputArgPanel(QWidget):
@@ -109,11 +113,19 @@ class InputArgPanel(QWidget):
                     input_widget.setSingleStep(0.1)
                     input_widget.setRange(-1000, 1000)
                     input_widget.setDecimals(3)
-                    input_widget.valueChanged.connect(
-                        lambda val, k=key: self.update_dict(k, val)
-                    )
-                    if value != inspect.Parameter.empty:
-                        input_widget.setValue(value)
+                    if "angle" in key:
+                        input_widget.setDecimals(1)
+                        input_widget.valueChanged.connect(
+                            lambda val, k=key: self.update_dict(k, val * gg.PI / 180)
+                        )
+                        if value != inspect.Parameter.empty:
+                            input_widget.setValue(value / gg.PI * 180)
+                    else:
+                        input_widget.valueChanged.connect(
+                            lambda val, k=key: self.update_dict(k, val)
+                        )
+                        if value != inspect.Parameter.empty:
+                            input_widget.setValue(value)
 
             layout.addWidget(label)
             layout.addWidget(input_widget)
