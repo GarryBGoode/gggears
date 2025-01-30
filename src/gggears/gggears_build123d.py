@@ -112,10 +112,15 @@ class GearBuilder(GearToNurbs):
             self.gear.z_vals = z_vals_save
             # parameters of ref_solid depend on accurate (original) z_vals
             ref_solid = self.gen_ref_solid()
-            # cut ref solid by side_surfaces
-            split_result = ref_solid.split(
-                tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
-            ).solids()
+            if bd.__version__ > "0.8.0":
+                # cut ref solid by side_surfaces
+                split_result = ref_solid.split(
+                    tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
+                ).solids()
+            else:
+                split_result = ref_solid.split(
+                    tool=bd.Shell(side_surfaces), keep=bd.Keep.BOTH
+                ).solids()
             if len(split_result) < 2:
                 raise RuntimeError(
                     "Split operation of blank solid via gear surfaces failed."
@@ -165,7 +170,10 @@ class GearBuilder(GearToNurbs):
 
         if self.gear.tooth_param.inside_teeth:
             r_o_face = r_o_cone.faces().sort_by(bd.Axis.Z)[1]
-            split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
+            if bd.__version__ > "0.8.0":
+                split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
+            else:
+                split_result = ref_solid.split(r_o_face, keep=bd.Keep.BOTH).solids()
             split_result.sort(key=lambda x: x.volume)
             ref_solid = split_result[0]
 
