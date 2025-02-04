@@ -399,8 +399,10 @@ class GearToothConicGenerator(GearToothGenerator):
                 (RIGHT * self.pitch_radius)
             )
             axis = np.cross(p0 / np.linalg.norm(p0), OUT)
+            t_a_axis = OUT * h - p0
+            t_a_axis /= np.linalg.norm(t_a_axis)
             rot_ta = scp_Rotation.from_rotvec(
-                -p0 / np.linalg.norm(p0) * self.tooth_angle
+                t_a_axis * self.tooth_angle * np.sign(gamma)
             )
             axis = rot_ta.apply(axis)
 
