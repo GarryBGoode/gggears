@@ -754,8 +754,8 @@ def fit_bezier_hermite_quadratic(target_curve: Curve):
     points = np.zeros((3, 3))
     points[0] = target_curve(0)
     points[2] = target_curve(1)
-    d1 = np.linalg.norm(target_curve.derivative(0, 1, delta=1e-4) / 3)
-    d2 = np.linalg.norm(target_curve.derivative(1, -1, delta=1e-4) / 3)
+    d1 = target_curve.derivative(0, 1, delta=1e-4) / 3
+    d2 = target_curve.derivative(1, -1, delta=1e-4) / 3
     # rooting is probably overkill but I don't want to think harder
     sol = root(
         lambda x: points[0] + x[0] * d1 - points[2] - x[1] * d2,
@@ -1344,7 +1344,9 @@ class SphericalInvoluteCurve(Curve):
 
     @property
     def center(self):
-        return (np.sqrt(self.R**2 - self.r**2) + self.z_offs) * OUT
+        return (
+            np.sqrt(self.R**2 - self.r**2) * np.sign(self.c_sphere) + self.z_offs
+        ) * OUT
 
     @property
     def center_sphere(self):

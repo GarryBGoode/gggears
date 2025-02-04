@@ -60,7 +60,10 @@ class GearPolarTransform(ConicData):
         if self.cone_angle == 0:
             return xyz_to_cylindrical(point)
         else:
-            point = xyz_to_spherical(point, center=self.center)
+
+            z_comp = np.array([1, 1, np.sign(self.cone_angle)])
+
+            point = xyz_to_spherical(point * z_comp, center=self.center * z_comp)
             # R theta phi in spherical
             # quasi r = (PI/2-phi) * self.R
             # theta = theta
@@ -87,20 +90,25 @@ class GearPolarTransform(ConicData):
         if self.cone_angle == 0:
             return cylindrical_to_xyz(point)
         else:
+            z_comp = np.array([1, 1, np.sign(self.cone_angle)])
             if point.ndim == 1:
                 point2 = np.array(
-                    [self.R - point[2], point[1], PI / 2 - point[0] / self.R]
+                    [
+                        (self.R - point[2]),
+                        point[1],
+                        PI / 2 - point[0] / self.R,
+                    ]
                 )
-                return spherical_to_xyz(point2, center=self.center)
+                return spherical_to_xyz(point2, center=self.center * z_comp) * z_comp
             else:
                 point2 = np.array(
                     [
-                        self.R - point[:, 2],
+                        (self.R - point[:, 2]),
                         point[:, 1],
                         PI / 2 - point[:, 0] / self.R,
                     ]
                 ).transpose()
-                return spherical_to_xyz(point2, center=self.center)
+                return spherical_to_xyz(point2, center=self.center * z_comp) * z_comp
 
 
 @dataclasses.dataclass
@@ -1038,3 +1046,19 @@ def calc_mesh_orientation(
         rot_ax = normalize_vector(np.cross(target_dir_norm, gear2.transform.z_axis))
         rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
         return rot1.as_matrix() @ gear2.transform.orientation
+
+
+def ref_curve_2_param(z, gear: Gear, ref_curve: crv.Curve) -> RecipeKeyParams:
+    t = (z - gear.z_vals[0]) / (gear.z_vals[1] - gear.z_vals[0])
+    p0 = ref_curve(t)
+    polar_res = xyz_to_cylindrical(p0)
+    scale = polar_res[0] / (gear.tooth_param.num_teeth / 2)
+    center = polar_res[2] * OUT
+    angle = polar_res[1]
+    diff = normalize_vector((ref_curve(t + DELTA)) - (ref_curve(t - DELTA)))
+    p1 = normalize_vector(np.array([p0[0], p0[1], 0]))
+    gamma = angle_between_vector_and_plane(diff, p1)
+    if np.dot(diff, p1) > 0:
+        gamma = -gamma
+
+    return RecipeKeyParams(gamma, center[2], angle, scale)

@@ -346,8 +346,8 @@ class ConicData:
     @property
     def spherical_radius(self):
         """Radius of the sphere that is concentric with the cone and contains the base
-        circle."""
-        return self.base_radius / np.sin(self.gamma) * self.transform.scale
+        circle. Always positive."""
+        return np.abs(self.base_radius / np.sin(self.gamma) * self.transform.scale)
 
     # shorthands
     @property
@@ -423,3 +423,19 @@ class GearToothConicGenerator(GearToothGenerator):
                     p0=p0, center=OUT * h, angle=0.1, axis=axis
                 )
             )
+
+
+@dataclasses.dataclass
+class RecipeKeyParams:
+    gamma: float
+    h: float
+    angle: float
+    scale: float
+
+    @property
+    def center(self):
+        return self.h * OUT
+
+    @property
+    def cone_angle(self):
+        return self.gamma * 2

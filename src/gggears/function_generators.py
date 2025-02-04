@@ -159,7 +159,7 @@ def involute_sphere(t, r=1, C=0.5, angle=0, v_offs=ORIGIN, z_offs=0):
 
         R = 1 / np.abs(C)
         Csig = np.sign(C)
-        gamma = r / R * t
+        phi = r / R * t
         # to keep similarity to circle involute for small conic angles (beta~0) this rotatoin of v_offs is needed.
         v1 = scp_Rotation.from_euler("y", -PI / 2 * Csig).apply(v_offs) + R * RIGHT
         # v1 = v_offs + R*RIGHT
@@ -168,11 +168,11 @@ def involute_sphere(t, r=1, C=0.5, angle=0, v_offs=ORIGIN, z_offs=0):
         # z_center = np.cos(beta) * R * OUT  * Csig
         z_center = np.sqrt(R**2 - r**2) * OUT * Csig
         rot_y0 = scp_Rotation.from_euler("y", (PI / 2 - beta) * Csig)
-        rot_z0 = scp_Rotation.from_euler("z", -gamma)
+        rot_z0 = scp_Rotation.from_euler("z", -phi)
 
         rot_chain = rot_z * rot_y0 * rot_z0
         rot_chain2 = scp_Rotation.from_euler(
-            "zyz", [-gamma, (PI / 2 - beta) * Csig, t + angle]
+            "zyz", [-phi, (PI / 2 - beta) * Csig, t + angle]
         )
         v2 = rot_chain.apply(v1) + z_center + z_offs * OUT
         return v2
