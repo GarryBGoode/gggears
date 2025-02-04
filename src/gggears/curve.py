@@ -907,6 +907,11 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
     else:
         if isinstance(input_curve, NurbCurve):
             return input_curve
+        elif isinstance(input_curve, TransformedCurve):
+            transform = input_curve.transform_method
+            convert = convert_curve_nurbezier(input_curve.target_curve, **kwargs)
+            convert.apply_transform(transform)
+            return convert
         elif isinstance(input_curve, LineCurve):
             bz_points = np.array([input_curve(0), input_curve(1)])
             bz_weights = np.ones((2))

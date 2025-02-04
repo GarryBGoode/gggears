@@ -319,6 +319,9 @@ class ConicData:
 
     cone_angle: float = 0
     base_radius: float = 1
+    transform: TransformData = dataclasses.field(
+        default_factory=lambda: TransformData()
+    )
 
     @property
     def gamma(self):
@@ -326,16 +329,25 @@ class ConicData:
 
     @property
     def height(self):
-        return self.base_radius / np.tan(self.gamma)
+        return self.base_radius / np.tan(self.gamma) * self.transform.scale
 
     @property
     def center(self):
         """Spherical center (tip) of the cone."""
-        return OUT * self.height
+        return apply_transform(
+            OUT * self.base_radius / np.tan(self.gamma), self.transform
+        )
+
+    @property
+    def center_base(self):
+        """Center of the base circle of the cone."""
+        return apply_transform(ORIGIN, self.transform)
 
     @property
     def spherical_radius(self):
-        return self.base_radius / np.sin(self.gamma)
+        """Radius of the sphere that is concentric with the cone and contains the base
+        circle."""
+        return self.base_radius / np.sin(self.gamma) * self.transform.scale
 
     # shorthands
     @property

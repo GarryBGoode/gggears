@@ -97,7 +97,7 @@ class GearToNurbs:
             )
             gear_stack_loc = [
                 gg.GearRefProfileExtended.from_refprofile(
-                    self.gear.curve_gen_at_z(z), self.gear.cone
+                    self.gear.curve_gen_at_z(z), self.gear.shape_recipe(z).cone
                 )
                 for z in z_tweens
             ]

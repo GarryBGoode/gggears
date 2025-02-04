@@ -30,6 +30,7 @@ class GearPolarTransform(ConicData):
     def __init__(self, cone_angle=0, base_radius=1):
         self.cone_angle = cone_angle
         self.base_radius = base_radius
+        self.transform = TransformData()
 
     def __call__(self, point):
         return self.polar_transform(point)
@@ -787,8 +788,8 @@ def default_gear_recipe(
     tooth_generator.pitch_intersect_angle = pitch_angle / 4
     return GearProfileRecipe(
         tooth_generator=tooth_generator,
-        cone=ConicData(base_radius=rp_ref, cone_angle=cone_angle),
-        limits=ToothLimitParam(),
+        cone=ConicDataRecipe(base_radius=rp_ref, cone_angle=cone_angle),
+        limits=ToothLimitParamRecipe(),
         pitch_angle=teeth_data.pitch_angle,
         transform=GearTransformRecipe(
             scale=lambda z: 1 * (1 - z * 2 * np.sin(gamma) / teeth_data.num_teeth),
@@ -870,6 +871,28 @@ class Gear:
 
     def curve_gen_at_z(self, z):
         return generate_reference_profile(self.shape_recipe(z))
+
+    def sphere_data_at_z(self, z):
+        # trf1 = self.transform
+        # trf2 = self.shape_recipe(z).transform
+        # trf = trf1 * trf2
+        # cone = self.shape_recipe(z).cone
+
+        # center0 = cone.center
+        # center = apply_gear_transform(center0, trf)
+        # R = trf.scale * cone.R
+        cone = self.cone_at_z(z)
+        center = cone.center
+        R = cone.R
+        return center, R
+
+    def cone_at_z(self, z):
+        trf1 = self.transform
+        trf2 = self.shape_recipe(z).transform
+        trf = trf1 * trf2
+        cone = self.shape_recipe(z).cone
+        cone.transform = trf
+        return cone
 
     def boundary_at_z(self, z, continuous=True):
         if continuous:
