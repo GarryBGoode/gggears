@@ -36,6 +36,10 @@ def angle_between_vector_and_plane(v, plane_normal):
         return angle_between_vectors(v_plane, v)
 
 
+def project_vector_to_plane(v, plane_normal):
+    return v - np.dot(v, plane_normal) * plane_normal
+
+
 def angle_of_vector_in_xy(v):
     return np.arctan2(v[1], v[0])
 

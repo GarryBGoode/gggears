@@ -1,5 +1,7 @@
 from gggears.gggears_base_classes import *
 from gggears.function_generators import *
+from gggears import curve as crv
+from gggears.defs import *
 from scipy.optimize import root
 
 
@@ -277,22 +279,35 @@ def generate_undercut_curve(
         )
 
     sol1 = root(
-        lambda t: np.dot(undercut_curve(t[0]), undercut_curve(t[0])) - pitch_radius**2,
-        [0.5],
+        lambda t: np.dot(undercut_curve(t[0]), undercut_curve(t[0]))
+        - (pitch_radius * 1.0) ** 2,
+        [1],
     )
+    if sol1.x[0] > 0:
+        undercut_curve.set_end_on(sol1.x[0])
+    else:
+        pass  ## debug
     # undercut_curve.set_end_on(sol1.x[0])
     return undercut_curve
 
 
-def trim_involute_undercut(
-    tooth_curve, undercut_curve, guess=(0.5, 1)
-) -> crv.CurveChain:
+def trim_involute_undercut(tooth_curve, undercut_curve, guess=(1, 1)) -> crv.CurveChain:
     """Find the intersection and trim the tooth curve (involute curve)
     with undercut curve."""
+
     sol = crv.find_curve_intersect(tooth_curve, undercut_curve, guess=guess)
+
+    if not sol.success:
+        sol = crv.find_curve_intersect(
+            tooth_curve,
+            undercut_curve,
+            guess=guess,
+            method=crv.IntersectMethod.MINDISTANCE,
+        )
 
     tooth_curve.set_start_on(sol.x[0])
     undercut_curve.set_end_on(sol.x[1])
+
     return crv.CurveChain(undercut_curve, tooth_curve)
 
 

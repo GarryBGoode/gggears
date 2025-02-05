@@ -430,7 +430,7 @@ class RecipeKeyParams:
     gamma: float
     h: float
     angle: float
-    scale: float
+    radius: float
 
     @property
     def center(self):

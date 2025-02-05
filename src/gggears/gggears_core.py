@@ -780,8 +780,7 @@ class FilletDataRecipe(FilletParam, ZFunctionMixin):
 def default_gear_recipe(
     teeth_data: GearToothParam,
     tooth_generator: GearToothConicGenerator,
-    module: float = 1,
-    cone_angle=0,
+    cone_angle: float = 0,
 ) -> GearProfileRecipe:
     """This creates the default recipe for a 3D gear tooth profile.
 
@@ -802,6 +801,53 @@ def default_gear_recipe(
         transform=GearTransformRecipe(
             scale=lambda z: 1 * (1 - z * 2 * np.sin(gamma) / teeth_data.num_teeth),
             center=lambda z: 1 * z * OUT * np.cos(gamma),
+        ),
+        fillet=FilletDataRecipe(),
+    )
+
+
+def gear_recipe_from_curve(
+    teeth_data: GearToothParam,
+    tooth_generator: GearToothConicGenerator,
+    ref_curve: crv.Curve,
+    ref_curve_scaling_function: Callable = lambda t: t,
+    gamma_rounding: float = DELTA,
+) -> GearProfileRecipe:
+    """This creates a recipe for a 3D gear based on a reference curve that defines
+    the path of 1 tooth."""
+    rp_ref = teeth_data.num_teeth / 2
+    pitch_angle = 2 * PI / teeth_data.num_teeth
+
+    def centerfunc(z):
+        return ref_curve_2_param(ref_curve_scaling_function(z), ref_curve).center
+
+    def gammafunc(z):
+        gamma_val = ref_curve_2_param(ref_curve_scaling_function(z), ref_curve).gamma
+        if gamma_rounding == 0:
+            return gamma_val
+        else:
+            return np.round(gamma_val / gamma_rounding) * gamma_rounding
+
+    def anglefunc(z):
+        return ref_curve_2_param(ref_curve_scaling_function(z), ref_curve).angle
+
+    def scalefunc(z):
+        return (
+            ref_curve_2_param(ref_curve_scaling_function(z), ref_curve).radius / rp_ref
+        )
+
+    tooth_generator.pitch_radius = rp_ref
+    tooth_generator.cone_angle = lambda z: gammafunc(z) * 2
+    tooth_generator.pitch_intersect_angle = pitch_angle / 4
+    return GearProfileRecipe(
+        tooth_generator=tooth_generator,
+        cone=ConicDataRecipe(base_radius=rp_ref, cone_angle=lambda z: gammafunc(z) * 2),
+        limits=ToothLimitParamRecipe(),
+        pitch_angle=teeth_data.pitch_angle,
+        transform=GearTransformRecipe(
+            scale=scalefunc,
+            center=centerfunc,
+            angle=anglefunc,
         ),
         fillet=FilletDataRecipe(),
     )
@@ -832,23 +878,41 @@ class Gear:
         else:
             self.tooth_param = tooth_param
         if cone is None:
-            self.cone = ConicData()
-        else:
-            self.cone = cone
-        self.cone.base_radius = tooth_param.num_teeth / 2
+            cone = ConicData()
+        cone.base_radius = self.tooth_param.num_teeth / 2
         if shape_recipe is None:
-            self.shape_recipe = default_gear_recipe(
-                teeth_data=tooth_param,
+            z_copy = copy.deepcopy(z_vals)
+            self.ref_curve_scaler = lambda z: (z) / (z_copy[-1] - z_copy[0])
+            p0 = RIGHT * self.tooth_param.num_teeth / 2
+            gamma_rot = scp_Rotation.from_euler("y", -cone.gamma)
+            p1 = p0 + gamma_rot.apply(OUT * (z_copy[-1] - z_copy[0]))
+            self.ref_curve = crv.LineCurve(p0=p0, p1=p1)
+            self.shape_recipe = gear_recipe_from_curve(
+                teeth_data=self.tooth_param,
                 tooth_generator=self.tooth_generator,
-                module=module,
-                cone_angle=self.cone.cone_angle,
+                ref_curve=self.ref_curve,
+                ref_curve_scaling_function=self.ref_curve_scaler,
             )
+            if cone.gamma == 0:
+                self.shape_recipe.cone.cone_angle = 0
+                self.shape_recipe.tooth_generator.cone_angle = 0
+
+            # self.shape_recipe = default_gear_recipe(
+            #     teeth_data=tooth_param,
+            #     tooth_generator=self.tooth_generator,
+            #     module=module,
+            #     cone_angle=self.cone.cone_angle,
+            # )
         else:
             self.shape_recipe = shape_recipe
         if transform is None:
             self.transform = GearTransform(scale=self.module)
         else:
             self.transform = transform
+
+    @property
+    def cone(self):
+        return self.shape_recipe(0).cone
 
     @property
     def rp(self):
@@ -1048,17 +1112,18 @@ def calc_mesh_orientation(
         return rot1.as_matrix() @ gear2.transform.orientation
 
 
-def ref_curve_2_param(z, gear: Gear, ref_curve: crv.Curve) -> RecipeKeyParams:
-    t = (z - gear.z_vals[0]) / (gear.z_vals[1] - gear.z_vals[0])
+def ref_curve_2_param(t, ref_curve: crv.Curve) -> RecipeKeyParams:
+    """Calculate key parameters of a gear tooth profile recipe based on a reference
+    curve. Consider the reference curve the path of 1 tooth."""
     p0 = ref_curve(t)
     polar_res = xyz_to_cylindrical(p0)
-    scale = polar_res[0] / (gear.tooth_param.num_teeth / 2)
+    radius = polar_res[0]
     center = polar_res[2] * OUT
     angle = polar_res[1]
-    diff = normalize_vector((ref_curve(t + DELTA)) - (ref_curve(t - DELTA)))
-    p1 = normalize_vector(np.array([p0[0], p0[1], 0]))
-    gamma = angle_between_vector_and_plane(diff, p1)
-    if np.dot(diff, p1) > 0:
-        gamma = -gamma
 
-    return RecipeKeyParams(gamma, center[2], angle, scale)
+    diff = xyz_to_cylindrical(ref_curve(t + DELTA)) - xyz_to_cylindrical(
+        ref_curve(t - DELTA)
+    )
+    gamma = np.arctan2(-diff[0], diff[2])
+
+    return RecipeKeyParams(gamma, center[2], angle, radius)

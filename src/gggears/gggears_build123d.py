@@ -568,11 +568,18 @@ def arc_to_b123d(arc: crv.ArcCurve) -> bd.Edge:
         bd.Intrinsic.XYZ,
     )
 
+    if arc2.angle < 0:
+        start = arc2.angle * 180 / PI
+        end = 0
+    else:
+        start = 0
+        end = arc2.angle * 180 / PI
+
     bd_arc = bd.Edge.make_circle(
         radius=arc2.radius,
         plane=bd.Plane(loc),
-        start_angle=0,
-        end_angle=arc2.angle * 180 / PI,
+        start_angle=start,
+        end_angle=end,
     )
     return bd_arc
 
