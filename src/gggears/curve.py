@@ -361,6 +361,11 @@ class CurveChain(Curve):
     def active(self, value):
         self._active = value
 
+    @property
+    def active_list(self):
+        """List of active statuses of the curves in the chain."""
+        return [curve.active for curve in self.curves]
+
     def update_lengths(self):
         for curve in self.curves:
             if curve.active:
@@ -1511,6 +1516,13 @@ class NURBSCurve(CurveChain):
             self.curves[0].points[0] = midpoints
             self.curves[-1].weights[-1] = midweights
             self.curves[0].weights[0] = midweights
+
+    def update_inactive_continuity(self):
+        for k in range(len(self.curves)):
+            if not self.curves[k].active:
+                p = self(self.get_t_for_index(k)[0])
+                for j in range(self.curves[k].points.shape[0]):
+                    self.curves[k].points[j] = p
 
     @classmethod
     def from_points(cls, points, knots, weights=None, active=True):
