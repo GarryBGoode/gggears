@@ -867,7 +867,7 @@ class Gear:
         cone: ConicData = None,
     ):
         self.module = module
-        self.z_vals = z_vals
+        self.z_vals = z_vals.astype(float)
         if tooth_generator is None:
             # it is updated in the default recipe
             self.tooth_generator = GearToothConicGenerator()
@@ -897,12 +897,6 @@ class Gear:
                 self.shape_recipe.cone.cone_angle = 0
                 self.shape_recipe.tooth_generator.cone_angle = 0
 
-            # self.shape_recipe = default_gear_recipe(
-            #     teeth_data=tooth_param,
-            #     tooth_generator=self.tooth_generator,
-            #     module=module,
-            #     cone_angle=self.cone.cone_angle,
-            # )
         else:
             self.shape_recipe = shape_recipe
         if transform is None:
