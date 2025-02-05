@@ -178,6 +178,9 @@ class GearBuilder(GearToNurbs):
             r_o_0, r_o_1, h_o, plane=(bd.Plane.XY).offset(c_o_0[2])
         )
 
+        if isinstance(ref_solid, bd.ShapeList):
+            ref_solid = ref_solid.sort_by_distance(np2v((c_o_0 + c_o_1) / 2))[0]
+
         if gearcopy.tooth_param.inside_teeth:
             r_o_face = r_o_cone.faces().sort_by(bd.Axis.Z)[1]
             if bd.__version__ > "0.8.0":

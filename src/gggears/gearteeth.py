@@ -291,7 +291,9 @@ def generate_undercut_curve(
     return undercut_curve
 
 
-def trim_involute_undercut(tooth_curve, undercut_curve, guess=(1, 1)) -> crv.CurveChain:
+def trim_involute_undercut(
+    tooth_curve: crv.CurveChain, undercut_curve: crv.Curve, guess=(1, 1)
+) -> crv.CurveChain:
     """Find the intersection and trim the tooth curve (involute curve)
     with undercut curve."""
 
@@ -303,6 +305,13 @@ def trim_involute_undercut(tooth_curve, undercut_curve, guess=(1, 1)) -> crv.Cur
             undercut_curve,
             guess=guess,
             method=crv.IntersectMethod.MINDISTANCE,
+        )
+    ps = tooth_curve.get_length_portions()
+    if sol.x[0] < ps[1]:
+        # undercut intersecting the involute-extension line is unlikely,
+        # try again with a different guess
+        sol = crv.find_curve_intersect(
+            tooth_curve, undercut_curve, guess=sol.x[:2] + np.array([0.2, 0.2])
         )
 
     tooth_curve.set_start_on(sol.x[0])
