@@ -1879,3 +1879,193 @@ class LineOfAction:
                 p1=center2 + rotate_vector(-diff_vector_unit, -alpha) * rb2,
             )
             return line1, line2
+
+
+class InvoluteRack:
+    """Class for generating an involute rack.
+
+    Parameters
+    ----------
+    number_of_teeth: int
+        Number of teeth of the gear.
+    height: float, optional
+        Height of the gear. Default is 1.0.
+    center: np.ndarray, optional
+        Center reference-point of the gear. Default is ORIGIN.
+    offset: float, optional
+        Linear offset (progress) of the rack. 1 offset would move the rack 1 tooth over.
+        Default is 0.
+    module: float, optional
+        Module of the gear. Default is 1.0.
+    root_fillet: float, optional
+        Root fillet radius coefficient. Default is 0.0.
+    tip_fillet: float, optional
+        Tip fillet radius coefficient. Default is 0.0.
+    tip_truncation: float, optional
+        Tip truncation coefficient. Default is 0.1. This parameter is used to truncate
+        the tip of the gear, should it reach a sharp point due to profile shift or
+        addendum parameter.
+    addendum_coefficient: float, optional
+        Addendum height coefficient. Default is 1.0.
+    dedendum_coefficient: float, optional
+        Dedendum height coefficient. Default is 1.2.
+    helix_angle: float, optional
+        Helix angle of the gear in radians. Default is 0.
+    backlash: float, optional
+        Backlash coefficient. Default is 0.
+    crowning: float, optional
+        Crowning coefficient. Default is 0.
+        Crowning reduces tooth width near the top and bottom face, resulting in a
+        barrel-like tooth shape. It is used to reduce axial alignment errors.
+        A value of 100 will result in a tooth flank displacement
+        of 0.1 module, or a reduction of tooth width by 0.2 module near the top and
+        bottom face, while tooth width remains nominal in the middle of the tooth.
+
+    Methods
+    -------
+    build_part()
+        Builds and returns a build123d Part object of the rack.
+
+    Examples
+    --------
+
+    >>> rack = InvoluteRack(number_of_teeth=12)
+    >>> rack_part = rack.build_part()
+    >>> isinstance(rack_part, Part)
+    True
+
+    """
+
+    def __init__(
+        self,
+        number_of_teeth: int = 16,
+        height: float = 1.0,
+        pressure_angle: float = 20 * PI / 180,
+        position: np.ndarray = ORIGIN,
+        offset: float = 0,
+        orientation: np.ndarray = UNIT3X3,
+        module: float = 1.0,
+        root_fillet: float = 0.0,
+        tip_fillet: float = 0.0,
+        tip_truncation: float = 0.1,
+        addendum_coefficient: float = 1.0,
+        dedendum_coefficient: float = 1.2,
+        helix_angle: float = 0,
+        backlash: float = 0,
+        crowning: float = 0,
+    ):
+        self.number_of_teeth = number_of_teeth
+        self.height = height
+        self.pressure_angle = pressure_angle
+        self.position = position
+        self.orientation = orientation
+        self.offset = offset
+        self.module = module
+        self.root_fillet = root_fillet
+        self.tip_fillet = tip_fillet
+        self.tip_truncation = tip_truncation
+        self.addendum_coefficient = addendum_coefficient
+        self.dedendum_coefficient = dedendum_coefficient
+        self.helix_angle = helix_angle
+        self.backlash = backlash
+        self.crowning = crowning
+
+    def build_part(self) -> Part:
+        """Creates the build123d Part object of the rack.
+
+        Returns
+        -------
+        Part"""
+
+        ref_point_a = RIGHT * self.addendum_coefficient + DOWN * (
+            PI / 4 - np.tan(self.pressure_angle) * self.addendum_coefficient
+        )
+
+        ref_point_d = LEFT * self.dedendum_coefficient + DOWN * (
+            PI / 4 + np.tan(self.pressure_angle) * self.dedendum_coefficient
+        )
+
+        ref_point_a_mirror = ref_point_a * np.array([1, -1, 1])
+        ref_point_d_mirror = ref_point_d * np.array([1, -1, 1])
+
+        ref_point_c = DOWN * PI / 2 + LEFT * self.dedendum_coefficient
+        ref_point_c_mirror = ref_point_c * np.array([1, -1, 1])
+
+        ref_point_o = ref_point_c + LEFT
+        ref_point_o2 = ref_point_c_mirror + LEFT
+
+        loc_offs = bd.Pos([0, PI / 2 * ((self.number_of_teeth + 1) % 2), 0])
+        locs = bd.GridLocations(0, PI, 1, self.number_of_teeth)
+        self.part = bd.extrude(
+            bd.Face.fuse(
+                *(
+                    loc_offs
+                    * locs
+                    * bd.make_face(
+                        bd.Polyline(
+                            ref_point_d_mirror,
+                            ref_point_a_mirror,
+                            ref_point_a,
+                            ref_point_d,
+                            ref_point_c,
+                            ref_point_o,
+                            ref_point_o2,
+                            ref_point_c_mirror,
+                            ref_point_d_mirror,
+                        )
+                    )
+                )
+            ),
+            amount=self.height / self.module,
+        )
+        # self.part = rack_part.part
+        # self.part = self.part.translate(UP * ((self.number_of_teeth + 1) % 2) * PI / 2)
+        self.part_transformed = self.part.translate(self.offset * UP * PI)
+        self.part_transformed = self.part_transformed.scale(self.module)
+        rot1 = scp_Rotation.from_matrix(self.orientation)
+        degrees = rot1.as_euler("zyx", degrees=True)
+        self.part_transformed = (
+            bd.Rotation(
+                Z=degrees[2], Y=degrees[1], X=degrees[0], ordering=bd.Extrinsic.ZYX
+            )
+            * self.part_transformed
+        )
+        self.part_transformed = self.part_transformed.translate(self.position)
+
+        return self.part_transformed
+
+    def mesh_to(
+        self, gear: "InvoluteGear", target_dir: np.ndarray = RIGHT, offset: float = 0
+    ):
+        """Aligns this rack to a gear object.
+
+        Arguments
+        ---------
+        other: InvoluteGear
+            The other gear object to align to.
+        target_dir: np.ndarray
+            The direction in which this rack should be placed in relation to the other
+            gear.
+            Should be a unit vector. Default is RIGHT (x).
+        offset: float
+            Amount of teeth to be offset in the rack direction.
+            Default is 0 which results the center of the rack positioned to the gear.
+        """
+        #
+        # mult from right: vector in gear's coordinate orientation
+        angle_of_target_dir = angle_of_vector_in_xy(
+            target_dir @ gear.gearcore.transform.orientation
+        )
+        phase = ((angle_of_target_dir - gear.angle) / gear.pitch_angle) % 1
+
+        self.offset = (phase + 0.5) % 1 + offset
+        target_dir_proj = normalize_vector(
+            project_vector_to_plane(target_dir, gear.gearcore.transform.z_axis)
+        )
+        self.orientation = (
+            gear.gearcore.transform.orientation
+            @ scp_Rotation.from_euler("z", PI + angle_of_target_dir).as_matrix()
+        )
+        self.position = (
+            gear.gearcore.transform.center + target_dir_proj * gear.pitch_radius
+        )

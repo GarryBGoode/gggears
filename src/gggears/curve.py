@@ -1087,6 +1087,11 @@ class LineCurve(Curve):
         self.t2s_lookup["s"] = np.array([0, 1])
         self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 
+    def transform(self, transform: callable) -> "ArcCurve":
+        p0 = transform(self.p0)
+        p1 = transform(self.p1)
+        return LineCurve(p0, p1, active=self.active)
+
 
 class ArcCurve(Curve):
     """Class to represent an arc as a Curve."""

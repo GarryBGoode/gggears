@@ -303,6 +303,27 @@ class GearToothParam:
 
 
 @dataclasses.dataclass
+class RackToothParam:
+    num_teeth: int = 16
+
+    @property
+    def pitch(self):
+        # Pitch is the distance between tooth flanks.
+        # By convention, module is considered 1 on this level.
+        return PI
+
+    @property
+    def num_teeth_act(self):
+        """Not implemented for racks, but added here for compatibility"""
+        return self.num_teeth
+
+    @property
+    def inside_teeth(self):
+        """Not implemented for racks, but added here for compatibility"""
+        return False
+
+
+@dataclasses.dataclass
 class ToothLimitParam:
     """Dataclass for radial limiting coefficients (addendum, dedendum, etc.).
 
@@ -373,6 +394,45 @@ class GearRefCircles:
         self.r_a_curve.center = value
         self.r_d_curve.center = value
         self.r_o_curve.center = value
+
+
+@dataclasses.dataclass
+class RackRefLines:
+    """Data class for rack reference lines as Curve objects.
+
+    Attributes
+    ----------
+    a_line : crv.LineCurve
+        Addendum line.
+    p_line : crv.LineCurve
+        Pitch line.
+    d_line : crv.LineCurve
+        Dedendum line.
+    o_line : crv.LineCurve
+        Other side line for closing the rack.
+    """
+
+    a_line: crv.LineCurve
+    p_line: crv.LineCurve
+    d_line: crv.LineCurve
+    o_line: crv.LineCurve
+
+    @property
+    def center(self):
+        """Center of the pitch line."""
+        return (self.p_line.p0 + self.p_line.p1) / 2
+
+    @center.setter
+    def center(self, value):
+        diff = value - self.center
+        self.a_line.p0 += diff
+        self.a_line.p1 += diff
+        self.p_line.p0 += diff
+        self.p_line.p1 += diff
+        self.d_line.p0 += diff
+        self.d_line.p1 += diff
+        self.o_line.p0 += diff
+        self.o_line.p1 += diff
 
 
 @dataclasses.dataclass
@@ -485,6 +545,27 @@ class GearToothConicGenerator(GearToothGenerator):
                     p0=p0, center=OUT * h, angle=0.1, axis=axis
                 )
             )
+
+
+class RackToothGenerator(ZFunctionMixin):
+    def __init__(
+        self,
+        tooth_width: float = PI / 2,
+        pitch: float = PI,
+        tooth_angle: float = 20 * PI / 180,
+    ):
+        self.pitch = pitch
+        self.tooth_width = tooth_width
+        self.tooth_angle = tooth_angle
+
+    def generate_tooth_curve(self) -> crv.Curve:
+        p0 = RIGHT
+        rot_ta = scp_Rotation.from_euler("z", self.tooth_angle)
+        dp = rot_ta.apply(p0)
+
+        return crv.CurveChain(
+            crv.LineCurve(p0=DOWN * PI / 4 - dp / 2, p1=DOWN * PI / 4 + dp / 2)
+        )
 
 
 @dataclasses.dataclass

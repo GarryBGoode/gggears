@@ -166,6 +166,28 @@ def generate_reference_circles(
     return GearRefCircles(ra_circle, rp_circle, rd_circle, ro_circle)
 
 
+def generate_reference_lines(
+    limitparam: ToothLimitParam,
+) -> RackRefLines:
+    pitch_line = crv.LineCurve(p0=UP, p1=DOWN)
+    addendum_line = crv.LineCurve(
+        p0=UP + RIGHT * limitparam.h_a, p1=UP + RIGHT * limitparam.h_a
+    )
+    dedendum_line = crv.LineCurve(
+        p0=UP - RIGHT * limitparam.h_d, p1=UP - RIGHT * limitparam.h_d
+    )
+    outside_line = crv.LineCurve(
+        p0=UP - RIGHT * limitparam.h_o, p1=UP - RIGHT * limitparam.h_o
+    )
+
+    return RackRefLines(
+        a_line=addendum_line,
+        d_line=dedendum_line,
+        o_line=outside_line,
+        p_line=pitch_line,
+    )
+
+
 def apply_tip_reduction(
     tooth_curve: crv.CurveChain,
     addendum_height: float,
