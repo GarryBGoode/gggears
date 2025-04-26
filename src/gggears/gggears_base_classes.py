@@ -86,8 +86,19 @@ class TransformData:
                 orientation=self.orientation @ other.orientation,
                 scale=self.scale * other.scale,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        return TransformData(
+            center=-inv_orient @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+        )
 
 
 def apply_transform(points: np.ndarray, data: TransformData) -> np.ndarray:
@@ -117,6 +128,27 @@ class Transform(TransformData):
 
     def __call__(self, points) -> np.ndarray:
         return apply_transform(points, self)
+
+    def __mul__(self, other):
+        if isinstance(other, TransformData):
+            return Transform(
+                center=self.center + self.orientation @ other.center * self.scale,
+                orientation=self.orientation @ other.orientation,
+                scale=self.scale * other.scale,
+            )
+        elif isinstance(other, np.ndarray):
+            return apply_transform(other, self)
+        else:
+            return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        return Transform(
+            center=-inv_orient @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+        )
 
 
 @dataclasses.dataclass
@@ -159,8 +191,21 @@ class GearTransformData(TransformData):
                 scale=self.scale * other.scale,
                 angle=self.angle + other.angle,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_gear_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        inv_angle = scp_Rotation.from_euler("z", -self.angle).as_matrix()
+        return GearTransformData(
+            center=-inv_orient @ inv_angle @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+            angle=-self.angle,
+        )
 
 
 def apply_gear_transform(points: np.ndarray, data: GearTransformData) -> np.ndarray:
@@ -182,13 +227,30 @@ class GearTransform(GearTransformData):
     def __mul__(self, other):
         if isinstance(other, GearTransformData):
             return GearTransform(
-                center=self.center + self.orientation @ other.center * self.scale,
+                center=self.center
+                + self.orientation
+                @ scp_Rotation.from_euler("z", self.angle).as_matrix()
+                @ other.center
+                / self.scale,
                 orientation=self.orientation @ other.orientation,
                 scale=self.scale * other.scale,
                 angle=self.angle + other.angle,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_gear_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation
+        inv_angle = scp_Rotation.from_euler("z", self.angle).as_matrix()
+        return GearTransform(
+            center=-self.center @ inv_orient @ inv_angle / self.scale,
+            orientation=inv_orient.transpose(),
+            scale=1 / self.scale,
+            angle=-self.angle,
+        )
 
 
 @dataclasses.dataclass
@@ -431,6 +493,7 @@ class RecipeKeyParams:
     h: float
     angle: float
     radius: float
+    beta: float
 
     @property
     def center(self):

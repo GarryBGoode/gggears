@@ -548,34 +548,35 @@ class InvoluteGear(GearInfoMixin):
             ),
         )
 
-    def build_part(self) -> Part:
+    def build_part(self, n_vert=None) -> Part:
         """Creates the build123d Part object of the gear. This may take several seconds.
 
         Returns
         -------
         Part"""
-        max_angle = np.max(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+        if n_vert is None:
+            max_angle = np.max(
+                self.gearcore.shape_recipe.transform.angle(
+                    np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+                )
             )
-        )
-        min_angle = np.min(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+            min_angle = np.min(
+                self.gearcore.shape_recipe.transform.angle(
+                    np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+                )
             )
-        )
 
-        twist_angle = np.abs(max_angle - min_angle)
+            twist_angle = np.abs(max_angle - min_angle)
 
-        if self.inputparam.crowning == 0 and self.beta == 0:
-            n_vert = 2
-        elif twist_angle > PI / 6:
-            n_vert = 3 + int(twist_angle / (PI / 6))
-        else:
-            if self.cone_angle == 0:
-                n_vert = 3
+            if self.inputparam.crowning == 0 and self.beta == 0:
+                n_vert = 2
+            elif twist_angle > PI / 6:
+                n_vert = 3 + int(twist_angle / (PI / 6))
             else:
-                n_vert = 4
+                if self.cone_angle == 0:
+                    n_vert = 3
+                else:
+                    n_vert = 4
 
         self.builder = GearBuilder(
             self.gearcore,

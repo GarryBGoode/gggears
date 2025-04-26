@@ -1119,5 +1119,6 @@ def ref_curve_2_param(t, ref_curve: crv.Curve) -> RecipeKeyParams:
         ref_curve(t - DELTA)
     )
     gamma = np.arctan2(-diff[0], diff[2])
+    beta = np.arctan2(diff[1] * radius, np.sqrt(diff[2] ** 2 + diff[0] ** 2))
 
-    return RecipeKeyParams(gamma, center[2], angle, radius)
+    return RecipeKeyParams(gamma, center[2], angle, radius, beta)

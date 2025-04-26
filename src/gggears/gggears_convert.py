@@ -79,7 +79,9 @@ class GearToNurbs:
                 gearprofile = gear_stack_loc[k]
 
                 NURB_profile = gearprofile_to_nurb(
-                    gearprofile, n_points=self.n_points_hz
+                    gearprofile,
+                    n_points=self.n_points_hz,
+                    oversamp_ratio=self.oversamp_ratio,
                 )
 
                 nurb_stack.append(NURB_profile)
@@ -116,9 +118,14 @@ class GearToNurbs:
                         for curve in nurb_profile_stack[k]
                         .profile_closed.copy()
                         .get_curves()
-                        if curve.active
                     ]
                 )
+                # nurb.idx_active_max
+                nurb.update_inactive_continuity()
+                for curve in nurb.curves:
+                    if not curve.active:
+                        curve.active = True
+                # nurb.enforce_continuity()
                 stack.append(nurb)
 
             # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
@@ -281,11 +288,17 @@ class NurbSurfaceData:
             yield {"points": points, "weights": weights}
 
 
-def gearprofile_to_nurb(gearprofile: gg.GearRefProfile, n_points=4, oversamp_ratio=2):
+def gearprofile_to_nurb(
+    gearprofile: gg.GearRefProfile,
+    n_points=4,
+    oversamp_ratio=2,
+    pad_inactive: bool = False,
+):
     tooth_nurb = crv.convert_curve_nurbezier(
         gearprofile.tooth_curve.get_curves(),
         n_points=n_points,
         samp_ratio=oversamp_ratio,
+        skip_inactive=not pad_inactive,
     )
 
     tooth_mirror_nurb = tooth_nurb.copy()
@@ -294,56 +307,56 @@ def gearprofile_to_nurb(gearprofile: gg.GearRefProfile, n_points=4, oversamp_rat
 
     if isinstance(gearprofile, gg.GearRefProfileExtended):
         NURB_profile = gg.GearRefProfileExtended(
-            ra_curve=crv.convert_curve_nurbezier(gearprofile.ra_curve).apply_transform(
-                gearprofile.transform
-            ),
-            rd_curve=crv.convert_curve_nurbezier(gearprofile.rd_curve).apply_transform(
-                gearprofile.transform
-            ),
-            ro_curve=crv.convert_curve_nurbezier(gearprofile.ro_curve).apply_transform(
-                gearprofile.transform
-            ),
+            ra_curve=crv.convert_curve_nurbezier(
+                gearprofile.ra_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
+            rd_curve=crv.convert_curve_nurbezier(
+                gearprofile.rd_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
+            ro_curve=crv.convert_curve_nurbezier(
+                gearprofile.ro_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
             tooth_curve=tooth_nurb.apply_transform(gearprofile.transform),
             tooth_curve_mirror=tooth_mirror_nurb.apply_transform(gearprofile.transform),
             pitch_angle=gearprofile.pitch_angle,
             # unity transform since the transform is directly applied to the curves
             transform=gg.GearTransform(),
             ro_connector_0=crv.convert_curve_nurbezier(
-                gearprofile.ro_connector_0
+                gearprofile.ro_connector_0, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             ro_connector_1=crv.convert_curve_nurbezier(
-                gearprofile.ro_connector_1
+                gearprofile.ro_connector_1, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             ro_connector_2=crv.convert_curve_nurbezier(
-                gearprofile.ro_connector_2
+                gearprofile.ro_connector_2, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             rd_connector=crv.convert_curve_nurbezier(
-                gearprofile.rd_connector
+                gearprofile.rd_connector, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             ra_connector=crv.convert_curve_nurbezier(
-                gearprofile.ra_connector
+                gearprofile.ra_connector, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             ro_curve_tooth=crv.convert_curve_nurbezier(
-                gearprofile.ro_curve_tooth
+                gearprofile.ro_curve_tooth, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             ro_curve_dedendum=crv.convert_curve_nurbezier(
-                gearprofile.ro_curve_dedendum
+                gearprofile.ro_curve_dedendum, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
             tooth_centerline=crv.convert_curve_nurbezier(
-                gearprofile.tooth_centerline
+                gearprofile.tooth_centerline, skip_inactive=not pad_inactive
             ).apply_transform(gearprofile.transform),
         )
     elif isinstance(gearprofile, gg.GearRefProfile):
         NURB_profile = gg.GearRefProfile(
-            ra_curve=crv.convert_curve_nurbezier(gearprofile.ra_curve).apply_transform(
-                gearprofile.transform
-            ),
-            rd_curve=crv.convert_curve_nurbezier(gearprofile.rd_curve).apply_transform(
-                gearprofile.transform
-            ),
-            ro_curve=crv.convert_curve_nurbezier(gearprofile.ro_curve).apply_transform(
-                gearprofile.transform
-            ),
+            ra_curve=crv.convert_curve_nurbezier(
+                gearprofile.ra_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
+            rd_curve=crv.convert_curve_nurbezier(
+                gearprofile.rd_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
+            ro_curve=crv.convert_curve_nurbezier(
+                gearprofile.ro_curve, skip_inactive=not pad_inactive
+            ).apply_transform(gearprofile.transform),
             tooth_curve=tooth_nurb.apply_transform(gearprofile.transform),
             tooth_curve_mirror=tooth_mirror_nurb.apply_transform(gearprofile.transform),
             pitch_angle=gearprofile.pitch_angle,
