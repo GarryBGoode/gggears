@@ -2058,7 +2058,7 @@ class InvoluteRack:
         )
         phase = ((angle_of_target_dir - gear.angle) / gear.pitch_angle) % 1
 
-        self.offset = (phase + 0.5) % 1 + offset
+        self.offset = (phase) % 1 - 0.5 + offset
         target_dir_proj = normalize_vector(
             project_vector_to_plane(target_dir, gear.gearcore.transform.z_axis)
         )
@@ -2066,6 +2066,6 @@ class InvoluteRack:
             gear.gearcore.transform.orientation
             @ scp_Rotation.from_euler("z", PI + angle_of_target_dir).as_matrix()
         )
-        self.position = (
-            gear.gearcore.transform.center + target_dir_proj * gear.pitch_radius
+        self.position = gear.gearcore.transform.center + target_dir_proj * (
+            gear.pitch_radius + gear.inputparam.profile_shift * gear.module
         )
