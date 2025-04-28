@@ -1994,6 +1994,8 @@ class InvoluteRack:
         ref_point_o = ref_point_c + LEFT
         ref_point_o2 = ref_point_c_mirror + LEFT
 
+        extrude_dir = scp_Rotation.from_euler("x", self.helix_angle).apply(OUT)
+
         loc_offs = bd.Pos([0, PI / 2 * ((self.number_of_teeth + 1) % 2), 0])
         locs = bd.GridLocations(0, PI, 1, self.number_of_teeth)
         self.part = bd.extrude(
@@ -2016,7 +2018,8 @@ class InvoluteRack:
                     )
                 )
             ),
-            amount=self.height / self.module,
+            dir=extrude_dir,
+            amount=self.height / self.module / np.cos(self.helix_angle),
         )
         # self.part = rack_part.part
         # self.part = self.part.translate(UP * ((self.number_of_teeth + 1) % 2) * PI / 2)
