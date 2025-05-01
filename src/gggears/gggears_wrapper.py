@@ -1887,39 +1887,35 @@ class InvoluteRack:
     Parameters
     ----------
     number_of_teeth: int
-        Number of teeth of the gear.
+        Number of teeth of the rack.
     height: float, optional
-        Height of the gear. Default is 1.0.
+        Height or width of the rack. Default is 1.0.
     center: np.ndarray, optional
-        Center reference-point of the gear. Default is ORIGIN.
+        Position of the reference-point (~middle, if no offset is used) of the rack.
+        Default is ORIGIN.
     offset: float, optional
         Linear offset (progress) of the rack. 1 offset would move the rack 1 tooth over.
         Default is 0.
     module: float, optional
-        Module of the gear. Default is 1.0.
+        Module of the rack. Default is 1.0.
     root_fillet: float, optional
         Root fillet radius coefficient. Default is 0.0.
     tip_fillet: float, optional
         Tip fillet radius coefficient. Default is 0.0.
-    tip_truncation: float, optional
-        Tip truncation coefficient. Default is 0.1. This parameter is used to truncate
-        the tip of the gear, should it reach a sharp point due to profile shift or
-        addendum parameter.
     addendum_coefficient: float, optional
         Addendum height coefficient. Default is 1.0.
     dedendum_coefficient: float, optional
         Dedendum height coefficient. Default is 1.2.
-    helix_angle: float, optional
-        Helix angle of the gear in radians. Default is 0.
+    beta_angle: float, optional
+        Slant angle of the rack in radians, used for supporting helical gears.
+        Default is 0.
     backlash: float, optional
-        Backlash coefficient. Default is 0.
-    crowning: float, optional
-        Crowning coefficient. Default is 0.
-        Crowning reduces tooth width near the top and bottom face, resulting in a
-        barrel-like tooth shape. It is used to reduce axial alignment errors.
-        A value of 100 will result in a tooth flank displacement
-        of 0.1 module, or a reduction of tooth width by 0.2 module near the top and
-        bottom face, while tooth width remains nominal in the middle of the tooth.
+        Backlash coefficient. Reduces tooth width to add backlash. Default is 0.
+
+    Notes
+    -----
+    Racks are not yet integrated into the class hierarchy of gggears like InvoluteGears.
+    This would take substantial effort, abstraction and refactoring.
 
     Methods
     -------
@@ -1929,8 +1925,11 @@ class InvoluteRack:
     Examples
     --------
 
-    >>> rack = InvoluteRack(number_of_teeth=12)
+    >>> rack = InvoluteRack(number_of_teeth=20,module=2.0,height=3,root_fillet=0.2)
+    >>> gear = InvoluteGear(number_of_teeth=12,module=2.0,height=3)
+    >>> rack.mesh_to(gear, target_dir=DOWN)
     >>> rack_part = rack.build_part()
+    >>> gear_part = gear.build_part()
     >>> isinstance(rack_part, Part)
     True
 
@@ -1947,12 +1946,10 @@ class InvoluteRack:
         module: float = 1.0,
         root_fillet: float = 0.0,
         tip_fillet: float = 0.0,
-        tip_truncation: float = 0.1,
         addendum_coefficient: float = 1.0,
         dedendum_coefficient: float = 1.2,
-        helix_angle: float = 0,
+        beta_angle: float = 0,
         backlash: float = 0,
-        crowning: float = 0,
     ):
         self.number_of_teeth = number_of_teeth
         self.height = height
@@ -1963,12 +1960,65 @@ class InvoluteRack:
         self.module = module
         self.root_fillet = root_fillet
         self.tip_fillet = tip_fillet
-        self.tip_truncation = tip_truncation
         self.addendum_coefficient = addendum_coefficient
         self.dedendum_coefficient = dedendum_coefficient
-        self.helix_angle = helix_angle
+        self.beta_angle = beta_angle
         self.backlash = backlash
-        self.crowning = crowning
+
+    def _build_ref_tooth_face(self) -> bd.Face:
+        # defautl construction convention: module = 1
+        # if module = 1 then linear pitch is PI
+        # since gear circumference is D*PI = module * Z * PI = Z*pitch
+        # pitch = module*PI = PI
+        pitch = PI
+
+        # Set up reference points for trapezoidal rack profile
+        ref_point_a_0 = RIGHT * self.addendum_coefficient
+        ref_point_a = RIGHT * self.addendum_coefficient + DOWN * (
+            pitch / 4
+            - np.tan(self.pressure_angle) * self.addendum_coefficient
+            - self.backlash
+        )
+        ref_point_d = LEFT * self.dedendum_coefficient + DOWN * (
+            pitch / 4
+            + np.tan(self.pressure_angle) * self.dedendum_coefficient
+            - self.backlash
+        )
+        ref_point_c = DOWN * pitch / 2 + LEFT * self.dedendum_coefficient
+        ref_point_o = ref_point_c + LEFT
+
+        ref_point_c_mirror = ref_point_c * np.array([1, -1, 1])
+        ref_point_o2 = ref_point_c_mirror + LEFT
+
+        ref_line_1 = bd.Polyline(ref_point_a_0, ref_point_a, ref_point_d, ref_point_c)
+
+        # Apply fillets
+        if self.tip_fillet > 0:
+            ref_line_2 = bd.fillet(
+                radius=self.tip_fillet,
+                objects=ref_line_1.vertices().sort_by(bd.Axis.Y)[-2],
+            )
+        else:
+            ref_line_2 = ref_line_1
+        if self.root_fillet > 0:
+            ref_line_2 = bd.fillet(
+                radius=self.root_fillet,
+                objects=ref_line_2.vertices().sort_by(bd.Axis.Y)[1],
+            )
+
+        # Create face object of 1 tooth
+        tooth_face = bd.make_face(
+            [
+                bd.Wire(ref_line_2),
+                bd.Wire(
+                    bd.Polyline(
+                        ref_point_c, ref_point_o, ref_point_o2, ref_point_c_mirror
+                    )
+                ),
+                bd.Wire(ref_line_2.mirror(bd.Plane.XZ)),
+            ]
+        )
+        return tooth_face
 
     def build_part(self) -> Part:
         """Creates the build123d Part object of the rack.
@@ -1977,53 +2027,26 @@ class InvoluteRack:
         -------
         Part"""
 
-        ref_point_a = RIGHT * self.addendum_coefficient + DOWN * (
-            PI / 4 - np.tan(self.pressure_angle) * self.addendum_coefficient
-        )
+        pitch = PI
+        tooth_face = self._build_ref_tooth_face()
 
-        ref_point_d = LEFT * self.dedendum_coefficient + DOWN * (
-            PI / 4 + np.tan(self.pressure_angle) * self.dedendum_coefficient
-        )
+        # Extrusion direction may not be at right angle due to beta (helix) angle
+        extrude_dir = scp_Rotation.from_euler("x", self.beta_angle).apply(OUT)
 
-        ref_point_a_mirror = ref_point_a * np.array([1, -1, 1])
-        ref_point_d_mirror = ref_point_d * np.array([1, -1, 1])
+        # Position shift so that there is a tooth at the origin
+        loc_shift = bd.Pos([0, pitch / 2 * ((self.number_of_teeth + 1) % 2), 0])
+        # Grid for the teeth
+        locs = bd.GridLocations(0, pitch, 1, self.number_of_teeth)
 
-        ref_point_c = DOWN * PI / 2 + LEFT * self.dedendum_coefficient
-        ref_point_c_mirror = ref_point_c * np.array([1, -1, 1])
-
-        ref_point_o = ref_point_c + LEFT
-        ref_point_o2 = ref_point_c_mirror + LEFT
-
-        extrude_dir = scp_Rotation.from_euler("x", self.helix_angle).apply(OUT)
-
-        loc_offs = bd.Pos([0, PI / 2 * ((self.number_of_teeth + 1) % 2), 0])
-        locs = bd.GridLocations(0, PI, 1, self.number_of_teeth)
+        # Create the rack 3D part
         self.part = bd.extrude(
-            bd.Face.fuse(
-                *(
-                    loc_offs
-                    * locs
-                    * bd.make_face(
-                        bd.Polyline(
-                            ref_point_d_mirror,
-                            ref_point_a_mirror,
-                            ref_point_a,
-                            ref_point_d,
-                            ref_point_c,
-                            ref_point_o,
-                            ref_point_o2,
-                            ref_point_c_mirror,
-                            ref_point_d_mirror,
-                        )
-                    )
-                )
-            ),
+            bd.Face.fuse(*(loc_shift * locs * tooth_face)),
             dir=extrude_dir,
-            amount=self.height / self.module / np.cos(self.helix_angle),
+            amount=self.height / self.module / np.cos(self.beta_angle),
         )
-        # self.part = rack_part.part
-        # self.part = self.part.translate(UP * ((self.number_of_teeth + 1) % 2) * PI / 2)
-        self.part_transformed = self.part.translate(self.offset * UP * PI)
+
+        # Apply transformations to position, orient and scale the rack
+        self.part_transformed = self.part.translate(self.offset * UP * pitch)
         self.part_transformed = self.part_transformed.scale(self.module)
         rot1 = scp_Rotation.from_matrix(self.orientation)
         degrees = rot1.as_euler("zyx", degrees=True)
@@ -2072,3 +2095,147 @@ class InvoluteRack:
         self.position = gear.gearcore.transform.center + target_dir_proj * (
             gear.pitch_radius + gear.inputparam.profile_shift * gear.module
         )
+
+
+class HelicalRack(InvoluteRack):
+    """Class for generating rack that meshes with helical gears. Same as involute rack,
+    except the transverse-normal calculations are applied so that the rack meshes with
+    HelicalGear objects.
+
+    Parameters
+    ----------
+    number_of_teeth: int
+        Number of teeth of the rack.
+    height: float, optional
+        Height or width of the rack. Default is 1.0.
+    center: np.ndarray, optional
+        Position of the reference-point (~middle, if no offset is used) of the rack.
+        Default is ORIGIN.
+    offset: float, optional
+        Linear offset (progress) of the rack. 1 offset would move the rack 1 tooth over.
+        Default is 0.
+    module: float, optional
+        Module of the rack. Default is 1.0.
+    root_fillet: float, optional
+        Root fillet radius coefficient. Default is 0.0.
+    tip_fillet: float, optional
+        Tip fillet radius coefficient. Default is 0.0.
+    addendum_coefficient: float, optional
+        Addendum height coefficient. Default is 1.0.
+    dedendum_coefficient: float, optional
+        Dedendum height coefficient. Default is 1.2.
+    helix_angle: float, optional
+        Slant angle of the rack in radians, used for matching helical gears.
+        Default is 0.
+    backlash: float, optional
+        Backlash coefficient. Reduces tooth width to add backlash. Default is 0.
+    herringbone: bool, optional
+        When true, creates a herringbone rack. Default is False.
+
+    Notes
+    -----
+    Racks are not yet integrated into the class hierarchy of gggears like InvoluteGears.
+    This would take substantial effort, abstraction and refactoring.
+
+    Methods
+    -------
+    build_part()
+        Builds and returns a build123d Part object of the rack.
+
+    Examples
+    --------
+
+    >>> rack = HelicalRack(number_of_teeth=20,module=2.0,height=3,helix_angle=0.5)
+    >>> gear = HelicalGear(number_of_teeth=12,module=2.0,height=3,helix_angle=0.5)
+    >>> rack.mesh_to(gear, target_dir=DOWN)
+    >>> rack_part = rack.build_part()
+    >>> gear_part = gear.build_part()
+    >>> isinstance(rack_part, Part)
+    True"""
+
+    def __init__(
+        self,
+        number_of_teeth: int = 16,
+        height: float = 1.0,
+        pressure_angle: float = 20 * PI / 180,
+        position: np.ndarray = ORIGIN,
+        offset: float = 0,
+        orientation: np.ndarray = UNIT3X3,
+        module: float = 1.0,
+        root_fillet: float = 0.0,
+        tip_fillet: float = 0.0,
+        addendum_coefficient: float = 1.0,
+        dedendum_coefficient: float = 1.2,
+        helix_angle: float = 0,
+        backlash: float = 0,
+        herringbone: bool = False,
+    ):
+        self.herringbone = herringbone
+        beta = helix_angle
+        super().__init__(
+            number_of_teeth=number_of_teeth,
+            height=height,
+            beta_angle=helix_angle,
+            position=position,
+            offset=offset,
+            orientation=orientation,
+            module=module / np.cos(beta),
+            root_fillet=root_fillet,
+            tip_fillet=tip_fillet,
+            addendum_coefficient=addendum_coefficient * np.cos(beta),
+            dedendum_coefficient=dedendum_coefficient * np.cos(beta),
+            pressure_angle=np.arctan(np.tan(pressure_angle) / np.cos(beta)),
+            backlash=backlash,
+        )
+
+    def build_part(self) -> Part:
+        """Creates the build123d Part object of the rack.
+
+        Returns
+        -------
+        Part"""
+
+        pitch = PI
+        tooth_face = self.build_ref_tooth_face()
+
+        # Extrusion direction may not be at right angle due to beta (helix) angle
+        extrude_dir = scp_Rotation.from_euler("x", self.beta_angle).apply(OUT)
+
+        # Position shift so that there is a tooth at the origin
+        loc_shift = bd.Pos([0, pitch / 2 * ((self.number_of_teeth + 1) % 2), 0])
+        # Grid for the teeth
+        locs = bd.GridLocations(0, pitch, 1, self.number_of_teeth)
+
+        if not self.herringbone:
+            # Create the rack 3D part
+            self.part = bd.extrude(
+                bd.Face.fuse(*(loc_shift * locs * tooth_face)),
+                dir=extrude_dir,
+                amount=self.height / self.module / np.cos(self.beta_angle),
+            )
+        else:
+            part0 = bd.extrude(
+                bd.Face.fuse(*(loc_shift * locs * tooth_face)),
+                dir=extrude_dir,
+                amount=0.5 * self.height / self.module / np.cos(self.beta_angle),
+            )
+            self.part = part0 + bd.extrude(
+                part0.faces().sort_by(bd.Axis.Z)[-1],
+                dir=extrude_dir * np.array([1, -1, 1]),
+                amount=0.5 * self.height / self.module / np.cos(self.beta_angle),
+            )
+
+        # Apply transformations to position, orient and scale the rack
+        self.part_transformed = self.part.translate(self.offset * UP * pitch)
+        self.part_transformed = self.part_transformed.scale(self.module)
+        rot1 = scp_Rotation.from_matrix(self.orientation)
+        degrees = rot1.as_euler("zyx", degrees=True)
+        self.part_transformed = (
+            bd.Rotation(
+                Z=degrees[2], Y=degrees[1], X=degrees[0], ordering=bd.Extrinsic.ZYX
+            )
+            * self.part_transformed
+        )
+        self.part_transformed = self.part_transformed.translate(self.position)
+
+        return self.part_transformed
