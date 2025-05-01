@@ -2196,7 +2196,7 @@ class HelicalRack(InvoluteRack):
         Part"""
 
         pitch = PI
-        tooth_face = self.build_ref_tooth_face()
+        tooth_face = self._build_ref_tooth_face()
 
         # Extrusion direction may not be at right angle due to beta (helix) angle
         extrude_dir = scp_Rotation.from_euler("x", self.beta_angle).apply(OUT)
