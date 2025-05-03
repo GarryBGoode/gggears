@@ -1890,6 +1890,13 @@ class InvoluteRack:
         Number of teeth of the rack.
     height: float, optional
         Height or width of the rack. Default is 1.0.
+    pressure_angle: float, optional
+        Pressure angle in radians. Default is 20 degrees (converted to radians).
+    position: np.ndarray, optional
+        Position of the rack. Default is ORIGIN.
+    orientation: np.ndarray, optional
+        Orientation of the rack, represented as a 3x3 rotation matrix.
+        Default is unit 3x3.
     center: np.ndarray, optional
         Position of the reference-point (~middle, if no offset is used) of the rack.
         Default is ORIGIN.
@@ -1916,6 +1923,14 @@ class InvoluteRack:
     -----
     Racks are not yet integrated into the class hierarchy of gggears like InvoluteGears.
     This would take substantial effort, abstraction and refactoring.
+
+    Position and orientation behavior: By convention, the reference point of the rack is
+    on a tooth center (on the rack line in the middle of the tooth). For racks with odd
+    number of teeth this is in the exact middle, for even number of teeth, the rack is
+    shifted half pitch upwards.
+    When no position, orientation and offset are given, the reference tooth is
+    positioned on the origin, the tooth pointing in the X direction, the rack
+    spanning the Y axis.
 
     Methods
     -------
@@ -2056,7 +2071,7 @@ class InvoluteRack:
             )
             * self.part_transformed
         )
-        self.part_transformed = self.part_transformed.translate(self.position)
+        self.part_transformed = bd.Part(self.part_transformed.translate(self.position))
 
         return self.part_transformed
 
@@ -2108,6 +2123,13 @@ class HelicalRack(InvoluteRack):
         Number of teeth of the rack.
     height: float, optional
         Height or width of the rack. Default is 1.0.
+    pressure_angle: float, optional
+        Pressure angle in radians. Default is 20 degrees (converted to radians).
+    position: np.ndarray, optional
+        Position of the rack. Default is ORIGIN.
+    orientation: np.ndarray, optional
+        Orientation of the rack, represented as a 3x3 rotation matrix.
+        Default is unit 3x3.
     center: np.ndarray, optional
         Position of the reference-point (~middle, if no offset is used) of the rack.
         Default is ORIGIN.
@@ -2136,6 +2158,14 @@ class HelicalRack(InvoluteRack):
     -----
     Racks are not yet integrated into the class hierarchy of gggears like InvoluteGears.
     This would take substantial effort, abstraction and refactoring.
+
+    Position and orientation behavior: By convention, the reference point of the rack is
+    on a tooth center (on the rack line in the middle of the tooth). For racks with odd
+    number of teeth this is in the exact middle, for even number of teeth, the rack is
+    shifted half pitch upwards.
+    When no position, orientation and offset are given, the reference tooth is
+    positioned on the origin, the tooth pointing in the X direction, the rack
+    spanning the Y axis.
 
     Methods
     -------
@@ -2236,6 +2266,8 @@ class HelicalRack(InvoluteRack):
             )
             * self.part_transformed
         )
-        self.part_transformed = self.part_transformed.translate(self.position)
+        self.part_transformed = bd.Part() + self.part_transformed.translate(
+            self.position
+        )
 
         return self.part_transformed

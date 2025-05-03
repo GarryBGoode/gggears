@@ -141,3 +141,32 @@ The :py:meth:`adapt_cycloid_radii <gggears.gggears_wrapper.CycloidGear.adapt_cyc
     :start-after: [Ex. 8]
     :end-before: [Ex. 8]
 
+
+9. Racks
+---------------------
+
+Create straight racks with the :py:class:`InvoluteRack <gggears.gggears_wrapper.InvoluteRack>` class.
+Racks are developed separately from the gear class structures, so not all features of gears are available for racks.
+Racks can use :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteRack.mesh_to>` function for positioning next to gears, but gears can't mesh_to() racks (missing feature for  now).
+
+.. image:: assets/general_ex9.svg
+    :align: center
+
+.. literalinclude:: examples.py
+    :start-after: [Ex. 9]
+    :end-before: [Ex. 9]
+
+
+10. Helical Racks
+---------------------
+
+The :py:class:`HelicalRack <gggears.gggears_wrapper.HelicalRack>` class can be used to create racks matching to `HelicalGear <gggears.gggears_wrapper.HelicalGear>`  class.
+While :py:class:`InvoluteRack <gggears.gggears_wrapper.InvoluteRack>` class also has beta angle input which corresponds to helical angle,
+the HelicalRack class also accounts for normal-transverse system conversions to directly match the `HelicalGear <gggears.gggears_wrapper.HelicalGear>` class.
+
+.. image:: assets/general_ex10.svg
+    :align: center
+
+.. literalinclude:: examples.py
+    :start-after: [Ex. 10]
+    :end-before: [Ex. 10]
