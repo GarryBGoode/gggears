@@ -1,5 +1,7 @@
 from gggears.gggears_base_classes import *
 from gggears.function_generators import *
+from gggears import curve as crv
+from gggears.defs import *
 from scipy.optimize import root
 
 
@@ -62,7 +64,7 @@ class InvoluteTooth(GearToothConicGenerator):
             return crv.CurveChain(connector_line, involute_curve)
 
         else:
-            R = rp / np.sin(gamma)
+            R = np.abs(rp / np.sin(gamma))
             C_sph = 1 / R  # spherical curvature
 
             def involute_angle_func(x):
@@ -86,7 +88,9 @@ class InvoluteTooth(GearToothConicGenerator):
                 [alpha / 2, rp * np.cos(alpha)],
                 tol=1e-14,
             )
-            involute_curve = crv.SphericalInvoluteCurve(r=base_res.x[1], c_sphere=C_sph)
+            involute_curve = crv.SphericalInvoluteCurve(
+                r=base_res.x[1], c_sphere=C_sph * np.sign(gamma)
+            )
             angle_0 = angle_between_vectors(
                 involute_sphere(base_res.x[0], base_res.x[1], angle=0, C=C_sph)
                 * np.array([1, 1, 0]),
@@ -96,7 +100,7 @@ class InvoluteTooth(GearToothConicGenerator):
             involute_curve.angle = angle_offset
             involute_curve.z_offs = -involute_sphere(
                 base_res.x[0], base_res.x[1], C=C_sph
-            )[2]
+            )[2] * np.sign(gamma)
             sol1 = crv.find_curve_plane_intersect(
                 involute_curve, offset=ORIGIN, plane_normal=UP, guess=1
             )
@@ -106,7 +110,8 @@ class InvoluteTooth(GearToothConicGenerator):
                 p0=involute_curve(0),
                 center=involute_curve.center_sphere,
                 angle=0.1,
-                axis=normalize_vector(np.cross(OUT, involute_curve(0))),
+                axis=normalize_vector(np.cross(OUT, involute_curve(0)))
+                * np.sign(gamma),
             )
             connector_curve.reverse()
 
@@ -166,8 +171,10 @@ class InvoluteUndercutTooth(InvoluteTooth):
             else:
                 return rack_curve(0)
         else:
+            # pitch angle is on the gear
+            # equivalent rotation on rack needs scaling by r/R = sin(gamma)
             plane_normal = scp_Rotation.from_euler(
-                "z", -self.pitch_angle / 2 * np.sin(self.cone_angle / 2)
+                "z", -self.pitch_angle / 2 * np.abs(np.sin(self.cone_angle / 2))
             ).apply(UP)
             sol = crv.find_curve_plane_intersect(
                 rack_curve,
@@ -258,36 +265,58 @@ def generate_undercut_curve(
 
     else:
         gamma = cone_angle / 2
-        R = pitch_radius / np.sin(gamma)
+        R = np.abs(pitch_radius / np.sin(gamma))
         C_sph = 1 / R  # spherical curvature
-        v_offs = scp_Rotation.from_euler("y", PI / 2 * np.sign(C_sph)).apply(
+        v_offs = scp_Rotation.from_euler("y", PI / 2).apply(
             undercut_ref_point - R * RIGHT
-        )
+        ) * np.array([1, 1, np.sign(gamma)])
         undercut_curve = crv.SphericalInvoluteCurve(
             r=pitch_radius,
-            c_sphere=C_sph,
+            c_sphere=C_sph * np.sign(gamma),
             v_offs=v_offs,
             t0=0,
             t1=-1,
         )
 
     sol1 = root(
-        lambda t: np.dot(undercut_curve(t[0]), undercut_curve(t[0])) - pitch_radius**2,
-        [0.5],
+        lambda t: np.dot(undercut_curve(t[0]), undercut_curve(t[0]))
+        - (pitch_radius * 1.0) ** 2,
+        [1],
     )
-    undercut_curve.set_end_on(sol1.x[0])
+    if sol1.x[0] > 0:
+        undercut_curve.set_end_on(sol1.x[0])
+    else:
+        pass  ## debug
+    # undercut_curve.set_end_on(sol1.x[0])
     return undercut_curve
 
 
 def trim_involute_undercut(
-    tooth_curve, undercut_curve, guess=(0.5, 1)
+    tooth_curve: crv.CurveChain, undercut_curve: crv.Curve, guess=(1, 1)
 ) -> crv.CurveChain:
     """Find the intersection and trim the tooth curve (involute curve)
     with undercut curve."""
+
     sol = crv.find_curve_intersect(tooth_curve, undercut_curve, guess=guess)
+
+    if not sol.success:
+        sol = crv.find_curve_intersect(
+            tooth_curve,
+            undercut_curve,
+            guess=guess,
+            method=crv.IntersectMethod.MINDISTANCE,
+        )
+    ps = tooth_curve.get_length_portions()
+    if sol.x[0] < ps[1]:
+        # undercut intersecting the involute-extension line is unlikely,
+        # try again with a different guess
+        sol = crv.find_curve_intersect(
+            tooth_curve, undercut_curve, guess=sol.x[:2] + np.array([0.2, 0.2])
+        )
 
     tooth_curve.set_start_on(sol.x[0])
     undercut_curve.set_end_on(sol.x[1])
+
     return crv.CurveChain(undercut_curve, tooth_curve)
 
 

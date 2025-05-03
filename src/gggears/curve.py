@@ -361,6 +361,11 @@ class CurveChain(Curve):
     def active(self, value):
         self._active = value
 
+    @property
+    def active_list(self):
+        """List of active statuses of the curves in the chain."""
+        return [curve.active for curve in self.curves]
+
     def update_lengths(self):
         for curve in self.curves:
             if curve.active:
@@ -754,8 +759,8 @@ def fit_bezier_hermite_quadratic(target_curve: Curve):
     points = np.zeros((3, 3))
     points[0] = target_curve(0)
     points[2] = target_curve(1)
-    d1 = np.linalg.norm(target_curve.derivative(0, 1, delta=1e-4) / 3)
-    d2 = np.linalg.norm(target_curve.derivative(1, -1, delta=1e-4) / 3)
+    d1 = target_curve.derivative(0, 1, delta=1e-4) / 3
+    d2 = target_curve.derivative(1, -1, delta=1e-4) / 3
     # rooting is probably overkill but I don't want to think harder
     sol = root(
         lambda x: points[0] + x[0] * d1 - points[2] - x[1] * d2,
@@ -907,6 +912,11 @@ def convert_curve_nurbezier(input_curve: Curve, skip_inactive=True, **kwargs):
     else:
         if isinstance(input_curve, NurbCurve):
             return input_curve
+        elif isinstance(input_curve, TransformedCurve):
+            transform = input_curve.transform_method
+            convert = convert_curve_nurbezier(input_curve.target_curve, **kwargs)
+            convert.apply_transform(transform)
+            return convert
         elif isinstance(input_curve, LineCurve):
             bz_points = np.array([input_curve(0), input_curve(1)])
             bz_weights = np.ones((2))
@@ -1076,6 +1086,11 @@ class LineCurve(Curve):
         self.length = np.linalg.norm(self.p1 - self.p0) * np.abs(self.t_1 - self.t_0)
         self.t2s_lookup["s"] = np.array([0, 1])
         self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
+
+    def transform(self, transform: callable) -> "ArcCurve":
+        p0 = transform(self.p0)
+        p1 = transform(self.p1)
+        return LineCurve(p0, p1, active=self.active)
 
 
 class ArcCurve(Curve):
@@ -1339,7 +1354,9 @@ class SphericalInvoluteCurve(Curve):
 
     @property
     def center(self):
-        return (np.sqrt(self.R**2 - self.r**2) + self.z_offs) * OUT
+        return (
+            np.sqrt(self.R**2 - self.r**2) * np.sign(self.c_sphere) + self.z_offs
+        ) * OUT
 
     @property
     def center_sphere(self):
@@ -1504,6 +1521,13 @@ class NURBSCurve(CurveChain):
             self.curves[0].points[0] = midpoints
             self.curves[-1].weights[-1] = midweights
             self.curves[0].weights[0] = midweights
+
+    def update_inactive_continuity(self):
+        for k in range(len(self.curves)):
+            if not self.curves[k].active:
+                p = self(self.get_t_for_index(k)[0])
+                for j in range(self.curves[k].points.shape[0]):
+                    self.curves[k].points[j] = p
 
     @classmethod
     def from_points(cls, points, knots, weights=None, active=True):

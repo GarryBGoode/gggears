@@ -23,6 +23,7 @@ import numpy as np
 import time
 import logging
 import warnings
+import copy
 
 
 class GearBuilder(GearToNurbs):
@@ -99,9 +100,10 @@ class GearBuilder(GearToNurbs):
                 n_points_vert=n_points_vert,
                 oversampling_ratio=oversampling_ratio,
             )
-            side_surfaces = self.gen_side_surfaces()
             # restore original z_vals
             self.gear.z_vals = z_vals_save
+            side_surfaces = self.gen_side_surfaces()
+
             # parameters of ref_solid depend on accurate (original) z_vals
             ref_solid = self.gen_ref_solid()
             # cut ref solid by side_surfaces
@@ -119,8 +121,12 @@ class GearBuilder(GearToNurbs):
                     "Split operation of blank solid via gear surfaces failed."
                 )
             # the valid result is the one with the smaller volume out of the 2
-            split_result.sort(key=lambda x: x.volume)
-            self.solid = split_result[0]
+
+            split_result.sort(key=lambda x: x.bounding_box().center().Z)
+            if self.gear.tooth_param.inside_teeth:
+                self.solid = split_result[1]
+            else:
+                self.solid = split_result[0]
 
         self.part = bd.Part() + self.solid
         self.part_transformed = bd.BasePartObject(
@@ -131,26 +137,32 @@ class GearBuilder(GearToNurbs):
         profile0 = self.gear.curve_gen_at_z(self.gear.z_vals[0])
         profile1 = self.gear.curve_gen_at_z(self.gear.z_vals[-1])
 
-        gamma = self.gear.cone.cone_angle / 2
-        Rb = self.gear.tooth_param.num_teeth / 2 / np.sin(gamma)
-        R0 = Rb * self.gear.shape_recipe(self.gear.z_vals[0]).transform.scale
-        h0 = Rb * np.cos(gamma)
-        R1 = Rb * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.scale
-        center = bd.Vector(0, 0, h0)
+        gearcopy = copy.deepcopy(self.gear)
+        gearcopy.transform = GearTransform()
+
+        center0, R0 = gearcopy.sphere_data_at_z(self.gear.z_vals[0])
+        center1, R1 = gearcopy.sphere_data_at_z(self.gear.z_vals[-1])
+        R0 = np.abs(R0)
+        R1 = np.abs(R1)
+
         bottom_angle = (
-            180 / PI * self.gear.shape_recipe(self.gear.z_vals[0]).transform.angle
+            180 / PI * gearcopy.shape_recipe(gearcopy.z_vals[0]).transform.angle
         )
         top_angle = (
-            180 / PI * self.gear.shape_recipe(self.gear.z_vals[-1]).transform.angle
+            180 / PI * gearcopy.shape_recipe(gearcopy.z_vals[-1]).transform.angle
         )
-        ref_solid = bd.Solid.make_sphere(
-            radius=R0, angle1=-90, angle2=90, angle3=360
-        ).rotate(bd.Axis.Z, bottom_angle) - bd.Solid.make_sphere(
-            radius=R1, angle1=-90, angle2=90, angle3=360
-        ).rotate(
-            bd.Axis.Z, top_angle
+        sph1 = (
+            bd.Solid.make_sphere(radius=R0, angle1=-90, angle2=90, angle3=360)
+            .rotate(bd.Axis.Z, bottom_angle)
+            .translate(center0)
         )
-        ref_solid = ref_solid.translate(center)
+        sph2 = (
+            bd.Solid.make_sphere(radius=R1, angle1=-90, angle2=90, angle3=360)
+            .rotate(bd.Axis.Z, top_angle)
+            .translate(center1)
+        )
+        ref_solid = (sph1 + sph2) - sph1.intersect(sph2)
+        ref_solid = ref_solid
 
         c_o_0 = profile0.transform(profile0.ro_curve.center)
         c_o_1 = profile1.transform(profile1.ro_curve.center)
@@ -161,7 +173,10 @@ class GearBuilder(GearToNurbs):
             r_o_0, r_o_1, h_o, plane=(bd.Plane.XY).offset(c_o_0[2])
         )
 
-        if self.gear.tooth_param.inside_teeth:
+        if isinstance(ref_solid, bd.ShapeList):
+            ref_solid = ref_solid.sort_by_distance(np2v((c_o_0 + c_o_1) / 2))[0]
+
+        if gearcopy.tooth_param.inside_teeth:
             r_o_face = r_o_cone.faces().sort_by(bd.Axis.Z)[1]
             if bd.__version__ > "0.8.0":
                 split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
@@ -272,7 +287,9 @@ class GearBuilder(GearToNurbs):
             num_teeth = self.gear.tooth_param.num_teeth_act
             curve = crv.NURBSCurve.from_curve_chain(nurb_stack.profile)
             curve.del_inactive_curves()
-            profile_edge = bd.Edge() + gen_splines(curve)
+            curve.enforce_continuity()
+            splines = gen_splines(curve)
+            profile_edge = bd.Wire(splines)
             splines = bd.Edge() + [
                 profile_edge.rotate(
                     axis=bd.Axis.Z,
@@ -303,14 +320,12 @@ class GearBuilder_old(GearToNurbs):
         n_points_vert=4,
         oversampling_ratio=2.5,
         add_plug=False,
-        method="fast",
     ):
         super().__init__(
             gear=gear,
             n_points_hz=n_points_hz,
             n_points_vert=n_points_vert,
             oversampling_ratio=oversampling_ratio,
-            convertmethod=method,
         )
         surfaces = []
         ro_surfaces = []
@@ -438,7 +453,7 @@ class GearBuilder_old(GearToNurbs):
         logging.log(
             logging.INFO, f"Gear solid fuse time: {time.time()-start:.5f} seconds"
         )
-        self.solid = bd.Part(self.solid).fix()
+        self.solid = bd.BasePartObject(self.solid).fix()
         self.solid_transformed = apply_transform_part(self.solid, self.gear.transform)
         self.part_transformed = self.solid_transformed
 
@@ -541,18 +556,32 @@ def generate_boundary_edges(
 
 def arc_to_b123d(arc: crv.ArcCurve) -> bd.Edge:
     """Converts a gggears ArcCurve to a build123d Edge object."""
+    if (arc.t_0, arc.t_1) != (0, 1):
+        # arc can be extended, better make a new one
+        arc2 = crv.ArcCurve.from_2_point_center(arc.p0, arc.p1, arc.center)
+    else:
+        arc2 = arc
+
     loc = bd.Location(
-        arc.center,
-        [arc.roll * 180 / PI, arc.pitch * 180 / PI, arc.yaw * 180 / PI],
+        arc2.center,
+        [arc2.roll * 180 / PI, arc2.pitch * 180 / PI, arc2.yaw * 180 / PI],
         bd.Intrinsic.XYZ,
     )
 
-    return bd.Edge.make_circle(
-        radius=arc.radius,
+    if arc2.angle < 0:
+        start = arc2.angle * 180 / PI
+        end = 0
+    else:
+        start = 0
+        end = arc2.angle * 180 / PI
+
+    bd_arc = bd.Edge.make_circle(
+        radius=arc2.radius,
         plane=bd.Plane(loc),
-        start_angle=0,
-        end_angle=arc.angle * 180 / PI,
+        start_angle=start,
+        end_angle=end,
     )
+    return bd_arc
 
 
 def line_to_b123d(line: crv.LineCurve) -> bd.Edge:

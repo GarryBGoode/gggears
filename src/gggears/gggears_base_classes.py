@@ -86,8 +86,19 @@ class TransformData:
                 orientation=self.orientation @ other.orientation,
                 scale=self.scale * other.scale,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        return TransformData(
+            center=-inv_orient @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+        )
 
 
 def apply_transform(points: np.ndarray, data: TransformData) -> np.ndarray:
@@ -117,6 +128,27 @@ class Transform(TransformData):
 
     def __call__(self, points) -> np.ndarray:
         return apply_transform(points, self)
+
+    def __mul__(self, other):
+        if isinstance(other, TransformData):
+            return Transform(
+                center=self.center + self.orientation @ other.center * self.scale,
+                orientation=self.orientation @ other.orientation,
+                scale=self.scale * other.scale,
+            )
+        elif isinstance(other, np.ndarray):
+            return apply_transform(other, self)
+        else:
+            return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        return Transform(
+            center=-inv_orient @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+        )
 
 
 @dataclasses.dataclass
@@ -159,8 +191,21 @@ class GearTransformData(TransformData):
                 scale=self.scale * other.scale,
                 angle=self.angle + other.angle,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_gear_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation.transpose()
+        inv_angle = scp_Rotation.from_euler("z", -self.angle).as_matrix()
+        return GearTransformData(
+            center=-inv_orient @ inv_angle @ self.center * self.scale,
+            orientation=inv_orient,
+            scale=1 / self.scale,
+            angle=-self.angle,
+        )
 
 
 def apply_gear_transform(points: np.ndarray, data: GearTransformData) -> np.ndarray:
@@ -182,13 +227,30 @@ class GearTransform(GearTransformData):
     def __mul__(self, other):
         if isinstance(other, GearTransformData):
             return GearTransform(
-                center=self.center + self.orientation @ other.center * self.scale,
+                center=self.center
+                + self.orientation
+                @ scp_Rotation.from_euler("z", self.angle).as_matrix()
+                @ other.center
+                * self.scale,
                 orientation=self.orientation @ other.orientation,
                 scale=self.scale * other.scale,
                 angle=self.angle + other.angle,
             )
+        elif isinstance(other, np.ndarray):
+            return apply_gear_transform(other, self)
         else:
             return NotImplemented
+
+    def invert(self):
+        """Invert the transformation."""
+        inv_orient = self.orientation
+        inv_angle = scp_Rotation.from_euler("z", self.angle).as_matrix()
+        return GearTransform(
+            center=-self.center @ inv_orient @ inv_angle / self.scale,
+            orientation=inv_orient.transpose(),
+            scale=1 / self.scale,
+            angle=-self.angle,
+        )
 
 
 @dataclasses.dataclass
@@ -238,6 +300,27 @@ class GearToothParam:
     def pitch_angle(self):
         """Pitch angle in radians"""
         return 2 * PI / self.num_teeth
+
+
+@dataclasses.dataclass
+class RackToothParam:
+    num_teeth: int = 16
+
+    @property
+    def pitch(self):
+        # Pitch is the distance between tooth flanks.
+        # By convention, module is considered 1 on this level.
+        return PI
+
+    @property
+    def num_teeth_act(self):
+        """Not implemented for racks, but added here for compatibility"""
+        return self.num_teeth
+
+    @property
+    def inside_teeth(self):
+        """Not implemented for racks, but added here for compatibility"""
+        return False
 
 
 @dataclasses.dataclass
@@ -314,11 +397,53 @@ class GearRefCircles:
 
 
 @dataclasses.dataclass
+class RackRefLines:
+    """Data class for rack reference lines as Curve objects.
+
+    Attributes
+    ----------
+    a_line : crv.LineCurve
+        Addendum line.
+    p_line : crv.LineCurve
+        Pitch line.
+    d_line : crv.LineCurve
+        Dedendum line.
+    o_line : crv.LineCurve
+        Other side line for closing the rack.
+    """
+
+    a_line: crv.LineCurve
+    p_line: crv.LineCurve
+    d_line: crv.LineCurve
+    o_line: crv.LineCurve
+
+    @property
+    def center(self):
+        """Center of the pitch line."""
+        return (self.p_line.p0 + self.p_line.p1) / 2
+
+    @center.setter
+    def center(self, value):
+        diff = value - self.center
+        self.a_line.p0 += diff
+        self.a_line.p1 += diff
+        self.p_line.p0 += diff
+        self.p_line.p1 += diff
+        self.d_line.p0 += diff
+        self.d_line.p1 += diff
+        self.o_line.p0 += diff
+        self.o_line.p1 += diff
+
+
+@dataclasses.dataclass
 class ConicData:
     """Dataclass for cone parameters."""
 
     cone_angle: float = 0
     base_radius: float = 1
+    transform: TransformData = dataclasses.field(
+        default_factory=lambda: TransformData()
+    )
 
     @property
     def gamma(self):
@@ -326,16 +451,25 @@ class ConicData:
 
     @property
     def height(self):
-        return self.base_radius / np.tan(self.gamma)
+        return self.base_radius / np.tan(self.gamma) * self.transform.scale
 
     @property
     def center(self):
         """Spherical center (tip) of the cone."""
-        return OUT * self.height
+        return apply_transform(
+            OUT * self.base_radius / np.tan(self.gamma), self.transform
+        )
+
+    @property
+    def center_base(self):
+        """Center of the base circle of the cone."""
+        return apply_transform(ORIGIN, self.transform)
 
     @property
     def spherical_radius(self):
-        return self.base_radius / np.sin(self.gamma)
+        """Radius of the sphere that is concentric with the cone and contains the base
+        circle. Always positive."""
+        return np.abs(self.base_radius / np.sin(self.gamma) * self.transform.scale)
 
     # shorthands
     @property
@@ -399,8 +533,10 @@ class GearToothConicGenerator(GearToothGenerator):
                 (RIGHT * self.pitch_radius)
             )
             axis = np.cross(p0 / np.linalg.norm(p0), OUT)
+            t_a_axis = OUT * h - p0
+            t_a_axis /= np.linalg.norm(t_a_axis)
             rot_ta = scp_Rotation.from_rotvec(
-                -p0 / np.linalg.norm(p0) * self.tooth_angle
+                t_a_axis * self.tooth_angle * np.sign(gamma)
             )
             axis = rot_ta.apply(axis)
 
@@ -409,3 +545,41 @@ class GearToothConicGenerator(GearToothGenerator):
                     p0=p0, center=OUT * h, angle=0.1, axis=axis
                 )
             )
+
+
+class RackToothGenerator(ZFunctionMixin):
+    def __init__(
+        self,
+        tooth_width: float = PI / 2,
+        pitch: float = PI,
+        tooth_angle: float = 20 * PI / 180,
+    ):
+        self.pitch = pitch
+        self.tooth_width = tooth_width
+        self.tooth_angle = tooth_angle
+
+    def generate_tooth_curve(self) -> crv.Curve:
+        p0 = RIGHT
+        rot_ta = scp_Rotation.from_euler("z", self.tooth_angle)
+        dp = rot_ta.apply(p0)
+
+        return crv.CurveChain(
+            crv.LineCurve(p0=DOWN * PI / 4 - dp / 2, p1=DOWN * PI / 4 + dp / 2)
+        )
+
+
+@dataclasses.dataclass
+class RecipeKeyParams:
+    gamma: float
+    h: float
+    angle: float
+    radius: float
+    beta: float
+
+    @property
+    def center(self):
+        return self.h * OUT
+
+    @property
+    def cone_angle(self):
+        return self.gamma * 2

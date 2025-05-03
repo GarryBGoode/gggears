@@ -170,4 +170,47 @@ gear_part_2 = gear2.build_part()
 # [Ex. 8]
 write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, -20, 70))
 
+
+##########################################
+# 9. Rack and Pinion
+# [Ex. 9]
+
+n_gear = 12
+n_rack = 40
+
+gear = SpurGear(number_of_teeth=n_gear, module=2, height=5, profile_shift=0.25)
+rack = InvoluteRack(number_of_teeth=n_rack, module=2, height=5)
+rack.mesh_to(gear, target_dir=LEFT, offset=19)
+gear_part = gear.build_part()
+rack_part = rack.build_part()
+# [Ex. 9]
+write_svg(Compound([gear_part, rack_part]), viewpos=(0, -20, 70))
+
+
+##########################################
+# 10. Helical, Herringbone  Rack and Pinion
+# [Ex. 10]
+
+n_gear = 12
+n_rack = 40
+
+gear = HelicalGear(
+    number_of_teeth=n_gear,
+    module=2,
+    height=25,
+    helix_angle=PI / 3,
+    herringbone=True,
+)
+rack = HelicalRack(
+    number_of_teeth=n_rack,
+    module=2,
+    height=25,
+    helix_angle=PI / 3,
+    herringbone=True,
+)
+rack.mesh_to(gear, target_dir=LEFT, offset=0)
+gear_part = gear.build_part()
+rack_part = rack.build_part()
+# [Ex. 10]
+write_svg(Compound([gear_part, rack_part]), viewpos=(0, -45, 70))
 # show(gear_part_1, gear_part_2)

@@ -43,12 +43,14 @@ Gear positioning and alignment supported.
 
 ![Bevel Gear Example](misc/media/bevelspin3.gif)
 
+Work in progress / partially supported:
+- Racks
+
 Not yet supported:
 
 - Hypoid gears
 - Worm gears
 - Face / crown gears
-- Racks
 
 Planned upcoming other features
 - Planetary drive design
