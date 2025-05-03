@@ -160,9 +160,9 @@ Racks can use :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteRack.mesh_to>
 10. Helical Racks
 ---------------------
 
-The :py:class:`HelicalRack <gggears.gggears_wrapper.HelicalRack>` class can be used to create racks matching to `HelicalGear <gggears.gggears_wrapper.HelicalGear>`  class.
+The :py:class:`HelicalRack <gggears.gggears_wrapper.HelicalRack>` class can be used to create racks matching to :py:class:`HelicalGear <gggears.gggears_wrapper.HelicalGear>`  class.
 While :py:class:`InvoluteRack <gggears.gggears_wrapper.InvoluteRack>` class also has beta angle input which corresponds to helical angle,
-the HelicalRack class also accounts for normal-transverse system conversions to directly match the `HelicalGear <gggears.gggears_wrapper.HelicalGear>` class.
+the HelicalRack class also accounts for normal-transverse system conversions to directly match the :py:class:`HelicalGear <gggears.gggears_wrapper.HelicalGear>` class.
 
 .. image:: assets/general_ex10.svg
     :align: center
