@@ -198,16 +198,13 @@ def bevel_gear():
 
     gear_part_1 = gear1_builder.part
     gear_part_2 = gear2_builder.part
-    return (
-        gear_part_1,
-        gear_part_2,
-        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_p_curve),
-        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_p_curve),
-        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_a_curve),
-        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_a_curve),
-        arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_d_curve),
-        arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_d_curve),
-    )
+    rp_1 = arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_p_curve)
+    rp_2 = arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_p_curve)
+    ra_1 = arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_a_curve)
+    ra_2 = arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_a_curve)
+    rd_1 = arc_to_b123d(gear1.radii_data_gen(gear1.p2z(1)).r_d_curve)
+    rd_2 = arc_to_b123d(gear2.radii_data_gen(gear2.p2z(1)).r_d_curve)
+    return (gear_part_1, gear_part_2, rp_1, rp_2, ra_1, ra_2, rd_1, rd_2)
 
 
 def bevel_chain():
@@ -244,7 +241,7 @@ def fishbone_bevels():
     beta = 0.65
 
     gear_base = Gear(
-        z_vals=[0, 2, 4],
+        z_vals=np.array([0, 2, 4]),
         tooth_param=GearToothParam(num_teeth=num_teeth),
         cone=ConicData(cone_angle=gamma * 2),
         module=m,

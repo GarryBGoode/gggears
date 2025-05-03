@@ -103,9 +103,6 @@ class GearBuilder(GearToNurbs):
             # restore original z_vals
             self.gear.z_vals = z_vals_save
             side_surfaces = self.gen_side_surfaces()
-            # covers = self.generate_shell_spherical(side_surfaces)
-            # side_surfaces.extend(covers)
-            # self.solid = bd.Solid(bd.Shell(side_surfaces))
 
             # parameters of ref_solid depend on accurate (original) z_vals
             ref_solid = self.gen_ref_solid()
@@ -292,7 +289,9 @@ class GearBuilder(GearToNurbs):
             num_teeth = self.gear.tooth_param.num_teeth_act
             curve = crv.NURBSCurve.from_curve_chain(nurb_stack.profile)
             curve.del_inactive_curves()
-            profile_edge = bd.Edge() + gen_splines(curve)
+            curve.enforce_continuity()
+            splines = gen_splines(curve)
+            profile_edge = bd.Wire(splines)
             splines = bd.Edge() + [
                 profile_edge.rotate(
                     axis=bd.Axis.Z,

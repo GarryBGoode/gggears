@@ -231,7 +231,7 @@ class GearTransform(GearTransformData):
                 + self.orientation
                 @ scp_Rotation.from_euler("z", self.angle).as_matrix()
                 @ other.center
-                / self.scale,
+                * self.scale,
                 orientation=self.orientation @ other.orientation,
                 scale=self.scale * other.scale,
                 angle=self.angle + other.angle,

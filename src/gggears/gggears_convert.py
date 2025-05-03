@@ -118,14 +118,9 @@ class GearToNurbs:
                         for curve in nurb_profile_stack[k]
                         .profile_closed.copy()
                         .get_curves()
+                        if curve.active
                     ]
                 )
-                # nurb.idx_active_max
-                nurb.update_inactive_continuity()
-                for curve in nurb.curves:
-                    if not curve.active:
-                        curve.active = True
-                # nurb.enforce_continuity()
                 stack.append(nurb)
 
             # axis 0: vertical, axis 1: horizontal, axis 2: x-y-z-w
@@ -135,6 +130,7 @@ class GearToNurbs:
             points_combined = np.concatenate(
                 [points_asd, weights_asd[:, :, np.newaxis]], axis=2
             )
+
             if self.n_z_tweens == 2:
                 # if only 2 layers exist, no need to solve for the side-surface
                 surface_data.append(
