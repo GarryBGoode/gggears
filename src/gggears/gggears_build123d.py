@@ -122,9 +122,7 @@ class GearBuilder(GearToNurbs):
                 )
             # the valid result is the one with the smaller volume out of the 2
 
-            split_result.sort(
-                key=lambda x: bd.BoundBox.from_topo_ds(x.wrapped).center().Z
-            )
+            split_result.sort(key=lambda x: x.bounding_box().center().Z)
             if self.gear.tooth_param.inside_teeth:
                 self.solid = split_result[1]
             else:
