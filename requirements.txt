@@ -1,6 +1,6 @@
 numpy>=2.0.0
 scipy>=1.10.1
-build123d>=0.9.1
+build123d>=0.8.0
 cadquery-ocp
 pytest
 pytest-xdist
