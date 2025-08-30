@@ -529,16 +529,30 @@ def trim_reference_profile(
     pa1 = tooth_curve(1)
     pa2 = tooth_mirror(0)
     center_a = ((pa1 + pa2) / 2 * np.array([0, 0, 1])) * OUT
-    ra_curve = crv.ArcCurve.from_2_point_center(p0=pa1, p1=pa2, center=center_a)
-    if ra_curve.length < 1e-9:
-        ra_curve.active = False
+    if np.linalg.norm(pa1 - pa2) > 1e-10:
+        ra_curve = crv.ArcCurve.from_2_point_center(p0=pa1, p1=pa2, center=center_a)
+    else:
+        ra_curve = crv.ArcCurve(
+            radius=ref_curves.r_a,
+            angle=0,
+            center=center_a,
+            yaw=np.atan2(pa1[1], pa1[0]),
+            active=False,
+        )
 
     pd1 = tooth_curve(0)
     pd2 = tooth_rotate(1)
     center_d = ((pd1 + pd2) / 2 * np.array([0, 0, 1])) * OUT
-    rd_curve = crv.ArcCurve.from_2_point_center(p0=pd2, p1=pd1, center=center_d)
-    if rd_curve.length < 1e-9:
-        rd_curve.active = False
+    if np.linalg.norm(pd1 - pd2) > 1e-10:
+        rd_curve = crv.ArcCurve.from_2_point_center(p0=pd2, p1=pd1, center=center_d)
+    else:
+        rd_curve = crv.ArcCurve(
+            radius=ref_curves.r_d,
+            angle=0,
+            center=center_d,
+            yaw=np.atan2(pd1[1], pd1[0]),
+            active=False,
+        )
 
     profile = crv.CurveChain(rd_curve, tooth_curve, ra_curve, tooth_mirror)
     angle_0 = np.arctan2(profile(0)[1], profile(0)[0])
