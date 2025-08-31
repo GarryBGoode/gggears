@@ -1097,7 +1097,14 @@ class ArcCurve(Curve):
     """Class to represent an arc as a Curve."""
 
     def __init__(
-        self, radius=1, angle=PI / 2, center=ORIGIN, yaw=0, pitch=0, roll=0, active=True
+        self,
+        radius=1.0,
+        angle=PI / 2,
+        center=ORIGIN,
+        yaw=0,
+        pitch=0,
+        roll=0,
+        active=True,
     ):
         self._radius = radius
         self._angle = angle

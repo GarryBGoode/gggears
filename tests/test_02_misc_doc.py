@@ -59,3 +59,8 @@ def test_doctest():
     # Run doctests and check for failures
     doctest_results = doctest.testmod(m=gg)
     assert doctest_results.failed == 0
+
+
+if __name__ == "__main__":
+    test_example()
+    test_doctest()
