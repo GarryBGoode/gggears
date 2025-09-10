@@ -28,7 +28,6 @@ dev = [
     "pytest-xdist",
     "shapely",
     "matplotlib",
-    "ocp-vscode",
     "flake8",
 ]
 
