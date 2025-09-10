@@ -28,7 +28,8 @@ dev = [
     "pytest-xdist",
     "shapely",
     "matplotlib",
-    "ocp-vscode"
+    "ocp-vscode",
+    "flake8",
 ]
 
 ocp_vscode = [
@@ -42,9 +43,9 @@ extras = [
 ]
 
 all = [
-    "gggears[dev]"
-    "gggears[ocp_vscode]"
-    "gggears[extras]"
+    "gggears[dev]",
+    "gggears[ocp_vscode]",
+    "gggears[extras]",
 ]
 
 [build-system]
