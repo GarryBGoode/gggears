@@ -31,6 +31,22 @@ dev = [
     "ocp-vscode"
 ]
 
+ocp_vscode = [
+    "ocp_vscode",
+]
+
+extras = [
+    "matplotlib",
+    "pyqt6",
+    "PyQt6-WebEngine",
+]
+
+all = [
+    "gggears[dev]"
+    "gggears[ocp_vscode]"
+    "gggears[extras]"
+]
+
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
