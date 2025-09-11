@@ -14,13 +14,15 @@ classifiers = [
 ]
 keywords = ["gears", "CAD", "python"]
 
+dependencies = [
+    "build123d >= 0.9.1",
+    "numpy >= 2, < 3",
+    "scipy >= 1.10.1",
+]
+
+
 [project_urls]
 Homepage = "https://github.com/GarryBGoode/gggears"
-
-[dependencies]
-numpy = "^2.0.0"
-scipy = "^1.10.1"
-build123d = "^0.9.1"
 
 [project.optional-dependencies]
 dev = [
