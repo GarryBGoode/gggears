@@ -555,16 +555,14 @@ class InvoluteGear(GearInfoMixin):
         -------
         Part"""
         if n_vert is None:
-            max_angle = np.max(
-                self.gearcore.shape_recipe.transform.angle(
-                    np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
-                )
+            z_samples = np.linspace(
+                self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20
             )
-            min_angle = np.min(
-                self.gearcore.shape_recipe.transform.angle(
-                    np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
-                )
-            )
+            angle_samples = [
+                self.gearcore.shape_recipe(z).transform.angle for z in z_samples
+            ]
+            max_angle = np.max(angle_samples)
+            min_angle = np.min(angle_samples)
 
             twist_angle = np.abs(max_angle - min_angle)
 
@@ -1042,18 +1040,15 @@ class HelicalGear(InvoluteGear):
             self.gearcore.shape_recipe.transform.angle = herringbone_mod
 
         # correct for too much twist
-        max_angle = np.max(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
-            )
-        )
-        min_angle = np.min(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
-            )
-        )
+        z_samples = np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+        angle_samples = [
+            self.gearcore.shape_recipe(z).transform.angle for z in z_samples
+        ]
+        max_angle = np.max(angle_samples)
+        min_angle = np.min(angle_samples)
 
         twist_angle = np.abs(max_angle - min_angle)
+
         if twist_angle > 2 * PI:
             z_add = int(twist_angle // (2 * PI) * (len(self.gearcore.z_vals) - 1))
             new_z_vals = np.linspace(
@@ -1232,16 +1227,25 @@ class HelicalRingGear(InvoluteGear):
         """:no-index:"""
         return GearToothParam(self.inputparam.number_of_teeth, inside_teeth=True)
 
-    def build_part(self):
+    def build_part(self, n_vert=None) -> Part:
         """:no-index:"""
-        max_zval = np.max(self.gearcore.z_vals[1:] - self.gearcore.z_vals[:-1])
-        twist_angle = np.abs(self.gearcore.shape_recipe.transform.angle(max_zval))
-        if twist_angle < PI / 16:
-            n_vert = 3
-        elif twist_angle < PI / 2:
-            n_vert = 4
-        else:
-            n_vert = 5
+        if n_vert is None:
+            z_samples = np.linspace(
+                self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20
+            )
+            angle_samples = [
+                self.gearcore.shape_recipe(z).transform.angle for z in z_samples
+            ]
+            max_angle = np.max(angle_samples)
+            min_angle = np.min(angle_samples)
+
+            twist_angle = np.abs(max_angle - min_angle)
+            if twist_angle < PI / 16:
+                n_vert = 3
+            elif twist_angle < PI / 2:
+                n_vert = 4
+            else:
+                n_vert = 5
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
@@ -1652,36 +1656,34 @@ class CycloidGear(GearInfoMixin):
             ),
         )
 
-    def build_part(self) -> Part:
+    def build_part(self, n_vert=None) -> Part:
         """Creates the build123d Part object of the gear. This may take several seconds.
 
         Returns
         -------
         Part"""
-
-        max_angle = np.max(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
+        if n_vert is None:
+            z_samples = np.linspace(
+                self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20
             )
-        )
-        min_angle = np.min(
-            self.gearcore.shape_recipe.transform.angle(
-                np.linspace(self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20)
-            )
-        )
+            angle_samples = [
+                self.gearcore.shape_recipe(z).transform.angle for z in z_samples
+            ]
+            max_angle = np.max(angle_samples)
+            min_angle = np.min(angle_samples)
 
-        twist_angle = np.abs(max_angle - min_angle)
+            twist_angle = np.abs(max_angle - min_angle)
 
-        if (
-            self.inputparam.helix_angle == 0
-            and self.inputparam.cone_angle == 0
-            and self.inputparam.crowning == 0
-        ):
-            n_vert = 2
-        elif twist_angle > PI / 4:
-            n_vert = 3 + int(twist_angle / (PI / 4))
-        else:
-            n_vert = 3
+            if (
+                self.inputparam.helix_angle == 0
+                and self.inputparam.cone_angle == 0
+                and self.inputparam.crowning == 0
+            ):
+                n_vert = 2
+            elif twist_angle > PI / 4:
+                n_vert = 3 + int(twist_angle / (PI / 4))
+            else:
+                n_vert = 3
         self.builder = GearBuilder(
             self.gearcore,
             n_points_hz=4,
