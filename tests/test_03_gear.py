@@ -296,7 +296,7 @@ def test_CAD(
     r1 = r0 - np.sin(gamma) * height
     expected_volume = h * np.pi * (r0**2 + r1**2 + r0 * r1) / 3
 
-    assert gearpart.is_valid() and gearsketch.is_valid()
+    assert gearpart.is_valid and gearsketch.is_valid
     assert gearsketch.is_closed
     assert gearsketch.length > r0_add * 2 * PI
 
@@ -326,13 +326,13 @@ if __name__ == "__main__":
     #     enable_plotting=True,
     # )
     test_CAD(
-        num_teeth=55,
-        module=2,
+        num_teeth=21,
+        module=0.5,
         beta=0,
-        height=1.5,
+        height=0.5,
         root_fillet=-1,
-        tip_fillet=0.25,
-        conic=False,
+        tip_fillet=0,
+        conic=True,
         cycloid=False,
         inside_ring=True,
     )

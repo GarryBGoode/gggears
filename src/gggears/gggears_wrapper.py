@@ -414,7 +414,7 @@ class InvoluteGear(GearInfoMixin):
             z_anchor=z_anchor,
         )
         if self.inputparam.number_of_teeth < 0:
-            self.inputparam.number_of_teeth = -self.number_of_teeth
+            self.inputparam.number_of_teeth = -number_of_teeth
             self.inputparam.inside_teeth = not self.inputparam.inside_teeth
 
         self.builder: GearBuilder = None
@@ -715,9 +715,9 @@ class SpurGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
 
     """
@@ -834,9 +834,9 @@ class SpurRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
     """
 
@@ -965,9 +965,9 @@ class HelicalGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
 
     """
@@ -1152,9 +1152,9 @@ class HelicalRingGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
     """
 
@@ -1360,9 +1360,9 @@ class BevelGear(InvoluteGear):
     >>> gear1.mesh_to(gear2, target_dir=UP)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
     """
 
@@ -1506,9 +1506,9 @@ class CycloidGear(GearInfoMixin):
     >>> gear1.adapt_cycloid_radii(gear2)
     >>> gear_part_1 = gear1.build_part()
     >>> gear_part_2 = gear2.build_part()
-    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid() and gear_part_1.volume > 1E-6
+    >>> isinstance(gear_part_1, Part) and gear_part_1.is_valid and gear_part_1.volume > 1E-6
     True
-    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid() and gear_part_2.volume > 1E-6
+    >>> isinstance(gear_part_2, Part) and gear_part_2.is_valid and gear_part_2.volume > 1E-6
     True
 
     """
@@ -1947,7 +1947,7 @@ class InvoluteRack:
     >>> rack.mesh_to(gear, target_dir=DOWN)
     >>> rack_part = rack.build_part()
     >>> gear_part = gear.build_part()
-    >>> isinstance(rack_part, Part) and rack_part.is_valid() and rack_part.volume > 1E-6
+    >>> isinstance(rack_part, Part) and rack_part.is_valid and rack_part.volume > 1E-6
     True
 
     """
@@ -2182,7 +2182,7 @@ class HelicalRack(InvoluteRack):
     >>> rack.mesh_to(gear, target_dir=DOWN)
     >>> rack_part = rack.build_part()
     >>> gear_part = gear.build_part()
-    >>> isinstance(rack_part, Part) and rack_part.is_valid() and rack_part.volume > 1E-6
+    >>> isinstance(rack_part, Part) and rack_part.is_valid and rack_part.volume > 1E-6
     True"""
 
     def __init__(
