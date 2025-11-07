@@ -2,13 +2,14 @@
 A gear generator in python.
 
 # Installation
-Currently the recommended way is to clone or download this repository, install dependencies from `requirements.txt` and then install gggears.
-
+Currently the recommended way for most users to install gggears is to install from github directly (git is required on the user's system for this):
 ```
-pip install -r requirements.txt
-pip install .
+python -m pip install git+https://github.com/GarryBGoode/gggears
 ```
-
+Alternatively, one can clone or download this repository and install via this command from the repository root directory:
+```
+python -m pip install .
+```
 There is an ongoing version-mismatch issue with build123d, ocp-vscode and ocp-cadquery packages. Obtaining dependencies via `pip` might cause problems. If using OCP VSCode for the first time, `quickstart with build123d` might cause problems because it grabs the newest version from build123d github. If build123d is already installed, use the 'package manager' window instead.
 
 For compatibility with dev version of build123d, use gggears branch `CAD_refactor_and_bd_090_compliance`.
@@ -16,13 +17,10 @@ Follow [this issue for details.](https://github.com/gumyr/build123d/issues/866)
 
 # Dependencies
 
-Gggears CAD model creation uses build123d package: [build-123d github](https://github.com/gumyr/build123d)
-
-gggears main depends on build123d 0.8.0, while gggears branch `CAD_refactor_and_bd_090_compliance` is compatible with build123d `dev` branch (planned v0.9.0).
+Gggears CAD model creation uses build123d package: [build123d github](https://github.com/gumyr/build123d)
 
 It is highly recommended, though not strictly necessary to use a python-CAD gui solution.
 See [OCP VSCode](https://github.com/bernhard-42/vscode-ocp-cad-viewer) and [CadQuery Editor](https://github.com/CadQuery/CQ-editor).
-
 
 # Documentation
 Docs hosted on [readthedocs](https://gggears.readthedocs.io/en/latest/)

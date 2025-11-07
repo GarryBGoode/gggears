@@ -1,26 +1,28 @@
 [project]
 name = "gggears"
-version = "0.0.12"
+version = "0.0.13"
 description = "A gear geometry generator in Python"
 authors = [
 { name = "Gergely Bencsik", email = "bencsik.gergely.1@gmail.com"},
 ]
 readme="README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
 "Programming Language :: Python :: 3",
 "License :: OSI Approved :: Apache-2.0",
 "Operating System :: OS Independent",
 ]
-keywords = ["gears","CAD", "python"]
+keywords = ["gears", "CAD", "python"]
+
+dependencies = [
+    "build123d >= 0.9.1",
+    "numpy >= 2, < 3",
+    "scipy >= 1.10.1",
+]
+
 
 [project_urls]
 Homepage = "https://github.com/GarryBGoode/gggears"
-
-[dependencies]
-numpy = "^2.0.0"
-scipy = "^1.10.1"
-build123d = "^0.8.0"
 
 [project.optional-dependencies]
 dev = [
@@ -28,7 +30,23 @@ dev = [
     "pytest-xdist",
     "shapely",
     "matplotlib",
-    "ocp-vscode"
+    "flake8",
+]
+
+ocp_vscode = [
+    "ocp_vscode",
+]
+
+extras = [
+    "matplotlib",
+    "pyqt6",
+    "PyQt6-WebEngine",
+]
+
+all = [
+    "gggears[dev]",
+    "gggears[ocp_vscode]",
+    "gggears[extras]",
 ]
 
 [build-system]
@@ -40,7 +58,7 @@ packages = ["gggears"]
 package-dir = {"" = "src"}
 
 [tool.black]
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312", "py313"]
 line-length = 88
 
 [tool.isort]
@@ -53,10 +71,10 @@ testpaths = ["tests"]
 pythonpath = "src"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 
 [tool.ruff]
-lint.select = ["E","F", "W", "B"]
+lint.select = ["E", "F", "W", "B"]
 lint.ignore = ["F403", "F405"]
