@@ -252,10 +252,11 @@ def apply_fillet(
         angle = -np.arctan2(p[1], p[0])
         return 0 < angle < pitch_angle / 2
 
+    ref_circle_guess = -pitch_angle / (2 * PI) / 4 * 1.01
     sol1 = crv.find_curve_intersect(
         tooth_curve,
         target_circle,
-        guess=[0.5, -pitch_angle / 4 / (2 * PI) * 1.01],
+        guess=[0.5, ref_circle_guess],
     )
     if sol1.success and angle_check(target_circle(sol1.x[1])):
         sharp_root = False

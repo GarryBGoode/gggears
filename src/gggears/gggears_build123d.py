@@ -107,22 +107,21 @@ class GearBuilder(GearToNurbs):
             # parameters of ref_solid depend on accurate (original) z_vals
             ref_solid = self.gen_ref_solid()
             # cut ref solid by side_surfaces
-            if bd.__version__ > "0.8.0":
-                split_result = ref_solid.split(
-                    tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
-                ).solids()
-            else:
-                split_result = ref_solid.split(
-                    tool=bd.Shell(side_surfaces), keep=bd.Keep.BOTH
-                ).solids()
+
+            split_result = ref_solid.split(
+                tool=bd.Shell(side_surfaces), keep=bd.Keep.ALL
+            )
 
             if len(split_result) < 2:
                 raise RuntimeError(
                     "Split operation of blank solid via gear surfaces failed."
                 )
             # the valid result is the one with the smaller volume out of the 2
-
-            split_result.sort(key=lambda x: x.bounding_box().center().Z)
+            # ref_solid.split may return a tuple (immutable), so use sorted()
+            # which works for both tuples and lists and returns a new list
+            split_result = sorted(
+                split_result, key=lambda x: x.bounding_box().center().Z
+            )
             if self.gear.tooth_param.inside_teeth:
                 self.solid = split_result[1]
             else:
@@ -178,15 +177,10 @@ class GearBuilder(GearToNurbs):
 
         if gearcopy.tooth_param.inside_teeth:
             r_o_face = r_o_cone.faces().sort_by(bd.Axis.Z)[1]
-            if bd.__version__ > "0.8.0":
-                split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
-            else:
-                split_result = ref_solid.split(r_o_face, keep=bd.Keep.BOTH).solids()
-            if bd.__version__ > "0.8.0":
-                split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL).solids()
-            else:
-                split_result = ref_solid.split(r_o_face, keep=bd.Keep.BOTH).solids()
-            split_result.sort(key=lambda x: x.volume)
+
+            split_result = ref_solid.split(r_o_face, keep=bd.Keep.ALL)
+
+            split_result = sorted(split_result, key=lambda x: x.volume)
             ref_solid = split_result[0]
 
         else:

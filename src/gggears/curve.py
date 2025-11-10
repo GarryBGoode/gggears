@@ -54,8 +54,8 @@ class Curve:
         self,
         curve_function: callable,
         active=True,
-        t0=0,
-        t1=1,
+        t0=0.0,
+        t1=1.0,
         params=None,
         enable_vectorize=True,
         lenght_approx_ndiv=21,
@@ -233,7 +233,9 @@ class Curve:
         if n <= 1:
             return numeric_diff(self, t, direction, delta)
         else:
-            return numeric_diff(self.derivative, t, direction, n - 1, delta)
+            return numeric_diff(
+                self.derivative(t, direction, n - 1, delta), t, direction, delta
+            )
 
     def cut(self, t):
         """Cut the curve at t and return two new curves."""
@@ -386,8 +388,8 @@ class CurveChain(Curve):
 
     # these might still show up some time
     # needed to override these from inherited functions, but not needed for CurveChain
-    def s2t(self, p):
-        return p
+    def s2t(self, s):
+        return s
 
     def t2s(self, t):
         return t
@@ -1087,7 +1089,7 @@ class LineCurve(Curve):
         self.t2s_lookup["s"] = np.array([0, 1])
         self.t2s_lookup["t"] = np.array([self.t_0, self.t_1])
 
-    def transform(self, transform: callable) -> "ArcCurve":
+    def transform(self, transform: callable) -> "LineCurve":
         p0 = transform(self.p0)
         p1 = transform(self.p1)
         return LineCurve(p0, p1, active=self.active)
@@ -1149,6 +1151,10 @@ class ArcCurve(Curve):
     @property
     def center(self):
         return self._center
+
+    @center.setter
+    def center(self, value):
+        self._center = value
 
     @property
     def p0(self):
