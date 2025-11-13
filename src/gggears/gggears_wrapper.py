@@ -500,21 +500,40 @@ class InvoluteGear(GearInfoMixin):
         )
 
         if self.inputparam.enable_undercut:
-            tooth_generator = InvoluteUndercutTooth(
-                pressure_angle=self.inputparam.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                ref_limits=limits,
-                cone_angle=self.inputparam.cone_angle,
-                pitch_angle=pitch_angle,
-            )
+            if self.inputparam.cone_angle == 0:
+                tooth_generator = InvoluteUndercutTooth(
+                    pressure_angle=self.inputparam.pressure_angle,
+                    pitch_radius=rp_ref,
+                    pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                    ref_limits=limits,
+                    cone_angle=self.inputparam.cone_angle,
+                    pitch_angle=pitch_angle,
+                )
+            else:
+                tooth_generator = OctoidUndercutTooth(
+                    pressure_angle=self.inputparam.pressure_angle,
+                    pitch_radius=rp_ref,
+                    pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                    ref_limits=limits,
+                    cone_angle=self.inputparam.cone_angle,
+                    pitch_angle=pitch_angle,
+                )
         else:
-            tooth_generator = InvoluteTooth(
-                pressure_angle=self.inputparam.pressure_angle,
-                pitch_radius=rp_ref,
-                pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
-                cone_angle=self.inputparam.cone_angle,
-            )
+            if self.inputparam.cone_angle == 0:
+                tooth_generator = InvoluteTooth(
+                    pressure_angle=self.inputparam.pressure_angle,
+                    pitch_radius=rp_ref,
+                    pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                    ref_limits=limits,
+                    cone_angle=self.inputparam.cone_angle,
+                )
+            else:
+                tooth_generator = OctoidTooth(
+                    pressure_angle=self.inputparam.pressure_angle,
+                    pitch_radius=rp_ref,
+                    pitch_intersect_angle=lambda z: crowning_func(z, tooth_angle),
+                    cone_angle=self.inputparam.cone_angle,
+                )
         z_h = self.inputparam.height / self.inputparam.module
         self.gearcore = Gear(
             tooth_param=self.update_tooth_param(),
@@ -621,6 +640,44 @@ class InvoluteGear(GearInfoMixin):
                 + other.inputparam.profile_shift * other.module * ps_mult_2
             ),
         )
+
+    def get_meshing_location(
+        self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT
+    ):
+        """
+
+        Arguments
+        ---------
+        other: InvoluteGear
+            The other gear object to align to.
+        target_dir: np.ndarray
+            The direction in which the gear should be placed in relation to the other
+            gear.
+            Should be a unit vector. Default is RIGHT (x).
+        """
+        if self.inside_teeth:
+            ps_mult_1 = -1
+        else:
+            ps_mult_1 = 1
+        if other.inside_teeth:
+            ps_mult_2 = -1
+        else:
+            ps_mult_2 = 1
+        transform = self.gearcore.get_meshing_transform(
+            other.gearcore,
+            target_dir=target_dir,
+            distance_offset=(
+                self.inputparam.profile_shift * ps_mult_1 * self.module
+                + other.inputparam.profile_shift * other.module * ps_mult_2
+            ),
+        )
+        return transform2Location(transform)
+
+    def reset_location(self):
+        """Resets the location of the gear to its original center and angle."""
+        self.gearcore.transform.center = ORIGIN
+        self.gearcore.transform.orientation = UNIT3X3
+        self.gearcore.transform.angle = 0
 
     def build_boundary_wire(self, z_ratio: float = 0):
         """Generates a build123d Wire object of the gear-tooth slice at a given z-ratio.

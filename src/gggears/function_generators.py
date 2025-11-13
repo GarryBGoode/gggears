@@ -164,7 +164,8 @@ def involute_sphere(t, r=1, C=0.5, angle=0, v_offs=ORIGIN, z_offs=0):
         R = 1 / np.abs(C)
         Csig = np.sign(C)
         phi = r / R * t
-        # to keep similarity to circle involute for small conic angles (beta~0) this rotatoin of v_offs is needed.
+        # to keep similarity to circle involute for small conic angles (beta~0) this
+        # rotation of v_offs is needed.
         v1 = scp_Rotation.from_euler("y", -PI / 2 * Csig).apply(v_offs) + R * RIGHT
         # v1 = v_offs + R*RIGHT
 
@@ -615,3 +616,64 @@ def cylindrical_to_xyz(c, center=ORIGIN):
     z = z + center[2]
     result = np.stack([x, y, z], axis=-1)
     return result[0] if single_vector else result
+
+
+def octoid(
+    t,
+    base_rad=0.5,
+    sphere_rad=1.0,
+    alpha=20 * PI / 180,
+    angle=0.0,
+    v_offs=ORIGIN,
+    z_offs=0.0,
+):
+    # pitch angle: beta
+    # pressure angle: phi
+    # r: fundamental sphere radius
+    # alpha1: rolling parameter
+    # alpha: flat tooth flank angle
+    beta = np.arcsin(base_rad / sphere_rad)
+    alpha_1 = t
+    r = sphere_rad
+
+    def s(x):
+        return np.sin(x)
+
+    def c(x):
+        return np.cos(x)
+
+    def s2(x):
+        return np.sin(x) ** 2
+
+    def c2(x):
+        return np.cos(x) ** 2
+
+    a1sb = alpha_1 * s(beta)
+
+    R = -r / np.sqrt(s2(alpha) * s2(alpha_1 * s(beta)) + c2(alpha_1 * s(beta)))
+
+    v0 = (
+        -c2(alpha) * c(alpha_1) * s(a1sb) * c(a1sb)
+        + s(beta) * s2(alpha) * s(alpha_1) * s2(a1sb)
+        + c(beta) * s(alpha) * c(alpha) * s(alpha_1) * s(a1sb)
+        + s(beta) * s(alpha_1) * c2(a1sb)
+    )
+
+    v1 = (
+        +c2(alpha) * s(alpha_1) * s(a1sb) * c(a1sb)
+        + s(beta) * s2(alpha) * c(alpha_1) * s2(a1sb)
+        + c(beta) * s(alpha) * c(alpha) * c(alpha_1) * s(a1sb)
+        + s(beta) * c(alpha_1) * c2(a1sb)
+    )
+
+    v2 = (
+        -c(beta) * s2(alpha) * s2(a1sb)
+        + s(beta) * s(alpha) * c(alpha) * s(a1sb)
+        - c(beta) * c2(a1sb)
+    )
+    v = np.array([v0, v1, v2]) * R
+
+    rot = scp_Rotation.from_euler("yz", angles=[PI, PI / 2 + angle])
+    zshift = np.sqrt(sphere_rad**2 - base_rad**2)
+    v = rot.apply(v)
+    return v + zshift * OUT
