@@ -1,6 +1,6 @@
 [project]
 name = "gggears"
-version = "0.0.14"
+dynamic = ["version"]
 description = "A gear geometry generator in Python"
 authors = [
 { name = "Gergely Bencsik", email = "bencsik.gergely.1@gmail.com"},
@@ -50,12 +50,19 @@ all = [
 ]
 
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = [
+    "setuptools>=45",
+    "wheel",
+    "setuptools_scm[toml]>=6.2",
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["gggears"]
 package-dir = {"" = "src"}
+
+[tool.setuptools_scm]
+write_to = "src/gggears/_version.py"
 
 [tool.black]
 target-version = ["py310", "py311", "py312", "py313"]
