@@ -620,6 +620,8 @@ def generate_reference_profile(inputdata: GearProfileDataCollector) -> GearRefPr
             p0=pa, center=OUT * pa[2], angle=2 * PI
         )
     if inputdata.fillet.tip_fillet > 0:
+        if not isinstance(tooth_curve, crv.CurveChain):
+            tooth_curve = crv.CurveChain(tooth_curve)
         tooth_curve = apply_fillet(
             tooth_curve,
             inputdata.pitch_angle,
@@ -628,6 +630,8 @@ def generate_reference_profile(inputdata: GearProfileDataCollector) -> GearRefPr
             direction=-1,
         )
     if inputdata.fillet.root_fillet > 0:
+        if not isinstance(tooth_curve, crv.CurveChain):
+            tooth_curve = crv.CurveChain(tooth_curve)
         tooth_curve = apply_fillet(
             tooth_curve,
             inputdata.pitch_angle,
@@ -1034,6 +1038,23 @@ class Gear:
             self, other, target_dir, distance_offset
         )
         self.transform.angle = calc_mesh_angle(self, other)
+        # transform = self.get_meshing_transform(other, target_dir, distance_offset)
+        # self.transform.center = transform.center
+        # self.transform.orientation = transform.orientation
+        # self.transform.angle = transform.angle
+
+    def get_meshing_transform(self, other: "Gear", target_dir=RIGHT, distance_offset=0):
+        pos = calc_mesh_placement_vector(self, other, target_dir, distance_offset)
+        R = calc_mesh_orientation(self, other, target_dir, distance_offset)
+        angle = calc_mesh_angle(self, other)
+        retval = GearTransform(
+            center=pos,
+            orientation=R,
+            scale=self.transform.scale,
+            angle=angle,
+        )
+
+        return retval
 
 
 def calc_mesh_angle(gear1: "Gear", gear2: "Gear"):

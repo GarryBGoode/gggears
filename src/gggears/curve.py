@@ -340,6 +340,9 @@ class Curve:
         """Property to check if the curve starts and ends on the same point."""
         return np.linalg.norm(self(0) - self(1)) < DELTA / 100
 
+    def get_curves(self):
+        return self
+
 
 class CurveChain(Curve):
     """A class to represent a kind of polyline made up of Curves. Also can behave like a Curve."""
@@ -721,14 +724,19 @@ def find_curve_line_intersect(curve, offset=ORIGIN, line_direction=RIGHT, guess=
     return res
 
 
-def find_curve_plane_intersect(curve, plane_normal=OUT, offset=ORIGIN, guess=0):
+def find_curve_plane_intersect(
+    curve, plane_normal=OUT, offset=ORIGIN, guess=0, method=IntersectMethod.EQUALITY
+):
     """Find the intersection point of a curve and a plane."""
 
     def target_func(t):
         val = np.dot((curve(t[0]) - offset), plane_normal)
         return val
 
-    res = root(target_func, guess)
+    if method == IntersectMethod.EQUALITY:
+        res = root(target_func, guess)
+    else:
+        res = minimize(lambda t: target_func(t) ** 2, guess)
     return res
 
 
@@ -1103,9 +1111,9 @@ class ArcCurve(Curve):
         radius=1.0,
         angle=PI / 2,
         center=ORIGIN,
-        yaw=0,
-        pitch=0,
-        roll=0,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
         active=True,
     ):
         self._radius = radius
@@ -1188,6 +1196,18 @@ class ArcCurve(Curve):
     def yaw(self):
         return self._yaw
 
+    @property
+    def rotmat(self):
+        return self._rotmat
+
+    @rotmat.setter
+    def rotmat(self, R):
+        yaw, pitch, roll = scp_Rotation.from_matrix(R).as_euler("zyx")
+        self._rotmat = R
+        self._yaw = yaw
+        self._pitch = pitch
+        self._roll = roll
+
     def gen_rotation_angles(self):
         return scp_Rotation.from_matrix(self._rotmat).as_euler("zyx")
 
@@ -1260,7 +1280,7 @@ class ArcCurve(Curve):
         cls,
         radius=1,
         center=ORIGIN,
-        angle_start=0,
+        angle_start=0.0,
         angle_end=PI / 2,
         axis=OUT,
         active=True,
@@ -1278,7 +1298,7 @@ class ArcCurve(Curve):
         return cls(
             radius=radius,
             angle=angle_end - angle_start,
-            center=ORIGIN,
+            center=center,
             yaw=angle_start,
             pitch=pitch,
             roll=roll,
@@ -1362,6 +1382,62 @@ class SphericalInvoluteCurve(Curve):
             t0,
             t1,
             params={},
+            enable_vectorize=enable_vectorize,
+        )
+
+    @property
+    def center(self):
+        return (
+            np.sqrt(self.R**2 - self.r**2) * np.sign(self.c_sphere) + self.z_offs
+        ) * OUT
+
+    @property
+    def center_sphere(self):
+        return self.center
+
+    @property
+    def R(self):
+        return 1 / self.c_sphere
+
+    @property
+    def base_radius(self):
+        return self.r
+
+
+class OctoidCurve(Curve):
+
+    def __init__(
+        self,
+        r=1.0,
+        t0=0.0,
+        t1=1.0,
+        angle=0.0,
+        c_sphere=1.0,
+        alpha=20 * PI / 180,
+        v_offs=ORIGIN,
+        z_offs=0.0,
+        active=True,
+        enable_vectorize=True,
+    ):
+        self.r = r
+        self.angle = angle
+        self.c_sphere = c_sphere
+        self.v_offs = v_offs
+        self.z_offs = z_offs
+        self.alpha = alpha
+        super().__init__(
+            lambda t: octoid(
+                t,
+                base_rad=self.r,
+                sphere_rad=1 / self.c_sphere,
+                alpha=self.alpha,
+                angle=self.angle,
+                v_offs=self.v_offs,
+                z_offs=self.z_offs,
+            ),
+            active,
+            t0,
+            t1,
             enable_vectorize=enable_vectorize,
         )
 

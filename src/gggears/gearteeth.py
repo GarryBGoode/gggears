@@ -2,7 +2,8 @@ from gggears.gggears_base_classes import *
 from gggears.function_generators import *
 from gggears import curve as crv
 from gggears.defs import *
-from scipy.optimize import root
+from scipy.optimize import root, minimize
+from scipy.spatial.transform import Rotation as scp_Rotation
 
 
 class InvoluteTooth(GearToothConicGenerator):
@@ -12,11 +13,13 @@ class InvoluteTooth(GearToothConicGenerator):
         pitch_radius: float = 1.0,
         cone_angle: float = PI / 4,
         pressure_angle: float = 20 * PI / 180,
+        ref_limits: ToothLimitParam = None,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.cone_angle = cone_angle
         self.pressure_angle = pressure_angle
+        self.ref_limits = ref_limits if ref_limits is not None else ToothLimitParam()
 
     def get_base_radius(self) -> float:
         invo_curve = self.generate_involute_curve()[1]
@@ -193,6 +196,241 @@ class InvoluteUndercutTooth(InvoluteTooth):
         return self
 
 
+class OctoidTooth(GearToothConicGenerator):
+    def __init__(
+        self,
+        pitch_intersect_angle: float = PI / 16,
+        pitch_radius: float = 1.0,
+        cone_angle: float = 0,
+        pressure_angle: float = 20 * PI / 180,
+        ref_limits: ToothLimitParam = None,
+        pitch_angle: float = PI / 16,
+    ):
+        self.pitch_intersect_angle = pitch_intersect_angle
+        self.pitch_radius = pitch_radius
+        self.cone_angle = cone_angle
+        self.pressure_angle = pressure_angle
+        if ref_limits is None:
+            self.ref_limits = ToothLimitParam(h_a=1, h_d=1.2)
+        else:
+            self.ref_limits = ref_limits
+        self.pitch_angle = pitch_angle
+
+    def generate_tooth_curve(self) -> crv.Curve:
+        tooth_curve = self.generate_octoid_curve()
+        return self.check_lower_curve_limit(tooth_curve)
+
+    def generate_octoid_curve(self) -> crv.Curve:
+        rp = self.pitch_radius
+        alpha = self.pressure_angle
+        gamma = self.cone_angle / 2
+
+        # in 2D, without any conic angle it's an involute
+        if self.cone_angle == 0:
+
+            involute_curve = crv.InvoluteCurve(
+                r=self.pitch_radius * np.cos(alpha), angle=0, t0=0, t1=2
+            )
+
+            pitch_circle = crv.ArcCurve(radius=rp, angle=2 * PI)
+
+            sol2 = crv.find_curve_intersect(
+                involute_curve, pitch_circle, guess=[0.5, 0]
+            )
+            involute_angle_0 = angle_between_vectors(RIGHT, involute_curve(sol2.x[0]))
+
+            involute_curve.angle = -(self.pitch_intersect_angle + involute_angle_0)
+            sol1 = crv.find_curve_plane_intersect(
+                involute_curve, plane_normal=UP, guess=1
+            )
+            involute_curve.set_end_on(sol1.x[0])
+
+            return involute_curve
+        else:
+            R = np.abs(rp / np.sin(gamma))
+            C_sph = 1 / R  # spherical curvature
+
+            octoid_curve = crv.OctoidCurve(r=rp, c_sphere=C_sph, angle=0, alpha=alpha)
+            angle_offset = -(self.pitch_intersect_angle)
+            octoid_curve.angle = angle_offset
+            sol1 = crv.find_curve_plane_intersect(
+                octoid_curve, offset=ORIGIN, plane_normal=UP, guess=1
+            )
+            octoid_curve.set_end_on(sol1.x[0])
+
+        return octoid_curve
+
+
+class OctoidUndercutTooth(GearToothConicGenerator):
+    def __init__(
+        self,
+        pitch_intersect_angle: float = PI / 16,
+        pitch_radius: float = 1.0,
+        cone_angle: float = 0,
+        pressure_angle: float = 20 * PI / 180,
+        ref_limits: ToothLimitParam = None,
+        pitch_angle: float = PI / 16,
+    ):
+        self.pitch_intersect_angle = pitch_intersect_angle
+        self.pitch_radius = pitch_radius
+        self.cone_angle = cone_angle
+        self.pressure_angle = pressure_angle
+        if ref_limits is None:
+            self.ref_limits = ToothLimitParam(h_a=1, h_d=1.2)
+        self.ref_limits = ref_limits
+        self.pitch_angle = pitch_angle
+
+    def generate_tooth_curve(self) -> crv.Curve:
+        tooth_curve = self.check_lower_curve_limit(self.generate_octoid_curve())
+        undercut_ref_point = self.get_default_undercut_ref_point()
+        undercut_enable = False
+        if self.cone_angle == 0:
+            base_radius = self.pitch_radius * np.cos(self.pressure_angle)
+            if np.linalg.norm(undercut_ref_point) < base_radius:
+                undercut_enable = True
+        else:
+            base_angle = np.arcsin(
+                np.sin(self.cone_angle / 2) * np.cos(self.pressure_angle)
+            )
+            undercut_ref_angle = self.ref_limits.h_d / (self.conic_data.R)
+            delta_angle = self.cone_angle / 2 - base_angle
+            if undercut_ref_angle > delta_angle:
+                undercut_enable = True
+        if undercut_enable:
+            undercut_curve = generate_undercut_curve(
+                pitch_radius=self.pitch_radius,
+                cone_angle=self.cone_angle,
+                undercut_ref_point=undercut_ref_point,
+            )
+            return trim_involute_undercut(tooth_curve, undercut_curve)
+        else:
+            return tooth_curve
+
+    def generate_octoid_curve(self) -> crv.Curve:
+        rp = self.pitch_radius
+        alpha = self.pressure_angle
+        gamma = self.cone_angle / 2
+
+        # in 2D, without any conic angle it's an involute
+        if self.cone_angle == 0:
+
+            involute_curve = crv.InvoluteCurve(
+                r=self.pitch_radius * np.cos(alpha), angle=0, t0=0, t1=2
+            )
+
+            pitch_circle = crv.ArcCurve(radius=rp, angle=2 * PI)
+
+            sol2 = crv.find_curve_intersect(
+                involute_curve, pitch_circle, guess=[0.5, 0]
+            )
+            involute_angle_0 = angle_between_vectors(RIGHT, involute_curve(sol2.x[0]))
+
+            involute_curve.angle = -(self.pitch_intersect_angle + involute_angle_0)
+            sol1 = crv.find_curve_plane_intersect(
+                involute_curve, plane_normal=UP, guess=1
+            )
+            involute_curve.set_end_on(sol1.x[0])
+            return involute_curve
+        else:
+
+            R = np.abs(rp / np.sin(gamma))
+            C_sph = 1 / R  # spherical curvature
+
+            octoid_curve = crv.OctoidCurve(r=rp, c_sphere=C_sph, angle=0, alpha=alpha)
+            angle_offset = -(self.pitch_intersect_angle)
+            octoid_curve.angle = angle_offset
+            sol1 = crv.find_curve_plane_intersect(
+                octoid_curve, offset=ORIGIN, plane_normal=UP, guess=1
+            )
+            octoid_curve.set_end_on(sol1.x[0])
+
+        return octoid_curve
+
+    def get_default_undercut_ref_point(
+        self,
+    ) -> np.ndarray:
+
+        if self.cone_angle == 0:
+            rack_curve = generate_involute_rack_curve(
+                self.pitch_radius,
+                self.pitch_intersect_angle,
+                ref_limits=self.ref_limits,
+                pressure_angle=self.pressure_angle,
+                cone_angle=self.cone_angle,
+            )
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=UP,
+                offset=-self.pitch_radius * self.pitch_angle / 2,
+                guess=1,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+            else:
+                return rack_curve(0)
+        else:
+            rack_curve = generate_flat_rack_curve(
+                self.pitch_radius,
+                self.pitch_intersect_angle,
+                ref_limits=self.ref_limits,
+                pressure_angle=self.pressure_angle,
+                cone_angle=self.cone_angle,
+            )
+            # pitch angle is on the gear
+            # equivalent rotation on rack needs scaling by r/R = sin(gamma)
+            plane_normal = scp_Rotation.from_euler(
+                "z", -self.pitch_angle / 2 * np.abs(np.sin(self.cone_angle / 2))
+            ).apply(UP)
+            sol = crv.find_curve_plane_intersect(
+                rack_curve,
+                plane_normal=plane_normal,
+                offset=0,
+                guess=0,
+            )
+            if sol.x[0] > 0:
+                return rack_curve(sol.x[0])
+
+            else:
+                return rack_curve(0)
+
+
+def generate_flat_rack_curve(
+    pitch_radius: float,
+    pitch_intersect_angle: float,
+    ref_limits: ToothLimitParam,
+    pressure_angle: float = PI / 9,
+    cone_angle: float = 0,
+) -> crv.Curve:
+    rp = pitch_radius
+    if cone_angle == 0:
+
+        pitch_len_ref = rp * pitch_intersect_angle
+        p0 = RIGHT * rp + DOWN * pitch_len_ref
+        direction = rotate_vector(RIGHT, pressure_angle)
+        p1 = p0 + direction * ref_limits.h_a / direction[0]
+        p2 = p0 - direction * ref_limits.h_d / direction[0]
+        return crv.LineCurve(p0=p2, p1=p1)
+    else:
+        conic_transform = ConicData(cone_angle=cone_angle, base_radius=pitch_radius)
+
+        rot_alpha = scp_Rotation.from_euler("x", angles=PI / 2 - pressure_angle)
+        rot_pitch = scp_Rotation.from_euler(
+            "z", angles=-pitch_intersect_angle * conic_transform.r / conic_transform.R
+        )
+        rot_gamma = scp_Rotation.from_euler("y", angles=(PI / 2 - cone_angle / 2) * 1)
+        rot_all = rot_pitch * rot_alpha
+        Arc1 = crv.ArcCurve(
+            radius=conic_transform.R,
+            center=ORIGIN,
+            angle=(ref_limits.h_a + ref_limits.h_d)
+            / (conic_transform.R)
+            / np.cos(pressure_angle),
+            yaw=-ref_limits.h_d / (conic_transform.R) / np.cos(pressure_angle),
+        )
+        Arc1.rotmat = rot_all.as_matrix() @ Arc1.rotmat
+        return Arc1
+
+
 def generate_involute_rack_curve(
     pitch_radius: float,
     pitch_intersect_angle: float,
@@ -328,12 +566,14 @@ class CycloidTooth(GearToothConicGenerator):
         cone_angle: float = PI / 4,
         rc_in_coeff: float = 0.5,
         rc_out_coeff: float = 0.5,
+        ref_limits: ToothLimitParam = None,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.cone_angle = cone_angle
         self.rc_in_coeff = rc_in_coeff
         self.rc_out_coeff = rc_out_coeff
+        self.ref_limits = ref_limits if ref_limits is not None else ToothLimitParam()
 
     def generate_tooth_curve(self) -> crv.CurveChain:
         return self.generate_cycloid_curve()
