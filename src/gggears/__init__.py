@@ -10,6 +10,6 @@ from gggears.gearmath import *
 
 
 try:
-    __version__ = version("bd_warehouse")
+    __version__ = version("gggears")
 except PackageNotFoundError:
     __version__ = "unknown version"
