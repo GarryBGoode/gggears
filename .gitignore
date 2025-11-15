@@ -15,6 +15,7 @@ output.txt
 # build
 *.egg-info/
 build/
+src/gggears/_version.py
 
 # Environments
 .env
