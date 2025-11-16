@@ -118,14 +118,17 @@ write_svg(gear_part_1, viewpos=(0, -40, 20))
 # 6. 90° Bevel Gears
 # [Ex. 6]
 
-gear1 = BevelGear(number_of_teeth=24, cone_angle=PI / 2, height=5)
-gear2 = BevelGear(number_of_teeth=24, cone_angle=PI / 2, height=5)
+n1 = 13
+n2 = 32
+cone_angle1, cone_angle2 = cone_angle_from_teeth(n1, n2, axis_angle=PI / 2)
+gear1 = BevelGear(number_of_teeth=n1, cone_angle=cone_angle1, height=5)
+gear2 = BevelGear(number_of_teeth=n2, cone_angle=cone_angle2, height=5)
 gear1.mesh_to(gear2, target_dir=RIGHT)
 gear_part_1 = gear1.build_part()
 gear_part_2 = gear2.build_part()
 
 # [Ex. 6]
-write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, -100, 70))
+write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(-50, -100, 30))
 
 # show_object(gear_part_1, gear_part_2)
 
@@ -136,11 +139,11 @@ write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, -100, 70))
 n1 = 12
 n2 = 31
 
-gamma1 = np.arctan2(n1, n2)
-gamma2 = PI / 2 - gamma1
-
-gear1 = BevelGear(number_of_teeth=n1, cone_angle=gamma1 * 2, height=5, helix_angle=0.5)
-gear2 = BevelGear(number_of_teeth=n2, cone_angle=gamma2 * 2, height=5, helix_angle=-0.5)
+cone_angle1, cone_angle2 = cone_angle_from_teeth(n1, n2)
+gear1 = BevelGear(number_of_teeth=n1, cone_angle=cone_angle1, height=5, helix_angle=0.5)
+gear2 = BevelGear(
+    number_of_teeth=n2, cone_angle=cone_angle2, height=5, helix_angle=-0.5
+)
 gear1.mesh_to(gear2, target_dir=RIGHT + UP)
 gear_part_1 = gear1.build_part()
 gear_part_2 = gear2.build_part()
@@ -213,4 +216,18 @@ gear_part = gear.build_part()
 rack_part = rack.build_part()
 # [Ex. 10]
 write_svg(Compound([gear_part, rack_part]), viewpos=(0, -45, 70))
+# show(gear_part_1, gear_part_2)
+
+
+# 11. Controlling backlash
+# [Ex. 11]
+
+gear1 = SpurGear(24, module=2)
+gear2 = SpurGear(33, module=2)
+gear2.center = np.array([-33, 0, 0])
+gear1.mesh_to(gear2, target_dir=RIGHT, backlash=0.4, angle_bias=1)
+gear_part_1 = gear1.build_part()
+gear_part_2 = gear2.build_part()
+# [Ex. 11]
+write_svg(Compound([gear_part_1, gear_part_2]), viewpos=(0, 0, 100))
 # show(gear_part_1, gear_part_2)

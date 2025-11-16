@@ -60,7 +60,8 @@ Create profile shifted gears. Use the :py:class:`tip_truncation <gggears.gggears
 
 .. note::
 
-    The :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` function does not yet handle accurately the ``profile_shift`` parameter, so you get increased backlash with shifted spur gears.
+    The :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` function calculates accurate zero-backlash meshing of gears with ``profile_shift`` parameter.
+    This is slightly shorter distance than the nominal center distance, and may lead to interference at the root.
 
 .. image:: assets/general_ex3.svg
     :align: center
@@ -104,6 +105,7 @@ The value of 1 corresponds to 0.001 module arc length reduction of tooth flank o
 ---------------------
 
 Create simple bevel gears at 90° angle.
+The function :py:meth:`cone_angle_from_teeth() <gggears.gearmath.cone_angle_from_teeth>` can be used to calculate appropriate cone angles for given number of teeth and given angle between axes.
 
 .. image:: assets/general_ex6.svg
     :align: center
@@ -113,11 +115,14 @@ Create simple bevel gears at 90° angle.
     :end-before: [Ex. 6]
 
 .. note ::
-    Bevel gears are implemented with ideal spherical involute geometry, which does not represent real bevel gears due to manufacturing constraints.
+    Bevel gears are implemented with octoid tooth profile. Undercuts are supported for bevel gears.
+    Top and bottom face of bevel gears follow spherical surface (not conic).
 
 7. Spiral Bevel Gears
 ---------------------
 Spiral bevel gears are under development, but you can already create them with the following code.
+The spiral geometry follows an euclidean spiral, which is mathematically simple, but is not realistic.
+Axis offset (hypoid) geometry is not yet supported.
 
 .. image:: assets/general_ex7.svg
     :align: center
@@ -170,3 +175,15 @@ the HelicalRack class also accounts for normal-transverse system conversions to 
 .. literalinclude:: examples.py
     :start-after: [Ex. 10]
     :end-before: [Ex. 10]
+
+11. Controlling backlash
+---------------------
+The :py:meth:`mesh_to() <gggears.gggears_wrapper.InvoluteGear.mesh_to>` function has a ``backlash`` parameter to control the distance between meshing gears.
+The backlash value is given in mm, it is measured as the distance along the line of action, between the inactive flanks of gearteeth.
+
+.. image:: assets/general_ex11.svg
+    :align: center
+
+.. literalinclude:: examples.py
+    :start-after: [Ex. 11]
+    :end-before: [Ex. 11]

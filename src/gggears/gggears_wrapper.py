@@ -14,6 +14,7 @@ from gggears.gggears_core import *
 from gggears.gggears_build123d import *
 from build123d import Part
 from gggears.gearteeth import *
+from gggears.gearmath import *
 
 
 class GearInfoMixin:
@@ -55,9 +56,16 @@ class GearInfoMixin:
     def cone_data(self):
         """Info about the cone of the gear in a ConicData object."""
         cone_loc = ConicData(
-            cone_angle=self.gearcore.cone.cone_angle, base_radius=self.rp
+            cone_angle=self.gearcore.cone.cone_angle,
+            base_radius=self.rp / self.module,
+            transform=self.gearcore.transform,
         )
         return cone_loc
+
+    @property
+    def radius_spherical(self):
+        """Spherical radius of the gear (for bevel gears)."""
+        return self.cone_data.R
 
     @property
     def cone_angle(self):
@@ -167,6 +175,10 @@ class GearInfoMixin:
     def angle(self):
         """Rotation progress of the gear."""
         return self.gearcore.transform.angle
+
+    @angle.setter
+    def angle(self, value):
+        self.gearcore.transform.angle = value
 
     @property
     def z_height(self):
@@ -442,6 +454,18 @@ class InvoluteGear(GearInfoMixin):
         circle_base = self.circle_involute_base(0)
         return circle_base.radius
 
+    @property
+    def angle_base(self):
+        """
+        Angle of the starting point of the involute curve of a tooth in the
+        default position.
+        """
+        tooth_gen = self.gearcore.shape_recipe(0).tooth_generator
+        if isinstance(tooth_gen, (InvoluteTooth, InvoluteUndercutTooth)):
+            return tooth_gen.get_base_angle()
+        else:
+            raise ValueError("Base angle is only implemented for involute gears.")
+
     def circle_involute_base(self, z_ratio: float = 0) -> crv.ArcCurve:
         """Generates the base circle of the involute at a given z-ratio.
 
@@ -567,12 +591,14 @@ class InvoluteGear(GearInfoMixin):
             ),
         )
 
-    def build_part(self, n_vert=None) -> Part:
+    def build_part(self, n_vert=None, n_points_hz=None) -> Part:
         """Creates the build123d Part object of the gear. This may take several seconds.
 
         Returns
         -------
         Part"""
+        if n_points_hz is None:
+            n_points_hz = 4
         if n_vert is None:
             z_samples = np.linspace(
                 self.gearcore.z_vals[0], self.gearcore.z_vals[1], 20
@@ -597,7 +623,7 @@ class InvoluteGear(GearInfoMixin):
 
         self.builder = GearBuilder(
             self.gearcore,
-            n_points_hz=4,
+            n_points_hz=n_points_hz,
             n_points_vert=n_vert,
         )
         return self.builder.part_transformed
@@ -612,66 +638,82 @@ class InvoluteGear(GearInfoMixin):
         )
         return self.builder.part_transformed
 
-    def mesh_to(self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT):
-        """Aligns this gear to the other gear object.
-
-        Arguments
-        ---------
-        other: InvoluteGear
-            The other gear object to align to.
-        target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other
-            gear.
-            Should be a unit vector. Default is RIGHT (x).
-        """
-        if self.inside_teeth:
-            ps_mult_1 = -1
-        else:
-            ps_mult_1 = 1
-        if other.inside_teeth:
-            ps_mult_2 = -1
-        else:
-            ps_mult_2 = 1
-        self.gearcore.mesh_to(
-            other.gearcore,
-            target_dir=target_dir,
-            distance_offset=(
-                self.inputparam.profile_shift * ps_mult_1 * self.module
-                + other.inputparam.profile_shift * other.module * ps_mult_2
-            ),
-        )
-
-    def get_meshing_location(
-        self, other: "InvoluteGear", target_dir: np.ndarray = RIGHT
+    def mesh_to(
+        self,
+        other: "InvoluteGear",
+        target_dir: np.ndarray = RIGHT,
+        backlash: float = 0.0,
+        angle_bias: float = 0.0,
     ):
-        """
-
-        Arguments
-        ---------
+        """Aligns this gear to another gear object.
+        Parameters
+        ----------
         other: InvoluteGear
-            The other gear object to align to.
-        target_dir: np.ndarray
-            The direction in which the gear should be placed in relation to the other
-            gear.
-            Should be a unit vector. Default is RIGHT (x).
+            The other gear to mesh to.
+        target_dir: np.ndarray, optional
+            Direction vector where this gear should be placed in relation to the other
+            gear. Default is RIGHT (x-axis). Need not be unit vector, will be normalized.
+        backlash: float, optional
+            Backlash value to consider during meshing. Default is 0.0.
+            Backlash is defined as linear distance along the line of action between the
+            inactive tooth flanks.
+        angle_bias: float, optional
+            Angle bias to apply within the backlash. 1 shifts the gear in the positive
+            direction until it makes contact. -1 shifts in the negative direction,
+            0 places it in the middle. Default is 0.0.
         """
-        if self.inside_teeth:
-            ps_mult_1 = -1
+        target_dir = target_dir / np.linalg.norm(target_dir)
+        if self.cone_angle != 0 or other.cone_angle != 0:
+            v0 = calc_bevel_gear_placement_vector(
+                target_dir,
+                self.cone_data,
+                other.cone_data,
+                self.inputparam.inside_teeth,
+                other.inputparam.inside_teeth,
+            )
+            self.gearcore.transform.center = v0
+            self.gearcore.transform.orientation = calc_mesh_orientation(
+                self.gearcore.cone.cone_angle,
+                other.gearcore.cone.cone_angle,
+                self.gearcore.cone.R,
+                other.gearcore.transform,
+                self.inputparam.inside_teeth,
+                other.inputparam.inside_teeth,
+                target_dir,
+                offset=0,
+            )
+            self.gearcore.transform.angle = calc_mesh_angle(
+                self.gearcore.transform,
+                other.gearcore.transform,
+                self.pitch_angle,
+                other.pitch_angle,
+                gear1_inside_ring=self.inside_teeth,
+                gear2_inside_ring=other.inside_teeth,
+            )
         else:
-            ps_mult_1 = 1
-        if other.inside_teeth:
-            ps_mult_2 = -1
-        else:
-            ps_mult_2 = 1
-        transform = self.gearcore.get_meshing_transform(
-            other.gearcore,
-            target_dir=target_dir,
-            distance_offset=(
-                self.inputparam.profile_shift * ps_mult_1 * self.module
-                + other.inputparam.profile_shift * other.module * ps_mult_2
-            ),
-        )
-        return transform2Location(transform)
+            distance = calc_involute_mesh_distance(
+                self.r_base,
+                other.r_base,
+                -self.angle_base,
+                -other.angle_base,
+                other.pitch_angle,
+                inside_ring=self.inside_teeth or other.inside_teeth,
+                backlash=backlash,
+            )
+            v0 = target_dir * distance + other.gearcore.transform.center
+            self.gearcore.transform.center = v0
+            self.gearcore.transform.orientation = other.gearcore.transform.orientation
+            self.gearcore.transform.angle = (
+                calc_mesh_angle(
+                    self.gearcore.transform,
+                    other.gearcore.transform,
+                    self.pitch_angle,
+                    other.pitch_angle,
+                    gear1_inside_ring=self.inside_teeth,
+                    gear2_inside_ring=other.inside_teeth,
+                )
+                + angle_bias / 2 * backlash / self.r_base
+            )
 
     def reset_location(self):
         """Resets the location of the gear to its original center and angle."""
@@ -1770,11 +1812,49 @@ class CycloidGear(GearInfoMixin):
             gear.
             Should be a unit vector. Default is RIGHT (x).
         """
-        self.gearcore.mesh_to(
-            other.gearcore,
-            target_dir=target_dir,
-            distance_offset=0,
-        )
+        if self.cone_angle != 0 or other.cone_angle != 0:
+            v0 = calc_bevel_gear_placement_vector(
+                target_dir,
+                self.cone_data,
+                other.cone_data,
+                self.inputparam.inside_teeth,
+                other.inputparam.inside_teeth,
+            )
+            self.gearcore.transform.center = v0
+            self.gearcore.transform.orientation = calc_mesh_orientation(
+                self.gearcore.cone.cone_angle,
+                other.gearcore.cone.cone_angle,
+                self.gearcore.cone.R,
+                other.gearcore.transform,
+                self.inputparam.inside_teeth,
+                other.inputparam.inside_teeth,
+                target_dir,
+                offset=0,
+            )
+            self.gearcore.transform.angle = calc_mesh_angle(
+                self.gearcore.transform,
+                other.gearcore.transform,
+                self.pitch_angle,
+                other.pitch_angle,
+                gear1_inside_ring=self.inside_teeth,
+                gear2_inside_ring=other.inside_teeth,
+            )
+        else:
+            if self.inside_teeth or other.inside_teeth:
+                distance = np.abs(self.pitch_radius - other.pitch_radius)
+            else:
+                distance = self.pitch_radius + other.pitch_radius
+            v0 = target_dir * distance + other.gearcore.transform.center
+            self.gearcore.transform.center = v0
+            self.gearcore.transform.orientation = other.gearcore.transform.orientation
+            self.gearcore.transform.angle = calc_mesh_angle(
+                self.gearcore.transform,
+                other.gearcore.transform,
+                self.pitch_angle,
+                other.pitch_angle,
+                gear1_inside_ring=self.inside_teeth,
+                gear2_inside_ring=other.inside_teeth,
+            )
 
     def adapt_cycloid_radii(self, other: "CycloidGear"):
         """Adapts the radii of the 2 gears to enable meshing. The inside radii will

@@ -25,23 +25,30 @@ a_gear2 = Compound(
     label="gear2",
 )
 
-gear1.mesh_to(gear2, target_dir=gg.LEFT)
-
-a_gear1.location = gear1.center_location_bottom
-a_gear2.location = gear2.center_location_bottom
-
 gears = Compound(children=[a_gear1, a_gear2], label="gears")
 
-n = 30
-duration = 2
 
+duration = 2
+n = duration * 30
 time_track = np.linspace(0, duration, n + 1)
-gear1_track = np.linspace(0, -gear1.pitch_angle * 180 / np.pi * 2, n + 1)
-gear2_track = np.linspace(0, gear2.pitch_angle * 180 / np.pi * 2, n + 1)
+gear1_track = np.linspace(0, -gear1.pitch_angle * 180 / np.pi, n + 1) * duration
+gear2_track = np.linspace(0, gear2.pitch_angle * 180 / np.pi, n + 1) * duration
 # assign the tracks to the gears
 animation = Animation(gears)
 animation.add_track("/gears/gear1", "rz", time_track, gear1_track)
 animation.add_track("/gears/gear2", "rz", time_track, gear2_track)
+
+# Animations have a limitation that the movement can only be translation or rotation
+# along a principal axis - see "rz" above.
+# However, if a build123d location is applied to the compound, the animation will
+# respect that location - which may include complex translation and re-orientation.
+# That is why mesh_to() method needs to be called after the animation tracks are defined,
+# and applied to the Compound after creation.
+gear1.mesh_to(gear2, target_dir=gg.LEFT)
+a_gear1.location = gear1.center_location_bottom
+a_gear2.location = gear2.center_location_bottom
+
+
 show(gears)
 
 # Start animation

@@ -1,6 +1,7 @@
 import gggears as gg
 from build123d import *
 from ocp_vscode import *
+import numpy as np
 
 set_port(3939)
 
@@ -16,6 +17,7 @@ gear1 = gg.SpurGear(
     module=gearmodule,
     height=gearheight,
     addendum_coefficient=1.2,
+    profile_shift=0.2,
     z_anchor=0.5,
 )
 gear2 = gg.SpurRingGear(
@@ -25,13 +27,12 @@ gear2 = gg.SpurRingGear(
     addendum_coefficient=1.4,
     dedendum_coefficient=0.6,
     outside_ring_coefficient=2.2,
+    profile_shift=0.2,
     z_anchor=0.5,
     # I used the angle kwarg to iteratively check for interference
     angle=0.135,
 )
-gear1.mesh_to(gear2)
-# adjustment for backlash / fitting
-gear1.center += gg.LEFT * clearence
+
 
 with BuildPart() as gearpart1:
     gear1.build_part()
@@ -51,10 +52,23 @@ with BuildPart() as gearpart1:
         Hole(radius=axis_diameter / 2)
 
 
+gear1.mesh_to(gear2)
+# adjustment for backlash / fitting
+delta1 = gg.calc_involute_mesh_distance(
+    gear1, gear2, clearence * 0
+) - gg.calc_nominal_mesh_distance(gear1, gear2)
+# gear1.center += gg.LEFT * delta1
+gear1.angle += delta1 / gear1.r_base * 0
+
+gearpart1.part.label = "gear1"
+gearpart1.part.location = gear1.center_location_middle
+
+
 # ring gear needs no modifications
 with BuildPart() as gearpart2:
     gear2.build_part()
 
+gearpart2.part.label = "gear2"
 # set up rendering colors
 gearpart1.part.color = (0.75, 0.75, 0.75)
 gearpart2.part.color = (0.6, 0.6, 0.6)
@@ -72,7 +86,7 @@ with BuildPart() as housing_bottom:
     add(housing_base.part.split(tool=Plane.XY, keep=Keep.BOTTOM))
     with Locations((gear1.center_location_bottom)):
         Hole(radius=axis_diameter / 2)
-
+housing_bottom.part.label = "housing_bottom"
 
 with BuildPart() as crescent:
     with BuildSketch():
@@ -93,6 +107,7 @@ with BuildPart() as crescent:
         fillet(vertices(), radius=1)
     extrude(amount=gearheight / 2, both=True)
 
+crescent.part.label = "crescent"
 crescent.part.color = (0.5, 0.5, 0.8)
 
 
@@ -189,5 +204,27 @@ with BuildPart() as housing_top:
             mode=Mode.SUBTRACT,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
+housing_top.part.label = "housing_top"
+anim_collector = Compound(
+    children=(
+        [
+            gearpart1.part,
+            gearpart2.part,
+            housing_bottom.part,
+            crescent.part,
+            housing_top.part,
+        ]
+    ),
+    label="assembly",
+)
 
-show_all()
+duration = 2
+n = duration * 30
+time_track = np.linspace(0, duration, n + 1)
+gear1_track = np.linspace(0, gear1.pitch_angle * 180 / np.pi, n + 1) * duration
+gear2_track = np.linspace(0, gear2.pitch_angle * 180 / np.pi, n + 1) * duration
+animation1 = Animation(anim_collector)
+animation1.add_track("/assembly/gear1", "rz", time_track, gear1_track)
+animation1.add_track("/assembly/gear2", "rz", time_track, gear2_track)
+show(anim_collector)
+animation1.animate(speed=1)

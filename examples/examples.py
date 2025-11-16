@@ -33,6 +33,72 @@ def spur_gears():
     return (gear_part_1, gear_part_2)
 
 
+def gear_and_rack():
+    gear1 = HelicalGear(
+        number_of_teeth=13,
+        helix_angle=PI / 6,
+        height=10,
+        profile_shift=0.3,
+        herringbone=True,
+    )
+    rack1 = HelicalRack(
+        number_of_teeth=40,
+        helix_angle=PI / 6,
+        height=10,
+        herringbone=True,
+    )
+    # racks can mesh to gears, but gears can't (yet) mesh to racks
+    rack1.mesh_to(gear1, target_dir=RIGHT)
+
+    gear2 = SpurGear(number_of_teeth=20, height=10)
+    gear2.center = LEFT * 50
+    rack2 = InvoluteRack(number_of_teeth=40, height=10)
+    # offset parameter moves the rack further along
+    rack2.mesh_to(gear2, target_dir=LEFT, offset=10)
+
+    gear_part_1 = gear1.build_part()
+    rack_part_1 = rack1.build_part()
+    gear_part_2 = gear2.build_part()
+    rack_part_2 = rack2.build_part()
+    return (gear_part_1, rack_part_1, gear_part_2, rack_part_2)
+
+
+def spur_gear_backlash():
+    m = 2
+    gear1 = SpurGear(number_of_teeth=28, module=m, profile_shift=0.1)
+    gear2 = SpurGear(number_of_teeth=57, module=m)
+    gear3 = SpurGear(number_of_teeth=8, module=m, profile_shift=0.7)
+    gear4 = SpurRingGear(number_of_teeth=95, profile_shift=-0.2, module=m)
+    gear5 = SpurGear(12, module=m, profile_shift=0.4)
+    gear6 = SpurGear(7, module=m, profile_shift=0.6)
+
+    # backlash is the linear gap between the inactive flanks of teeth
+    # backlash is measured in regular distance, not per-module
+    # angle_bias shifts the gear to one side of the backlash gap
+    gear1.mesh_to(gear2, target_dir=RIGHT, backlash=0.1, angle_bias=1)
+    gear4.mesh_to(gear1, target_dir=RIGHT, backlash=0.2, angle_bias=0)
+
+    # while the underlying math can handle profile shifts,
+    # there can be some interference with backlash=0 due to numerical errors
+    gear5.mesh_to(gear4, target_dir=DOWN + RIGHT, backlash=0.1, angle_bias=0)
+    gear3.mesh_to(gear2, target_dir=UP, backlash=0)
+    gear6.mesh_to(gear4, target_dir=DOWN + RIGHT * 0.056, backlash=0)
+    gear_part_1 = gear1.build_part()
+    gear_part_2 = gear2.build_part()
+    gear_part_3 = gear3.build_part()
+    gear_part_4 = gear4.build_part()
+    gear_part_5 = gear5.build_part()
+    gear_part_6 = gear6.build_part()
+    return (
+        gear_part_1,
+        gear_part_2,
+        gear_part_3,
+        gear_part_4,
+        gear_part_5,
+        gear_part_6,
+    )
+
+
 def helical_gears():
     # a test of helical gears meshing with different helix angles
     # z_anchor=0.5 places the gear symmetrically on the XY plane, makes meshing easier
@@ -372,4 +438,4 @@ if __name__ == "__main__":
     set_port(3939)
     # default deviation is 0.1, default angular tolerance is 0.2.
     # Lower values result in higher resulution.
-    show(bevel_gear(), deviation=0.05, angular_tolerance=0.1)
+    show(spur_gear_backlash(), deviation=0.05, angular_tolerance=0.1)

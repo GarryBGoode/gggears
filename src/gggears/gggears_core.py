@@ -12,6 +12,7 @@
 from gggears.function_generators import *
 from gggears.defs import *
 from gggears.gggears_base_classes import *
+from gggears.gearmath import *
 import gggears.curve as crv
 
 from scipy.optimize import root
@@ -1026,142 +1027,50 @@ class Gear:
         self.tooth_generator = tg
         self.shape_recipe.tooth_generator = tg
 
-    def mesh_to(self, other: "Gear", target_dir=RIGHT, distance_offset=0):
-        """
-        Move this gear into a meshing position with other gear,
-        so that the point of contact of the pitch circles is in target_dir direction.
-        """
-        self.transform.center = calc_mesh_placement_vector(
-            self, other, target_dir, distance_offset
-        )
-        self.transform.orientation = calc_mesh_orientation(
-            self, other, target_dir, distance_offset
-        )
-        self.transform.angle = calc_mesh_angle(self, other)
-        # transform = self.get_meshing_transform(other, target_dir, distance_offset)
-        # self.transform.center = transform.center
-        # self.transform.orientation = transform.orientation
-        # self.transform.angle = transform.angle
-
-    def get_meshing_transform(self, other: "Gear", target_dir=RIGHT, distance_offset=0):
-        pos = calc_mesh_placement_vector(self, other, target_dir, distance_offset)
-        R = calc_mesh_orientation(self, other, target_dir, distance_offset)
-        angle = calc_mesh_angle(self, other)
-        retval = GearTransform(
-            center=pos,
-            orientation=R,
-            scale=self.transform.scale,
-            angle=angle,
-        )
-
-        return retval
-
-
-def calc_mesh_angle(gear1: "Gear", gear2: "Gear"):
-    """Calculate the rotation angle for this gear to mesh with the other gear. A
-    bias value can be used for positioning within backlash."""
-
-    center_diff_dir = gear2.transform.center - gear1.transform.center
-    if np.linalg.norm(center_diff_dir) < 1e-12:
-        # if gears are co-axial, use x axis of other gear as reference
-        center_diff_dir = gear2.transform.x_axis
-    else:
-        center_diff_dir = normalize_vector(center_diff_dir)
-
-    if gear1.tooth_param.inside_teeth:
-        contact_dir_gear1 = center_diff_dir
-        contact_dir_other = center_diff_dir
-        phase_offset = 0
-        phase_sign = 1
-    elif gear2.tooth_param.inside_teeth:
-        contact_dir_gear1 = -center_diff_dir
-        contact_dir_other = -center_diff_dir
-        phase_offset = 0
-        phase_sign = 1
-    else:
-        contact_dir_gear1 = center_diff_dir
-        contact_dir_other = -center_diff_dir
-        phase_offset = 0.5
-        phase_sign = -1
-
-    # mult from right: vector in other's coordinate system
-    angle_of_other = angle_of_vector_in_xy(
-        contact_dir_other @ gear2.transform.orientation
-    )
-    target_angle_gear1 = angle_of_vector_in_xy(
-        contact_dir_gear1 @ gear1.transform.orientation
-    )
-
-    phase_of_other = (
-        (gear2.transform.angle - angle_of_other) / gear2.tooth_param.pitch_angle
-    ) % 1
-
-    angle_out = (
-        target_angle_gear1
-        + ((phase_sign * phase_of_other + phase_offset) % 1)
-        * gear1.tooth_param.pitch_angle
-    )
-
-    return angle_out
-
-
-def calc_mesh_placement_vector(
-    gear1: Gear, gear2: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
-):
-    target_dir_norm = (
-        target_dir - np.dot(target_dir, gear2.transform.z_axis) * gear2.transform.z_axis
-    )
-    if np.linalg.norm(target_dir_norm) < 1e-12:
-        # target_dir is parallel to x axis
-        target_dir_norm = gear2.transform.x_axis
-    else:
-        target_dir_norm = normalize_vector(target_dir_norm)
-
-    if gear1.cone.cone_angle == 0 and gear2.cone.cone_angle == 0:
-        if gear2.tooth_param.inside_teeth:
-            distance_ref = gear2.rp - gear1.rp + offset
-        elif gear1.tooth_param.inside_teeth:
-            distance_ref = gear2.rp - gear1.rp - offset
+    def mesh_to(self, other: "Gear", target_dir=RIGHT):
+        if self.cone.cone_angle != 0 or other.cone.cone_angle != 0:
+            v0 = calc_bevel_gear_placement_vector(
+                target_dir,
+                self.cone,
+                other.cone,
+                self.tooth_param.inside_teeth,
+                other.tooth_param.inside_teeth,
+            )
+            self.transform.center = v0
+            self.transform.orientation = calc_mesh_orientation(
+                self.cone.cone_angle,
+                other.cone.cone_angle,
+                self.cone.R,
+                other.transform,
+                self.tooth_param.inside_teeth,
+                other.tooth_param.inside_teeth,
+                target_dir,
+                offset=0,
+            )
+            self.transform.angle = calc_mesh_angle(
+                self.transform,
+                other.transform,
+                self.pitch_angle,
+                other.pitch_angle,
+                gear1_inside_ring=self.tooth_param.inside_teeth,
+                gear2_inside_ring=other.tooth_param.inside_teeth,
+            )
         else:
-            distance_ref = gear1.rp + gear2.rp + offset
-        return gear2.center + distance_ref * target_dir_norm
-    else:
-        if gear2.tooth_param.inside_teeth:
-            angle_ref = gear2.cone.gamma - gear1.cone.gamma + offset / gear1.R
-        elif gear1.tooth_param.inside_teeth:
-            angle_ref = gear2.cone.gamma - gear1.cone.gamma - offset / gear1.R
-        else:
-            angle_ref = gear1.cone.gamma + gear2.cone.gamma + offset / gear1.R
-        rot_ax = normalize_vector(np.cross(target_dir_norm, gear2.transform.z_axis))
-        rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
-        center_h = gear1.cone.R * gear1.module * np.cos(gear1.cone.gamma)
-        diff_vector = rot1.apply(-center_h * gear2.transform.z_axis)
-        return gear2.center_sphere + diff_vector
-
-
-def calc_mesh_orientation(
-    gear1: "Gear", gear2: "Gear", target_dir: np.ndarray = RIGHT, offset: float = 0
-):
-    target_dir_norm = (
-        target_dir - np.dot(target_dir, gear2.transform.z_axis) * gear2.transform.z_axis
-    )
-    if np.linalg.norm(target_dir_norm) < 1e-12:
-        # target_dir is parallel to x axis
-        target_dir_norm = gear2.transform.x_axis
-    else:
-        target_dir_norm = normalize_vector(target_dir_norm)
-    if gear1.cone.cone_angle == 0 and gear2.cone.cone_angle == 0:
-        return gear2.transform.orientation
-    else:
-        if gear2.tooth_param.inside_teeth:
-            angle_ref = gear2.cone.gamma - gear1.cone.gamma + offset / gear1.R
-        elif gear1.tooth_param.inside_teeth:
-            angle_ref = gear2.cone.gamma - gear1.cone.gamma - offset / gear1.R
-        else:
-            angle_ref = gear1.cone.gamma + gear2.cone.gamma + offset / gear1.R
-        rot_ax = normalize_vector(np.cross(target_dir_norm, gear2.transform.z_axis))
-        rot1 = scp_Rotation.from_rotvec(rot_ax * angle_ref)
-        return rot1.as_matrix() @ gear2.transform.orientation
+            if self.tooth_param.inside_teeth or other.tooth_param.inside_teeth:
+                distance = np.abs(self.rp - other.rp)
+            else:
+                distance = self.rp + other.rp
+            v0 = target_dir * distance + other.transform.center
+            self.transform.center = v0
+            self.transform.orientation = other.transform.orientation
+            self.transform.angle = calc_mesh_angle(
+                self.transform,
+                other.transform,
+                self.pitch_angle,
+                other.pitch_angle,
+                gear1_inside_ring=self.tooth_param.inside_teeth,
+                gear2_inside_ring=other.tooth_param.inside_teeth,
+            )
 
 
 def ref_curve_2_param(t, ref_curve: crv.Curve) -> RecipeKeyParams:

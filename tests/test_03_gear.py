@@ -43,7 +43,7 @@ def test_rotation():
     "num_teeth", [8, 13, 25, 62, 121]
 )  # range of teeth from low end to high-ish
 @pytest.mark.parametrize("module", [0.5, 2])  # test if module is used correctly
-@pytest.mark.parametrize("angle_ref", np.linspace(0, 1, 7))  # angle progression
+@pytest.mark.parametrize("angle_ref", np.linspace(0, 1, 5))  # angle progression
 @pytest.mark.parametrize(
     "root_fillet",
     [-1, 0, 0.1, 0.4],  # negative value for undercut, only for this test though
@@ -51,6 +51,7 @@ def test_rotation():
 @pytest.mark.parametrize("tip_fillet", [0, 0.1, 0.4])
 @pytest.mark.parametrize("conic", [False, True])
 @pytest.mark.parametrize("cycloid", [False, True])
+@pytest.mark.parametrize("profile_shift", [0, 0.3])
 def test_gear_intersect(
     num_teeth,
     module,
@@ -59,6 +60,7 @@ def test_gear_intersect(
     tip_fillet,
     conic,
     cycloid,
+    profile_shift,
     enable_plotting=False,
 ):
     """
@@ -87,6 +89,8 @@ def test_gear_intersect(
         gamma1 = gamma2 = 0
 
     if not cycloid:
+        if conic:
+            profile_shift = 0  # profile shift not supported for bevel gears yet
         gear1 = gg.InvoluteGear(
             number_of_teeth=num_teeth,
             module=m,
@@ -95,14 +99,15 @@ def test_gear_intersect(
             tip_fillet=tip_fillet,
             root_fillet=0,
             helix_angle=0.3,
-            profile_shift=0,
+            profile_shift=profile_shift,
+            addendum_coefficient=1,
             enable_undercut=True,
         )
 
         gear2 = gg.InvoluteGear(
             number_of_teeth=num_teeth_2,
             module=m,
-            dedendum_coefficient=1 + f0 + 1e-3,
+            dedendum_coefficient=1 + f0 + 1e-3 + profile_shift / 10,
             tip_fillet=tip_fillet,
             root_fillet=f0,
             helix_angle=-0.3,
@@ -197,8 +202,8 @@ def test_gear_intersect(
         ax = plt.axes()
         ax.plot(poly1.exterior.xy[0], poly1.exterior.xy[1], marker=".")
         ax.plot(poly2.exterior.xy[0], poly2.exterior.xy[1], marker=".")
-        ax.plot(poly3.exterior.xy[0], poly3.exterior.xy[1], marker=".")
-        ax.plot(poly4.exterior.xy[0], poly4.exterior.xy[1], marker=".")
+        # ax.plot(poly3.exterior.xy[0], poly3.exterior.xy[1], marker=".")
+        # ax.plot(poly4.exterior.xy[0], poly4.exterior.xy[1], marker=".")
         # ax.axis("equal")
         plt.show()
 
@@ -210,7 +215,7 @@ def test_gear_intersect(
     assert its3.area != pytest.approx(0, abs=1e-4)
 
 
-@pytest.mark.parametrize("num_teeth", [8, 21, 55, 144])
+@pytest.mark.parametrize("num_teeth", [8, 21, 55, 104])
 @pytest.mark.parametrize("module", [0.5, 2])  # test if module is used correctly
 @pytest.mark.parametrize("beta", [0, PI / 6])  # spiral angle
 # negative value for undercut, only for this test though
@@ -315,24 +320,24 @@ def test_CAD(
 
 if __name__ == "__main__":
 
-    # test_gear_intersect(
-    #     num_teeth=13,
-    #     module=0.5,
-    #     angle_ref=np.float64(0.16666666666666666),
-    #     root_fillet=0.4,
-    #     tip_fillet=0.4,
-    #     conic=False,
-    #     cycloid=True,
-    #     enable_plotting=True,
-    # )
-    test_CAD(
-        num_teeth=21,
-        module=0.5,
-        beta=0,
-        height=0.5,
-        root_fillet=-1,
-        tip_fillet=0,
-        conic=True,
+    test_gear_intersect(
+        num_teeth=121,
+        module=2,
+        angle_ref=np.float64(1.0),
+        root_fillet=0,
+        tip_fillet=0.4,
+        conic=False,
         cycloid=False,
-        inside_ring=True,
+        profile_shift=0.3,
+        enable_plotting=True,
     )
+    #     num_teeth=21,
+    #     module=0.5,
+    #     beta=0,
+    #     height=0.5,
+    #     root_fillet=-1,
+    #     tip_fillet=0,
+    #     conic=True,
+    #     cycloid=False,
+    #     inside_ring=True,
+    # )

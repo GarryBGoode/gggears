@@ -25,6 +25,10 @@ class InvoluteTooth(GearToothConicGenerator):
         invo_curve = self.generate_involute_curve()[1]
         return invo_curve.base_radius
 
+    def get_base_angle(self) -> float:
+        invo_curve = self.generate_involute_curve()[1]
+        return invo_curve.angle
+
     def generate_tooth_curve(self) -> crv.CurveChain:
         return self.generate_involute_curve()
 
