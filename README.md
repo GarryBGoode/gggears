@@ -60,14 +60,15 @@ See `examples.py` for more.
 ```python
 from gggears import *
 from ocp_vscode import show, set_port
-set_port(3939)
 
 # create 2 spur gears
 gear1 = SpurGear(number_of_teeth=12)
-gear2 = SpurGear(number_of_teeth=24)
+gear2 = SpurGear(number_of_teeth=23)
 
 # move and align gear 1 next to gear 2 in the Y direction
-gear1.mesh_to(gear2, target_dir=UP)
+# backlash can be optionally specified
+# angle_bias conrtols location within backlash range (-1 to 1)
+gear1.mesh_to(gear2, target_dir=UP, backlash=0.2, angle_bias=1)
 
 # generate build123d Part objects
 gear_part_1 = gear1.build_part()
