@@ -4,6 +4,7 @@ import gggears.curve as crv
 import numpy as np
 from gggears.defs import *
 from scipy.spatial.transform import Rotation as scp_Rotation
+from gggears.function_generators import angle_between_vector_and_plane
 
 # If a dataclass tends to be user input, it should be named param.
 # If a dataclass tends to be generated or manipulated by functions,
@@ -487,10 +488,12 @@ class GearToothGenerator(ZFunctionMixin):
         pitch_intersect_angle: float = PI / 16,
         pitch_radius: float = 1.0,
         tooth_angle: float = 0,
+        ref_limits: ToothLimitParam = None,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.tooth_angle = tooth_angle
+        self.ref_limits = ref_limits if ref_limits is not None else ToothLimitParam()
 
     def generate_tooth_curve(self) -> crv.Curve:
         p0 = scp_Rotation.from_euler("z", -self.pitch_intersect_angle).apply(
@@ -500,6 +503,30 @@ class GearToothGenerator(ZFunctionMixin):
         dp = rot_ta.apply(p0 * 0.2)
         return crv.CurveChain(crv.LineCurve(p0=p0 - dp, p1=p0 + dp))
 
+    def check_lower_curve_limit(self, tooth_curve: crv.Curve) -> crv.Curve:
+        r_d = self.pitch_radius - self.ref_limits.h_d
+        circle_d = crv.ArcCurve(
+            center=ORIGIN, radius=r_d, angle=-self.pitch_intersect_angle * 2
+        )
+        cross_point = crv.find_curve_intersect(tooth_curve, circle_d)
+        if not cross_point.success:
+            cross_point = crv.find_curve_intersect(
+                tooth_curve, circle_d, method=crv.IntersectMethod.MINDISTANCE
+            )
+            tooth_curve.set_start_on(cross_point.x[0])
+            r_low = np.linalg.norm(tooth_curve(0)[:2])
+            if r_low > r_d:
+                connector_curve = crv.LineCurve(
+                    p0=tooth_curve(0) * r_d / r_low, p1=tooth_curve(0)
+                )
+                return crv.CurveChain(connector_curve, tooth_curve)
+            else:
+                return tooth_curve
+
+        else:
+            tooth_curve.set_start_on(cross_point.x[0])
+            return tooth_curve
+
 
 class GearToothConicGenerator(GearToothGenerator):
     def __init__(
@@ -508,11 +535,13 @@ class GearToothConicGenerator(GearToothGenerator):
         pitch_radius: float = 1.0,
         cone_angle: float = PI / 4,
         tooth_angle: float = 0,
+        ref_limits: ToothLimitParam = None,
     ):
         self.pitch_intersect_angle = pitch_intersect_angle
         self.pitch_radius = pitch_radius
         self.cone_angle = cone_angle
         self.tooth_angle = tooth_angle
+        self.ref_limits = ref_limits if ref_limits is not None else ToothLimitParam()
 
     @property
     def conic_data(self):
@@ -545,6 +574,44 @@ class GearToothConicGenerator(GearToothGenerator):
                     p0=p0, center=OUT * h, angle=0.1, axis=axis
                 )
             )
+
+    def check_lower_curve_limit(self, tooth_curve: crv.Curve) -> crv.Curve:
+        if self.cone_angle == 0:
+            return super().check_lower_curve_limit(tooth_curve)
+        else:
+            gamma = self.conic_data.gamma
+            R = self.conic_data.R
+            h_d_angle = PI / 2 - gamma + self.ref_limits.h_d / R
+            z_center = R * np.cos(gamma)
+            h_d_point = crv.find_curve_plane_intersect(
+                tooth_curve,
+                plane_normal=scp_Rotation.from_euler("y", h_d_angle).apply(OUT),
+                offset=z_center * OUT,
+                guess=0,
+            )
+            if not h_d_point.success:
+                h_d_point = crv.find_curve_plane_intersect(
+                    tooth_curve,
+                    plane_normal=scp_Rotation.from_euler("y", h_d_angle).apply(OUT),
+                    offset=z_center * OUT,
+                    method=crv.IntersectMethod.MINDISTANCE,
+                    guess=0,
+                )
+                tooth_curve.set_start_on(h_d_point.x[0])
+                bottom_angle = np.abs(
+                    angle_between_vector_and_plane(tooth_curve(0), OUT) - h_d_angle
+                )
+                connector_curve = crv.ArcCurve.from_point_center_angle(
+                    p0=tooth_curve(0),
+                    center=OUT * R * np.cos(gamma),
+                    angle=bottom_angle,
+                    axis=UP,
+                )
+                connector_curve.reverse()
+                return crv.CurveChain(connector_curve, tooth_curve)
+            else:
+                tooth_curve.set_start_on(h_d_point.x[0])
+                return tooth_curve
 
 
 class RackToothGenerator(ZFunctionMixin):

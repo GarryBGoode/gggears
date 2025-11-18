@@ -131,6 +131,8 @@ class GearBuilder(GearToNurbs):
         self.part_transformed = bd.BasePartObject(
             apply_transform_part(self.solid, self.gear.transform)
         )
+        # stop here with debugger
+        pass
 
     def gen_ref_solid(self):
         profile0 = self.gear.curve_gen_at_z(self.gear.z_vals[0])
@@ -458,18 +460,14 @@ class GearBuilder_old(GearToNurbs):
 
 
 def apply_transform_part(part: bd.Part, transform: GearTransform):
-    rot1 = scp_Rotation.from_matrix(transform.orientation)
-    # rot1.as_angle_axis()
-    degrees = rot1.as_euler("zyx", degrees=True)
+    location1 = transform2Location(transform)
     part = part.scale(transform.scale)
-    part = bd.Rotation(0, 0, transform.angle * 180 / PI) * part
-    part = (
-        bd.Rotation(Z=degrees[2], Y=degrees[1], X=degrees[0], ordering=bd.Extrinsic.ZYX)
-        * part
-    )
+    part2 = location1 * part
+    return part2
 
-    part = part.translate(transform.center)
-    return part
+
+def apply_animation(gear: gg.Gear, part: bd.Part, time: float = 1):
+    pass
 
 
 def fix_attempt(solid):
@@ -511,7 +509,7 @@ def transform2Location(transform: GearTransform):
     degrees = rot1.as_euler("zyx", degrees=True)
     loc = bd.Location(
         transform.center,
-        [degrees[2] + transform.angle * 180 / PI, degrees[1], degrees[0]],
+        [degrees[0] + transform.angle * 180 / PI, degrees[1], degrees[2]],
         bd.Extrinsic.ZYX,
     )
 

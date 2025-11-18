@@ -61,6 +61,14 @@ gggears.gggears\_core module
    :undoc-members:
    :show-inheritance:
 
+gggears.gearmath module
+----------------------------
+
+.. automodule:: gggears.gearmath
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 gggears.gggears\_wrapper module
 -------------------------------
 

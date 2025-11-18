@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import doctest
 import sys
 import os
+import inspect
 
 
 def test_example():
@@ -23,33 +24,19 @@ def test_example():
     relative_path = os.path.join(current_dir, "..", "examples")
     sys.path.append(relative_path)
 
-    from examples import spur_gears
+    import examples
 
-    spur_gears()
-    from examples import helical_gears
+    # Get all functions from the examples module
+    example_functions = [
+        func
+        for name, func in inspect.getmembers(examples, inspect.isfunction)
+        if func.__module__ == "examples"
+    ]
 
-    helical_gears()
-    from examples import worm_approx
-
-    worm_approx()
-    from examples import planetary_helical_gear
-
-    planetary_helical_gear()
-    from examples import bevel_gear
-
-    bevel_gear()
-    from examples import bevel_chain
-
-    bevel_chain()
-    from examples import fishbone_bevels
-
-    fishbone_bevels()
-    from examples import cycloid_gear
-
-    cycloid_gear()
-    from examples import cycloid_drive
-
-    cycloid_drive()
+    # Call each example function
+    for func in example_functions:
+        print(f"Running {func.__name__}...")
+        func()
 
 
 def test_doctest():
