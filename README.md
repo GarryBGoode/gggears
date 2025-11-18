@@ -10,11 +10,6 @@ Alternatively, one can clone or download this repository and install via this co
 ```
 python -m pip install .
 ```
-There is an ongoing version-mismatch issue with build123d, ocp-vscode and ocp-cadquery packages. Obtaining dependencies via `pip` might cause problems. If using OCP VSCode for the first time, `quickstart with build123d` might cause problems because it grabs the newest version from build123d github. If build123d is already installed, use the 'package manager' window instead.
-
-For compatibility with dev version of build123d, use gggears branch `CAD_refactor_and_bd_090_compliance`.
-Follow [this issue for details.](https://github.com/gumyr/build123d/issues/866)
-
 # Dependencies
 
 Gggears CAD model creation uses build123d package: [build123d github](https://github.com/gumyr/build123d)
