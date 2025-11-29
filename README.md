@@ -1,6 +1,13 @@
 # gggears
 A gear generator in python.
 
+# name conflict notice
+I was careless when choosing a name for this project and it was already taken. If you're looking for the older gggears project go check out https://sourceforge.net/projects/gggears/
+
+The 2 are unrelated other than the (perhaps poor) choice of name.
+
+Out of respect for the original gggears this project will pivot and get renamed soon.
+
 # Installation
 Currently the recommended way for most users to install gggears is to install from github directly (git is required on the user's system for this):
 ```
